@@ -26,43 +26,43 @@
 
 namespace aspect
 {
-	namespace MaterialModel
-	{
-		using namespace dealii;
+  namespace MaterialModel
+  {
+    using namespace dealii;
 
-		/*Beginning of material model to test viscosity and density changes.
-		*/
+    /*Beginning of material model to test viscosity and density changes.
+    */
     template <int dim>
     class PhaseTransitions : public MaterialModel::Interface<dim>, public ::aspect::SimulatorAccess<dim>
-		{
-			public:
+    {
+      public:
+
         virtual void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
                               MaterialModel::MaterialModelOutputs<dim> &out) const;
 
-				virtual bool is_compressible () const;
-				virtual double reference_viscosity () const;
-				
-				static
-				void
-				declare_parameters (ParameterHandler &prm);
+        virtual bool is_compressible () const;
+        virtual double reference_viscosity () const;
 
-				virtual
-				void
-				parse_parameters (ParameterHandler &prm);
+        static
+        void
+        declare_parameters (ParameterHandler &prm);
 
-			private:
-				double reference_rho;
-				double reference_T;
-				double reference_compressibility;
-				double reference_specific_heat;
-				double thermal_alpha;
-				double eta;
-				double activation_energy;
-				double k_value;
-				double B;
+        virtual
+        void
+        parse_parameters (ParameterHandler &prm);
 
-		};
-	}
+      private:
+        double reference_rho;
+        double reference_T;
+        double reference_compressibility;
+        double reference_specific_heat;
+        double thermal_alpha;
+        double eta;
+        double activation_energy;
+        double k_value;
+        double B;
+    };
+  }
 }
 
 #endif
