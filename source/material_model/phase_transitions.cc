@@ -39,7 +39,7 @@ namespace aspect
 				const double pressure = in.pressure[i];
 
 				//constant properties for now
-				out.compressibilities[i] = reference_compressibility;
+        out.compressibilities[i] = reference_compressibility;
 				out.specific_heat[i] = reference_specific_heat;
 				out.thermal_conductivities[i] = k_value;
 				out.thermal_expansion_coefficients[i] = thermal_alpha;
@@ -63,32 +63,32 @@ namespace aspect
 			{
 				prm.enter_subsection("Phase transitions");
 				{
-          prm.declare_entry ("Reference density", "3300",
-                             Patterns::Double (0),
-                             "Reference density $\\rho_0$. Units: $kg/m^3$.");
-          prm.declare_entry ("Reference temperature", "293",
-                             Patterns::Double (0),
-                             "The reference temperature $T_0$. The reference temperature is used "
-                             "in the density formula. Units: $K$.");
-          prm.declare_entry ("Viscosity", "5e24",
-                             Patterns::Double (0),
-                             "The value of the viscosity $\\eta$. Units: $kg/m/s$.");
-          prm.declare_entry ("Thermal conductivity", "4.7",
-                             Patterns::Double (0),
-                             "The value of the thermal conductivity $k$. "
-                             "Units: $W/m/K$.");
-          prm.declare_entry ("Reference specific heat", "1250",
-                             Patterns::Double (0),
-                             "The value of the specific heat $C_p$. "
-                             "Units: $J/kg/K$.");
-          prm.declare_entry ("Thermal expansion coefficient", "4e-5",
-                             Patterns::Double (0),
-                             "The value of the thermal expansion coefficient $\\beta$. "
-                             "Units: $1/K$.");
-          prm.declare_entry ("Compressibility", "5.124e-12",
-                             Patterns::Double (0),
-                             "The value of the compressibility $\\kappa$. "
-                             "Units: $1/Pa$.");
+					prm.declare_entry ("Reference density", "3300",
+														 Patterns::Double (0),
+														 "Reference density $\\rho_0$. Units: $kg/m^3$.");
+					prm.declare_entry ("Reference temperature", "293",
+														 Patterns::Double (0),
+														 "The reference temperature $T_0$. The reference temperature is used "
+														 "in the density formula. Units: $K$.");
+					prm.declare_entry ("Viscosity", "5e24",
+														 Patterns::Double (0),
+														 "The value of the viscosity $\\eta$. Units: $kg/m/s$.");
+					prm.declare_entry ("Thermal conductivity", "4.7",
+														 Patterns::Double (0),
+														 "The value of the thermal conductivity $k$. "
+														 "Units: $W/m/K$.");
+					prm.declare_entry ("Reference specific heat", "1250",
+														 Patterns::Double (0),
+														 "The value of the specific heat $C_p$. "
+														 "Units: $J/kg/K$.");
+					prm.declare_entry ("Thermal expansion coefficient", "4e-5",
+														 Patterns::Double (0),
+														 "The value of the thermal expansion coefficient $\\beta$. "
+														 "Units: $1/K$.");
+					prm.declare_entry ("Compressibility", "5.124e-12",
+														 Patterns::Double (0),
+														 "The value of the compressibility $\\kappa$. "
+														 "Units: $1/Pa$.");
 					prm.declare_entry ("Viscosity constant", "9.1e11",
 														 Patterns::Double(0),
 														 "Preexponential constant for viscosity." "Units: None");
