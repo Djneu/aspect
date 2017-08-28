@@ -61,6 +61,14 @@ namespace aspect
         double activation_energy;
         double k_value;
         double B;
+        double b0;
+        double b1;
+        double b2;
+        double b3;
+        double d0; 
+        double d1; 
+        double d2; 
+        
     };
   }
 }

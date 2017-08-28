@@ -37,20 +37,40 @@ namespace aspect
       {
         const double temperature = in.temperature[i];
         const double pressure = in.pressure[i];
+        const Point<dim> position = in.position[i];
+        double depth = this->get_geometry_model().depth(position);
 
-        //constant properties for now
+        //constant properties
         out.compressibilities[i] = reference_compressibility;
         out.specific_heat[i] = reference_specific_heat;
-        out.thermal_conductivities[i] = k_value;
-        out.thermal_expansion_coefficients[i] = thermal_alpha;
 
-        out.viscosities[i] = eta;
+        /*thermal conductivity equation (Tosi, et. al., 2013) that varies with temperature, depth, and phase.
+         For now only uses perovskite periclase phase to calculate.*/
+        out.thermal_conductivities[i] = (d0+(d1*depth))*pow((300/temperature),d2);
+
+        /*thermal expansivity equation (Tosi, et. al., 2013) that varies with temperature, depth, and phase.
+         For now only uses fperovskite periclase phase to calculate.*/
+        out.thermal_expansion_coefficients[i] = (b0+(b1*temperature)+b2/(temperature*temperature))*exp(-b3*depth);
+
+        //placeholder viscosity equation
+        if (temperature !=0.0)
+          {
+            out.viscosities[i] =B/2*exp(activation_energy/(8.314*temperature));
+          }
+
 
 
         //density equation with pressure and temperature dependence, likely will change when adiabatic conditions are introduced.
+        double density_temperature_dependence = 1.0;
+        if (this->include_adiabatic_heating ())
+        {
+          density_temperature_dependence -= thermal_alpha * (temperature - this->get_adiabatic_conditions().temperature(position));
+        }
+        else
+          density_temperature_dependence -= thermal_alpha * (temperature-reference_T);
+
         const double density_pressure_dependence = reference_rho * out.compressibilities[i] * (pressure - this->get_surface_pressure());
-        const double density_temperature_dependence = 1.0 - thermal_alpha * (temperature - reference_T);
-        out.densities[i] = (reference_rho + density_pressure_dependence) * density_temperature_dependence;
+        out.densities[i] = (reference_rho + density_pressure_dependence)*density_temperature_dependence;
       }
     }
 
@@ -116,6 +136,27 @@ namespace aspect
             prm.declare_entry ("Activation energy", "300000",
                                Patterns::Double(0),
                                "Activation energy for viscosity equation." "Units: J/mol");
+            prm.declare_entry ("b0", "2.68e-5",
+                               Patterns::Double(0),
+                               "coefficient for depth dependent thermal expansivity" "Units: 1/K");
+            prm.declare_entry ("b1", "2.77e-9",
+                               Patterns::Double(0),
+                               "coefficient for depth dependent thermal expansivity" "Units: 1/K^2");
+            prm.declare_entry ("b2", "-1.21",
+                               Patterns::Double(),
+                               "coefficient for depth dependent thermal expansivity" "Units: K"); 
+            prm.declare_entry ("b3", "3.76e-7",
+                               Patterns::Double(0),
+                               "coefficient for depth dependent thermal expansivity" "Units: 1/m");
+            prm.declare_entry ("d0", "3.48",
+                               Patterns::Double(0),
+                               "coefficient for depth dependent thermal conductivity" "Units: Wm^-1K^-1");
+            prm.declare_entry ("d1", "5.17e-6",
+                               Patterns::Double(0),
+                               "coefficient for depth dependent thermal conductivity" "Units: Wm^-2K^-1");
+            prm.declare_entry ("d2", "0.31",
+                               Patterns::Double(0),
+                               "coefficient for depth dependent thermal conductivity" "Units: None");
 
           }
           prm.leave_subsection();
@@ -140,6 +181,13 @@ namespace aspect
           thermal_alpha              = prm.get_double ("Thermal expansion coefficient");
           B                          = prm.get_double ("Viscosity constant");
           activation_energy          = prm.get_double ("Activation energy");
+          b0                         = prm.get_double ("b0");
+          b1                         = prm.get_double ("b1");
+          b2                         = prm.get_double ("b2");
+          b3                         = prm.get_double ("b3");
+          d0                         = prm.get_double ("d0");
+          d1                         = prm.get_double ("d1");
+          d2                         = prm.get_double ("d2");
         }
         prm.leave_subsection();
       }
