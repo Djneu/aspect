@@ -57,17 +57,32 @@ namespace aspect
         double reference_compressibility;
         double reference_specific_heat;
         double thermal_alpha;
+
+        //viscosity variables
         double eta;
-        double activation_energy;
+        double max_eta;
+        double min_eta;
+        double grain_size;
+        std::vector<double> activation_energy;
+        std::vector<double> activation_volume;
+        std::vector<double> A;
+
+        //thermal expansivity and conductivity variables
         double k_value;
-        double B;
         double b0;
         double b1;
         double b2;
         double b3;
         double d0; 
         double d1; 
-        double d2; 
+        double d2;
+
+        virtual
+        double
+        calculate_viscosity ( const double &pressure,
+                              const double &temperature,
+                              const Point<dim> &position,
+                              const SymmetricTensor<2,dim> &strain_rate) const;
         
     };
   }
