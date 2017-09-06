@@ -69,13 +69,13 @@ namespace aspect
 
         //thermal expansivity and conductivity variables
         double k_value;
-        double b0;
-        double b1;
-        double b2;
-        double b3;
-        double d0; 
-        double d1; 
-        double d2;
+        double a0;
+        double a1;
+        double a2;
+        double a3;
+        double c0; 
+        double c1; 
+        double c2;
 
         virtual
         double

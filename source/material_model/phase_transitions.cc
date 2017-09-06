@@ -109,7 +109,7 @@ namespace aspect
       else
         current_viscosity = vdiff;
 
-     return current_viscosity;
+     return eta;
     }
 
 
@@ -124,7 +124,6 @@ namespace aspect
         const double temperature = in.temperature[i];
         const double pressure = in.pressure[i];
         const Point<dim> position = in.position[i];
-        double depth = this->get_geometry_model().depth(position);
 
         //constant properties
         out.compressibilities[i] = reference_compressibility;
@@ -132,11 +131,17 @@ namespace aspect
 
         /*thermal conductivity equation (Tosi, et. al., 2013) that varies with temperature, depth, and phase.
          For now only uses perovskite periclase phase to calculate.*/
-        out.thermal_conductivities[i] = (d0+(d1*depth))*pow((300/temperature),d2);
+        if(k_value == 0.0)
+          out.thermal_conductivities[i] = (c0+(c1*pressure*1e-9))*pow((300/temperature),c2);
+        else
+          out.thermal_conductivities[i] = k_value;
 
         /*thermal expansivity equation (Tosi, et. al., 2013) that varies with temperature, depth, and phase.
          For now only uses fperovskite periclase phase to calculate.*/
-        out.thermal_expansion_coefficients[i] = (b0+(b1*temperature)+b2/(temperature*temperature))*exp(-b3*depth);
+        if(thermal_alpha == 0.0)
+          out.thermal_expansion_coefficients[i] = (a0+(a1*temperature)+a2/(temperature*temperature))*exp(-a3*pressure*1e-9);
+        else
+          out.thermal_expansion_coefficients[i] = thermal_alpha;
 
 
         if(in.strain_rate.size())
@@ -238,25 +243,25 @@ namespace aspect
                                "Stabilizes strain dependent viscosity. Units: m");
 
             //thermal expansivity and conductivity parameters
-            prm.declare_entry ("b0", "2.68e-5",
+            prm.declare_entry ("a0", "2.68e-5",
                                Patterns::Double(0),
                                "coefficient for depth dependent thermal expansivity" "Units: 1/K");
-            prm.declare_entry ("b1", "2.77e-9",
+            prm.declare_entry ("a1", "2.77e-9",
                                Patterns::Double(0),
                                "coefficient for depth dependent thermal expansivity" "Units: 1/K^2");
-            prm.declare_entry ("b2", "-1.21",
+            prm.declare_entry ("a2", "-1.21",
                                Patterns::Double(),
                                "coefficient for depth dependent thermal expansivity" "Units: K"); 
-            prm.declare_entry ("b3", "3.76e-7",
+            prm.declare_entry ("a3", "3.76e-7",
                                Patterns::Double(0),
-                               "coefficient for depth dependent thermal expansivity" "Units: 1/m");
-            prm.declare_entry ("d0", "3.48",
+                               "coefficient for depth dependent thermal expansivity" "Units: 1/GPa");
+            prm.declare_entry ("c0", "3.48",
                                Patterns::Double(0),
                                "coefficient for depth dependent thermal conductivity" "Units: Wm^-1K^-1");
-            prm.declare_entry ("d1", "5.17e-6",
+            prm.declare_entry ("c1", "5.17e-6",
                                Patterns::Double(0),
-                               "coefficient for depth dependent thermal conductivity" "Units: Wm^-2K^-1");
-            prm.declare_entry ("d2", "0.31",
+                               "coefficient for depth dependent thermal conductivity" "Units: Wm^-1K^-1GPa^-1");
+            prm.declare_entry ("c2", "0.31",
                                Patterns::Double(0),
                                "coefficient for depth dependent thermal conductivity" "Units: None");
 
@@ -298,13 +303,13 @@ namespace aspect
                AssertThrow(false, ExcMessage("Error: Too many inputs for activation volume, activation energy, or viscosity prefactor."));
 
           //thermal exansivity and conductivity parameters
-          b0                         = prm.get_double ("b0");
-          b1                         = prm.get_double ("b1");
-          b2                         = prm.get_double ("b2");
-          b3                         = prm.get_double ("b3");
-          d0                         = prm.get_double ("d0");
-          d1                         = prm.get_double ("d1");
-          d2                         = prm.get_double ("d2");
+          a0                         = prm.get_double ("a0");
+          a1                         = prm.get_double ("a1");
+          a2                         = prm.get_double ("a2");
+          a3                         = prm.get_double ("a3");
+          c0                         = prm.get_double ("c0");
+          c1                         = prm.get_double ("c1");
+          c2                         = prm.get_double ("c2");
         }
         prm.leave_subsection();
       }
