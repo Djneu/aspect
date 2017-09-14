@@ -73,9 +73,17 @@ namespace aspect
         double a1;
         double a2;
         double a3;
-        double c0; 
-        double c1; 
-        double c2;
+        std::vector<double> c0; 
+        std::vector<double> c1; 
+        std::vector<double> c2;
+
+        //phase boundary variables
+        std::vector<double> transition_depths;
+        std::vector<double> transition_temperatures;
+        std::vector<double> transition_widths;
+        std::vector<double> transition_slopes;
+        std::vector<double> density_jumps;
+        bool auto_temp;
 
         virtual
         double
@@ -83,6 +91,18 @@ namespace aspect
                               const double &temperature,
                               const Point<dim> &position,
                               const SymmetricTensor<2,dim> &strain_rate) const;
+
+        virtual
+        double
+        phase_function (const Point<dim> &position,
+                        const double temperature,
+                        const double pressure,
+                        const int phase) const;
+        virtual
+        unsigned int
+        get_phase_index (const Point<dim> &position,
+                         const double temperature,
+                         const double pressure) const;
         
     };
   }
