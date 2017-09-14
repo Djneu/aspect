@@ -322,8 +322,8 @@ namespace aspect
                        Patterns::Bool(),
                        "If set to true, the advection and reactions of compositional fields and "
                        "temperature are solved separately, and can use different time steps. Note that "
-                       "this will only work if the material/heating model fills the reaction_rates/"
-                       "heating_reaction_rates structures. Operator splitting can be used with any "
+                       "this will only work if the material/heating model fills the reaction\\_rates/"
+                       "heating\\_reaction\\_rates structures. Operator splitting can be used with any "
                        "existing solver schemes that solve the temperature/composition equations.");
 
     prm.enter_subsection ("Solver parameters");
@@ -1560,6 +1560,13 @@ namespace aspect
     // plugin mechanism, declare their parameters if they have subscribed
     // to the relevant signals
     SimulatorSignals<dim>::parse_additional_parameters (*this, prm);
+
+    AssertThrow((!use_direct_stokes_solver) || (nullspace_removal == NullspaceRemoval::none),
+                ExcMessage("Because of the difference in system partitioning, nullspace removal is "
+                           "currently not compatible with the direct solver. "
+                           "Please turn off one or both of the options 'Model settings/Remove nullspace', "
+                           "or 'Use direct solver for Stokes system', or contribute code to enable "
+                           "this feature combination."));
   }
 
 
