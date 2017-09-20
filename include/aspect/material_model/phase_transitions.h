@@ -56,23 +56,26 @@ namespace aspect
         double reference_T;
         double reference_compressibility;
         double reference_specific_heat;
-        double thermal_alpha;
 
         //viscosity variables
         double eta;
         double max_eta;
         double min_eta;
-        double grain_size;
-        std::vector<double> activation_energy;
-        std::vector<double> activation_volume;
-        std::vector<double> A;
+        std::vector<double> grain_size;
+        std::vector<double> diffusion_activation_energy;
+        std::vector<double> diffusion_activation_volume;
+        std::vector<double> diffusion_prefactor;
+        std::vector<double> dislocation_activation_energy;
+        std::vector<double> dislocation_activation_volume;
+        std::vector<double> dislocation_prefactor;
 
         //thermal expansivity and conductivity variables
         double k_value;
-        double a0;
-        double a1;
-        double a2;
-        double a3;
+        double thermal_alpha;
+        std::vector<double> a0;
+        std::vector<double> a1;
+        std::vector<double> a2;
+        std::vector<double> a3;
         std::vector<double> c0; 
         std::vector<double> c1; 
         std::vector<double> c2;
@@ -90,7 +93,8 @@ namespace aspect
         calculate_viscosity ( const double &pressure,
                               const double &temperature,
                               const Point<dim> &position,
-                              const SymmetricTensor<2,dim> &strain_rate) const;
+                              const SymmetricTensor<2,dim> &strain_rate,
+                              const int phase) const;
 
         virtual
         double
@@ -98,6 +102,13 @@ namespace aspect
                         const double temperature,
                         const double pressure,
                         const int phase) const;
+
+        virtual
+        double
+        phase_function_derivative (const Point<dim> &position,
+                                   const double temperature,
+                                   const double pressure,
+                                   const int phase) const;
         virtual
         unsigned int
         get_phase_index (const Point<dim> &position,
