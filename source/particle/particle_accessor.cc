@@ -25,6 +25,15 @@ namespace aspect
   namespace Particle
   {
     template <int dim, int spacedim>
+    ParticleAccessor<dim,spacedim>::ParticleAccessor ()
+      :
+      map (NULL),
+      particle ()
+    {}
+
+
+
+    template <int dim, int spacedim>
     ParticleAccessor<dim,spacedim>::ParticleAccessor (const std::multimap<types::LevelInd, Particle<dim,spacedim> > &map,
                                                       const typename std::multimap<types::LevelInd, Particle<dim,spacedim> >::iterator &particle)
       :
@@ -119,6 +128,18 @@ namespace aspect
 
 
     template <int dim, int spacedim>
+    bool
+    ParticleAccessor<dim,spacedim>::has_properties () const
+    {
+      Assert(particle != map->end(),
+             ExcInternalError());
+
+      return particle->second.has_properties();
+    }
+
+
+
+    template <int dim, int spacedim>
     void
     ParticleAccessor<dim,spacedim>::set_properties (const std::vector<double> &new_properties)
     {
@@ -166,6 +187,18 @@ namespace aspect
              ExcInternalError());
 
       return particle->second.get_properties();
+    }
+
+
+
+    template <int dim, int spacedim>
+    std::size_t
+    ParticleAccessor<dim,spacedim>::serialized_size_in_bytes () const
+    {
+      Assert(particle != map->end(),
+             ExcInternalError());
+
+      return particle->second.serialized_size_in_bytes();
     }
 
 
