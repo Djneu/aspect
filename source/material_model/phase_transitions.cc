@@ -91,17 +91,25 @@ namespace aspect
 
       const double dislocation_strain_rate_dependence = (1.0 - 3.5) / 3.5;
 
-      if(std::abs(second_strain_rate_invariant) > 1e-30)
+
+      //if the strain rate inviariant is high enough calculate dislocation creep, otherwise set it to zero
+      if(std::abs(second_strain_rate_invariant) > 1e-20)
       {
              vdis = pow(dislocation_prefactor[phase],-1.0/3.5)
              * std::pow(second_strain_rate_invariant,dislocation_strain_rate_dependence)
              * dislocation_energy_term;
       }
 
-      if(std::abs(second_strain_rate_invariant) > 1e-30)
+      //if dislocation creep was calculated use a harmonic average of the two, otherwise use diffusion creep.
+      if(std::abs(second_strain_rate_invariant) > 1e-20)
         current_viscosity = vdis * vdiff / (vdis + vdiff);
       else
         current_viscosity = vdiff;
+
+          std::ofstream mfile;
+	  mfile.open("checks.txt", std::ios::app);
+	  mfile<<second_strain_rate_invariant<<"  "<<vdis<<std::endl;
+	  mfile.close();
 
      return current_viscosity;
     }
@@ -290,9 +298,10 @@ namespace aspect
 
 
         //calculating viscosity
+        double viscosity=0;
         if(in.strain_rate.size())
         {
-                      out.viscosities[i] = std::min(std::max(min_eta,calculate_viscosity(pressure,
+                      viscosity = std::min(std::max(min_eta,calculate_viscosity(pressure,
                                                                        temperature,
                                                                        position,
                                                                        in.strain_rate[i],
@@ -301,7 +310,8 @@ namespace aspect
 
 
    
-        double phase_dependence = 0.0;
+        double density_phase_dependence = 0.0;
+        double viscosity_phase_dependence = 1.0;
         for(unsigned int i=0; i<number_of_phase_transitions; ++i)
         {
           const double phaseFunction = phase_function (position,
@@ -309,7 +319,8 @@ namespace aspect
                                                        pressure,
                                                        i);
 
-          phase_dependence += phaseFunction * density_jumps[i];
+          density_phase_dependence += phaseFunction * density_jumps[i];
+          viscosity_phase_dependence *= 1. + phaseFunction * (phase_prefactors[i+1]-1.);
         }  
 
         //density equation with pressure and temperature dependence, likely will change when adiabatic conditions are introduced.
@@ -324,9 +335,10 @@ namespace aspect
             density_temperature_dependence -= temperature * alpha;
 
           const double kappa = reference_compressibility;
-          const double pressure_dependence = reference_rho * kappa * (pressure - this->get_surface_pressure());
-          out.densities[i] = (reference_rho + pressure_dependence + phase_dependence)
+          const double density_pressure_dependence = reference_rho * kappa * (pressure - this->get_surface_pressure());
+          out.densities[i] = (reference_rho + density_pressure_dependence + density_phase_dependence)
                                * density_temperature_dependence;
+          out.viscosities[i] = std::min(std::max(min_eta, viscosity * viscosity_phase_dependence), max_eta);
 
         // Calculate entropy derivative
         {
@@ -358,6 +370,11 @@ namespace aspect
           out.entropy_derivative_pressure[i] = entropy_gradient_pressure;
           out.entropy_derivative_temperature[i] = entropy_gradient_temperature;
         }
+
+
+        // Assign reaction terms
+        for (unsigned int c=0; c<in.composition[i].size(); ++c)
+          out.reaction_terms[i][c] = 0.0;
 
       }
     }
@@ -469,10 +486,6 @@ namespace aspect
                                "coefficient for depth dependent thermal conductivity" "Units: None");
 
             //phase variables
-            prm.declare_entry ("Auto transition temperature", "true",
-                               Patterns::Bool (),
-                               "If set to true the program will find the temperature at the transition "
-                               "depth and use that for transition temperastures");
             prm.declare_entry ("Phase transition temperatures", "",
                                Patterns::List (Patterns::Double(0)),
                                "A list of temperatures where phase transitions occur. Higher or lower "
@@ -511,6 +524,13 @@ namespace aspect
                                "A list of depths where phase transitions occur. Values must "
                                "monotonically increase. "
                                "Units: $m$.");
+            prm.declare_entry ("Viscosity prefactors", "",
+                               Patterns::List (Patterns::Double(0)),
+                               "A list of prefactors for the viscosity for each phase. The reference "
+                               "viscosity will be multiplied by this factor to get the corresponding "
+                               "viscosity for each phase. "
+                               "List must have one more entry than Phase transition depths. "
+                               "Units: non-dimensional.");
 
 
           }
@@ -563,19 +583,19 @@ namespace aspect
 
           //thermal exansivity and conductivity parameters
           a0                         = Utilities::string_to_double
-                                       (Utilities::split_string_list(prm.get ("a0")));
+                                         (Utilities::split_string_list(prm.get ("a0")));
           a1                         = Utilities::string_to_double
-                                       (Utilities::split_string_list(prm.get ("a1")));
+                                         (Utilities::split_string_list(prm.get ("a1")));
           a2                         = Utilities::string_to_double
-                                       (Utilities::split_string_list(prm.get ("a2")));
+                                         (Utilities::split_string_list(prm.get ("a2")));
           a3                         = Utilities::string_to_double
-                                       (Utilities::split_string_list(prm.get ("a3")));
+                                         (Utilities::split_string_list(prm.get ("a3")));
           c0                         = Utilities::string_to_double
-                                       (Utilities::split_string_list(prm.get ("c0")));
+                                         (Utilities::split_string_list(prm.get ("c0")));
           c1                         = Utilities::string_to_double
-                                       (Utilities::split_string_list(prm.get ("c1")));
+                                         (Utilities::split_string_list(prm.get ("c1")));
           c2                         = Utilities::string_to_double
-                                       (Utilities::split_string_list(prm.get ("c2")));
+                                         (Utilities::split_string_list(prm.get ("c2")));
 
               if (a0.size() != a1.size() ||
                   a1.size() != a2.size() ||
@@ -586,7 +606,6 @@ namespace aspect
                   AssertThrow(false, ExcMessage("Error, one of your a or c values is not right"));
 
           //phase transition parameters
-          auto_temp                  = prm.get_bool ("Auto transition temperature");
           transition_depths          = Utilities::string_to_double
                                          (Utilities::split_string_list(prm.get ("Phase transition depths")));
           transition_widths          = Utilities::string_to_double
@@ -597,15 +616,26 @@ namespace aspect
                                          (Utilities::split_string_list(prm.get ("Phase transition Clapeyron slopes")));
           density_jumps              = Utilities::string_to_double
                                         (Utilities::split_string_list(prm.get ("Phase transition density jumps")));
+          phase_prefactors            = Utilities::string_to_double
+                                          (Utilities::split_string_list(prm.get ("Viscosity prefactors")));
 
               if (transition_widths.size() != transition_depths.size() ||
                   transition_temperatures.size() != transition_depths.size() ||
                   transition_slopes.size() != transition_depths.size() ||
-                  density_jumps.size() != transition_depths.size())
+                  density_jumps.size() != transition_depths.size() ||
+                  phase_prefactors.size() != density_jumps.size()+1)
                   AssertThrow(false, ExcMessage("Error: At least one list that gives input parameters for the phase "
                                               "transitions has the wrong size. Currently checking against transition depths. "
                                               "If phase transitions in terms of pressure inputs are desired, check to make sure "
                                               "'Define transition by depth instead of pressure = false'."));
+
+          // as the phase viscosity prefactors are all applied multiplicatively on top of each other,
+          // we have to scale them here so that they are relative factors in comparison to the product
+          // of the prefactors of all phase above the current one
+          for (unsigned int phase=1; phase<phase_prefactors.size(); ++phase)
+            {
+              phase_prefactors[phase] /= phase_prefactors[phase-1];
+            }
         }
         prm.leave_subsection();
       }

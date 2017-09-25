@@ -86,7 +86,7 @@ namespace aspect
         std::vector<double> transition_widths;
         std::vector<double> transition_slopes;
         std::vector<double> density_jumps;
-        bool auto_temp;
+        std::vector<double> phase_prefactors;
 
         virtual
         double
