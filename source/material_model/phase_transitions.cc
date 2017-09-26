@@ -106,10 +106,10 @@ namespace aspect
       else
         current_viscosity = vdiff;
 
-          std::ofstream mfile;
-	  mfile.open("checks.txt", std::ios::app);
-	  mfile<<second_strain_rate_invariant<<"  "<<vdis<<std::endl;
-	  mfile.close();
+          //std::ofstream mfile;
+	 // mfile.open("checks.txt", std::ios::app);
+	 // mfile<<second_strain_rate_invariant<<"  "<<vdis<<std::endl;
+	  //mfile.close();
 
      return current_viscosity;
     }
