@@ -92,8 +92,8 @@ namespace aspect
       const double dislocation_strain_rate_dependence = (1.0 - 3.5) / 3.5;
 
 
-      //if the strain rate inviariant is high enough calculate dislocation creep, otherwise set it to zero
-      if(std::abs(second_strain_rate_invariant) > 1e-20)
+      //if the strain rate inviariant is high enough calculate dislocation creep
+      if(std::abs(second_strain_rate_invariant) > 1e-30)
       {
              vdis = pow(dislocation_prefactor[phase],-1.0/3.5)
              * std::pow(second_strain_rate_invariant,dislocation_strain_rate_dependence)
@@ -101,15 +101,10 @@ namespace aspect
       }
 
       //if dislocation creep was calculated use a harmonic average of the two, otherwise use diffusion creep.
-      if(std::abs(second_strain_rate_invariant) > 1e-20)
+      if(std::abs(second_strain_rate_invariant) > 1e-30)
         current_viscosity = vdis * vdiff / (vdis + vdiff);
       else
         current_viscosity = vdiff;
-
-          //std::ofstream mfile;
-	 // mfile.open("checks.txt", std::ios::app);
-	 // mfile<<second_strain_rate_invariant<<"  "<<vdis<<std::endl;
-	  //mfile.close();
 
      return current_viscosity;
     }
@@ -235,7 +230,7 @@ namespace aspect
         if(phase_function(position, temperature, pressure, j-1) > 0.5 )
           phase_index = j;
 
-      //first part checks to see if material has passed final phase transition
+      //check to see if material has passed final phase transition
       if(transition_depths.size()>0)
         if(phase_function(position, temperature, pressure, transition_depths.size()-1) > 0.5)
           phase_index = transition_depths.size();
@@ -285,11 +280,12 @@ namespace aspect
 
 
         //thermal expansivity equation (Tosi, et. al., 2013) that varies with temperature, depth, and phase.
-        if(thermal_alpha == 0.0)
-        {
-          alpha = (a0[ol_index]+(a1[ol_index]*temperature)+a2[ol_index]*pow(temperature,-2))*exp(-a3[ol_index]*pressure*1e-9);
-        }
-        else
+       if(thermal_alpha == 0.0)
+       {
+        alpha = (a0[ol_index]+(a1[ol_index]*temperature)+a2[ol_index]*pow(temperature,-2))*exp(-a3[ol_index]*pressure*1e-9);
+
+       }
+       else
         {
           alpha = thermal_alpha;
         }
@@ -338,7 +334,9 @@ namespace aspect
           const double density_pressure_dependence = reference_rho * kappa * (pressure - this->get_surface_pressure());
           out.densities[i] = (reference_rho + density_pressure_dependence + density_phase_dependence)
                                * density_temperature_dependence;
-          out.viscosities[i] = std::min(std::max(min_eta, viscosity * viscosity_phase_dependence), max_eta);
+         //out.viscosities[i] = std::min(std::max(min_eta, viscosity * viscosity_phase_dependence), max_eta);
+           out.viscosities[i] = viscosity;
+
 
         // Calculate entropy derivative
         {

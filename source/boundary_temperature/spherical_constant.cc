@@ -24,6 +24,19 @@
 #include <aspect/geometry_model/spherical_shell.h>
 #include <aspect/geometry_model/chunk.h>
 #include <aspect/geometry_model/ellipsoidal_chunk.h>
+#include <aspect/geometry_model/box.h>
+
+#include <aspect/initial_temperature/interface.h>
+#include <aspect/gravity_model/interface.h>
+#include <aspect/global.h>
+#include <aspect/utilities.h>
+#include <deal.II/base/std_cxx11/array.h>
+
+#include <aspect/geometry_model/sphere.h>
+#include <aspect/geometry_model/spherical_shell.h>
+#include <aspect/geometry_model/chunk.h>
+#include <aspect/geometry_model/ellipsoidal_chunk.h>
+#include <aspect/geometry_model/box.h>
 
 #include <utility>
 #include <limits>
@@ -39,7 +52,7 @@ namespace aspect
     double
     SphericalConstant<dim>::
     boundary_temperature (const types::boundary_id boundary_indicator,
-                          const Point<dim> &) const
+                          const Point<dim> &position) const
     {
       const GeometryModel::Interface<dim> *geometry_model = &this->get_geometry_model();
       const std::string boundary_name = geometry_model->translate_id_to_symbol_name(boundary_indicator);
@@ -48,6 +61,10 @@ namespace aspect
         return inner_temperature;
       else if (boundary_name =="top")
         return outer_temperature;
+      else if (boundary_name == "east" || boundary_name == "west")
+        {
+          return this->get_initial_temperature_manager().initial_temperature(position);
+        }
       else
         {
           Assert (false, ExcMessage ("Unknown boundary indicator for geometry model. "
