@@ -92,8 +92,7 @@ namespace aspect
         /**
          * Initialize the particle handler. This function does not clear the
          * internal data structures, it just sets the connections to the
-         * MPI communicator and the triangulation. This is useful after de-
-         * serialization of a particle handler.
+         * MPI communicator and the triangulation.
          */
         void initialize(const parallel::distributed::Triangulation<dim,spacedim> &tria,
                         const Mapping<dim,spacedim> &mapping,
@@ -158,8 +157,8 @@ namespace aspect
         /**
          * Insert a particle into the collection of particles. Return an iterator
          * to the new position of the particle. This function involves a copy of
-         * the particle and its properties. Note that this function is of O(N \log N)
-         * complexity for N particles.
+         * the particle and its properties. Note that this function is of $O(N \log N)$
+         * complexity for $N$ particles.
          */
         particle_iterator
         insert_particle(const Particle<dim,spacedim> &particle,
@@ -382,6 +381,13 @@ namespace aspect
                                          const void *)> load_callback;
 
         /**
+         * This variable is set by the register_store_callback_function()
+         * function and used by the register_load_callback_function() function
+         * to check where the particle data was stored.
+         */
+        unsigned int data_offset;
+
+        /**
          * Calculates the number of particles in the global model domain.
          */
         void
@@ -421,17 +427,35 @@ namespace aspect
          * is empty, received particles are simply attached to the end of
          * the vector.
          *
-         * @param [in] Optional vector of cell iterators with the same structure
-         * as @p particles_to_send. If this parameter is given it should contain
-         * the cell iterator for every particle to be send in which the particle
-         * belongs. This parameter is necessary if the cell information of the
-         * particle iterator is outdated (e.g. after particle movement).
+         * @param [in] new_cells_for_particles Optional vector of cell
+         * iterators with the same structure as @p particles_to_send. If this
+         * parameter is given it should contain the cell iterator for every
+         * particle to be send in which the particle belongs. This parameter
+         * is necessary if the cell information of the particle iterator is
+         * outdated (e.g. after particle movement).
          */
         void
         send_recv_particles(const std::vector<std::vector<particle_iterator> > &particles_to_send,
                             std::multimap<types::LevelInd,Particle <dim> >     &received_particles,
                             const std::vector<std::vector<active_cell_it> >    &new_cells_for_particles = std::vector<std::vector<active_cell_it> > ());
 
+
+
+        /**
+         * Callback function that should be called before every
+         * refinement and when writing checkpoints.
+         * Allows registering store_particles() in the triangulation.
+         */
+        void
+        register_store_callback_function(const bool serialization);
+
+        /**
+         * Callback function that should be called after every
+         * refinement and after resuming from a checkpoint.
+         * Allows registering load_particles() in the triangulation.
+         */
+        void
+        register_load_callback_function(const bool serialization);
 
         /**
          * Called by listener functions from Triangulation for every cell
@@ -441,7 +465,7 @@ namespace aspect
         void
         store_particles(const typename parallel::distributed::Triangulation<dim,spacedim>::cell_iterator &cell,
                         const typename parallel::distributed::Triangulation<dim,spacedim>::CellStatus status,
-                        void *data);
+                        void *data) const;
 
         /**
          * Called by listener functions after a refinement step. The local map

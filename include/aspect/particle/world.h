@@ -64,11 +64,6 @@ namespace aspect
     {
       public:
         /**
-         * A type that can be used to iterate over all particles in the domain.
-         */
-        typedef ParticleIterator<dim> particle_iterator;
-
-        /**
          * Default World constructor.
          */
         World();
@@ -155,24 +150,6 @@ namespace aspect
          */
         void
         connect_to_signals(aspect::SimulatorSignals<dim> &signals);
-
-        /**
-         * Callback function that is called from Simulator before every
-         * refinement and when writing checkpoints.
-         * Allows registering store_particles() in the triangulation.
-         */
-        void
-        register_store_callback_function(const bool serialization,
-                                         typename parallel::distributed::Triangulation<dim> &triangulation);
-
-        /**
-         * Callback function that is called from Simulator after every
-         * refinement and after resuming from a checkpoint.
-         * Allows registering load_particles() in the triangulation.
-         */
-        void
-        register_load_callback_function(const bool serialization,
-                                        typename parallel::distributed::Triangulation<dim> &triangulation);
 
         /**
          * Called by listener functions from Triangulation for every cell
@@ -273,13 +250,6 @@ namespace aspect
          * managing the internal particle structures.
          */
         std_cxx11::unique_ptr<ParticleHandler<dim> > particle_handler;
-
-        /**
-         * This variable is set by the register_store_callback_function()
-         * function and used by the register_load_callback_function() function
-         * to check where the particle data was stored.
-         */
-        unsigned int data_offset;
 
         /**
          * Strategy for particle load balancing.
@@ -400,14 +370,12 @@ namespace aspect
     template <class Archive>
     void World<dim>::serialize (Archive &ar, const unsigned int)
     {
+      // Note that although Boost claims to handle serialization of pointers
+      // correctly, at least for the case of unique_ptr it seems to not work.
+      // It works correctly when archiving the content of the pointer instead.
       ar
-      &particle_handler
+      &(*particle_handler)
       ;
-
-      // Note that initialize is not necessary when saving the particle handler,
-      // but it does not harm either. When loading the triangulation we need to
-      // recreate the links to the triangulation and the MPI communicator.
-      particle_handler->initialize(this->get_triangulation(),this->get_mapping(),this->get_mpi_communicator());
     }
   }
 }
