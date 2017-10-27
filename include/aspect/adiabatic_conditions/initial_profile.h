@@ -106,6 +106,20 @@ namespace aspect
 
       private:
 
+        // Parameters accessed from phase_transitions
+        double reference_rho;
+        double reference_T;
+        double reference_compressibility;
+        double reference_specific_heat;
+        double thermal_alpha;
+        std::vector<double> transition_depths;
+        std::vector<double> transition_temperatures;
+        std::vector<double> transition_widths;
+        std::vector<double> transition_slopes;
+        std::vector<double> density_jumps;
+        std::vector<double> phase_prefactors;
+
+
         /**
          * Whether the adiabatic conditions are already calculated. This is
          * important for plugins that are used by the adiabatic conditions but
@@ -133,6 +147,10 @@ namespace aspect
          * with regard to the depth coordinate.
          */
         double delta_z;
+
+
+        // Power law exponent of thermal expansivity
+        double delta;
 
         /**
          * An enum describing the different options to compute the reference

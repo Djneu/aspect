@@ -47,6 +47,8 @@ namespace aspect
         void
         declare_parameters (ParameterHandler &prm);
 
+        double test = 0.;
+
         virtual
         void
         parse_parameters (ParameterHandler &prm);

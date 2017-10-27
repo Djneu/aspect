@@ -20,12 +20,13 @@
 
 
 #include <aspect/global.h>
+#include <aspect/material_model/interface.h>
+#include <aspect/material_model/phase_transitions.h>
 #include <aspect/adiabatic_conditions/initial_profile.h>
 #include <aspect/gravity_model/interface.h>
 #include <aspect/initial_composition/interface.h>
-
 #include <deal.II/base/signaling_nan.h>
-
+#include <aspect/utilities.h>
 
 namespace aspect
 {
@@ -73,6 +74,8 @@ namespace aspect
       const int gravity_direction =  (g * (point_bot - point_surf) >= 0) ?
                                      1 :
                                      -1;
+
+      this->get_pcout() << "Reference density? " << reference_rho << std::endl;
 
       // now integrate downward using the explicit Euler method for simplicity
       //
@@ -274,6 +277,10 @@ namespace aspect
       {
         prm.enter_subsection("Initial profile");
         {
+          prm.declare_entry("Delta", "2",
+                            Patterns::Double (0),
+                            "Power law exponent of thermal expansivity. Units: none$.");
+
           Functions::ParsedFunction<1>::declare_parameters (prm, 1);
           prm.declare_entry("Composition reference profile","initial composition",
                             Patterns::Selection("initial composition|function"),
@@ -296,6 +303,8 @@ namespace aspect
       {
         prm.enter_subsection("Initial profile");
         {
+
+          delta = prm.get_double("Delta");
           const std::string composition_profile = prm.get("Composition reference profile");
 
           if (composition_profile == "initial composition")
@@ -325,6 +334,34 @@ namespace aspect
             }
         }
         prm.leave_subsection();
+      }
+      prm.leave_subsection();
+
+      // Get data from Material model parameters
+      prm.enter_subsection("Material model");
+      {
+        prm.enter_subsection("Phase transitions");
+        {
+          reference_rho              = prm.get_double ("Reference density");
+          reference_T                = prm.get_double ("Reference temperature");
+          reference_compressibility  = prm.get_double ("Compressibility");
+          reference_specific_heat    = prm.get_double ("Reference specific heat");
+          thermal_alpha              = prm.get_double ("Thermal expansion coefficient");
+          transition_depths          = Utilities::string_to_double
+                                         (Utilities::split_string_list(prm.get ("Phase transition depths")));
+          transition_widths          = Utilities::string_to_double
+                                        (Utilities::split_string_list(prm.get ("Phase transition widths")));
+          transition_temperatures    = Utilities::string_to_double
+                                        (Utilities::split_string_list(prm.get ("Phase transition temperatures")));
+          transition_slopes          = Utilities::string_to_double
+                                         (Utilities::split_string_list(prm.get ("Phase transition Clapeyron slopes")));
+          density_jumps              = Utilities::string_to_double
+                                        (Utilities::split_string_list(prm.get ("Phase transition density jumps")));
+          phase_prefactors            = Utilities::string_to_double
+                                          (Utilities::split_string_list(prm.get ("Viscosity prefactors")));
+        }
+        prm.leave_subsection();
+        //ASSERT(prm.get(
       }
       prm.leave_subsection();
     }
