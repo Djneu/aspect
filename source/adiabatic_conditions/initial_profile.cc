@@ -75,7 +75,8 @@ namespace aspect
                                      1 :
                                      -1;
 
-      this->get_pcout() << "Reference density? " << reference_rho << std::endl;
+      // Initialize variable for density
+      double density;
 
       // now integrate downward using the explicit Euler method for simplicity
       //
@@ -83,34 +84,58 @@ namespace aspect
       //       T'(z) = alpha |g| T / C_p
       for (unsigned int i=0; i<n_points; ++i)
         {
+ 
+          // Define current depth
+          const double z = double(i)/double(n_points-1)*this->get_geometry_model().maximal_depth(); 
+
           if (i==0)
             {
               pressures[i] = this->get_surface_pressure();
               temperatures[i] = this->get_adiabatic_surface_temperature();
+              density = reference_rho;
             }
           else
             {
-              // use material properties calculated at i-1
-              const double density = out.densities[0];
+
+              // Using surface (reference) value of thermal expansivity
               const double alpha = out.thermal_expansion_coefficients[0];
+
               // Handle the case that cp is zero (happens in simple Stokes test problems like sol_cx). By setting
               // 1/cp = 0.0 we will have a constant temperature profile with depth.
               const double one_over_cp = (out.specific_heat[0]>0.0) ? 1.0/out.specific_heat[0] : 0.0;
+
               // get the magnitude of gravity. we assume
               // that gravity always points along the depth direction. this
               // may not strictly be true always but is likely a good enough
               // approximation here.
               const double gravity = gravity_direction * this->get_gravity_model().gravity_vector(in.position[0]).norm();
 
+              // Calculate current pressure (using previous density)
               pressures[i] = pressures[i-1] + density * gravity * delta_z;
+
+              double phase_function_rho = 0.;
+              double phase_function_t = 0.;
+              for (unsigned int j=0; j<transition_depths.size(); ++j)
+                {
+                  phase_function_rho += 0.5 * ( 1. + tanh( ( z-transition_depths[j]) / transition_widths[j] ) )*density_jumps[j];
+                  phase_function_t += 0.5 * ( 1. + tanh( ( z-transition_depths[j]) / transition_widths[j] ) )*temperature_jumps[j];      
+                }
+
+              // Calculate Dissipation number
+              const double di = ( alpha * gravity * this->get_geometry_model().maximal_depth() ) / reference_specific_heat; 
+
+              // Recalculate density. Divide by "1" is Gruenheissen parameter
+              density = reference_rho * std::pow( ( ( (delta * di * z ) / 1. ) + 1. ), 1 / delta ) +  phase_function_rho;
+              
+
               temperatures[i] = (this->include_adiabatic_heating())
                                 ?
-                                temperatures[i-1] * (1 + alpha * gravity * delta_z * one_over_cp)
+                                this->get_adiabatic_surface_temperature() * std::pow( ( ( (delta * di * z ) ) + 1. ), 1 / delta ) +  phase_function_t
                                 :
                                 this->get_adiabatic_surface_temperature();
             }
 
-          const double z = double(i)/double(n_points-1)*this->get_geometry_model().maximal_depth();
+          //const double z = double(i)/double(n_points-1)*this->get_geometry_model().maximal_depth();
           const Point<dim> representative_point = this->get_geometry_model().representative_point (z);
           const Tensor <1,dim> g = this->get_gravity_model().gravity_vector(representative_point);
 
@@ -141,7 +166,7 @@ namespace aspect
 
           this->get_material_model().evaluate(in, out);
 
-          densities[i] = out.densities[0];
+          densities[i] = density;
         }
 
       if (gravity_direction == 1 && this->get_surface_pressure() >= 0)
@@ -357,6 +382,8 @@ namespace aspect
                                          (Utilities::split_string_list(prm.get ("Phase transition Clapeyron slopes")));
           density_jumps              = Utilities::string_to_double
                                         (Utilities::split_string_list(prm.get ("Phase transition density jumps")));
+          temperature_jumps              = Utilities::string_to_double
+                                        (Utilities::split_string_list(prm.get ("Phase transition temperature jumps")));
           phase_prefactors            = Utilities::string_to_double
                                           (Utilities::split_string_list(prm.get ("Viscosity prefactors")));
         }

@@ -510,6 +510,14 @@ namespace aspect
                                "in peridotite, eclogite or none of them."
                                "List must have the same number of entries as Phase transition depths. "
                                "Units: $kg/m^3$.");
+            prm.declare_entry ("Phase transition temperature jumps", "",
+                               Patterns::List (Patterns::Double(0)),
+                               "A list of temperature jumps at each phase transition. A positive value means "
+                               "that the temperature increases with depth. The corresponding entry in "
+                               "Corresponding phase for temperature jump determines if the temperature jump occurs "
+                               "in peridotite, eclogite or none of them."
+                               "List must have the same number of entries as Phase transition depths. "
+                               "Units: $kg/m^3$.");
             prm.declare_entry ("Phase transition widths", "",
                                Patterns::List (Patterns::Double(0)),
                                "A list of widths for each phase transition, in terms of depth. The phase functions "
@@ -614,6 +622,8 @@ namespace aspect
                                          (Utilities::split_string_list(prm.get ("Phase transition Clapeyron slopes")));
           density_jumps              = Utilities::string_to_double
                                         (Utilities::split_string_list(prm.get ("Phase transition density jumps")));
+          temperature_jumps              = Utilities::string_to_double
+                                        (Utilities::split_string_list(prm.get ("Phase transition temperature jumps")));
           phase_prefactors            = Utilities::string_to_double
                                           (Utilities::split_string_list(prm.get ("Viscosity prefactors")));
 
