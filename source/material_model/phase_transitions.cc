@@ -511,7 +511,7 @@ namespace aspect
                                "List must have the same number of entries as Phase transition depths. "
                                "Units: $kg/m^3$.");
             prm.declare_entry ("Phase transition temperature jumps", "",
-                               Patterns::List (Patterns::Double(0)),
+                               Patterns::List (Patterns::Double()),
                                "A list of temperature jumps at each phase transition. A positive value means "
                                "that the temperature increases with depth. The corresponding entry in "
                                "Corresponding phase for temperature jump determines if the temperature jump occurs "
