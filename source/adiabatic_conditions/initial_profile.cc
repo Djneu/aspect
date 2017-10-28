@@ -86,7 +86,9 @@ namespace aspect
         {
  
           // Define current depth
-          const double z = double(i)/double(n_points-1)*this->get_geometry_model().maximal_depth(); 
+          //const double z = double(i)/double(n_points-1)*this->get_geometry_model().maximal_depth(); 
+          const double z = double(i)/double(n_points-1); 
+          const double max_depth = this->get_geometry_model().maximal_depth();
 
           if (i==0)
             {
@@ -117,8 +119,8 @@ namespace aspect
               double phase_function_t = 0.;
               for (unsigned int j=0; j<transition_depths.size(); ++j)
                 {
-                  phase_function_rho += 0.5 * ( 1. + tanh( ( z-transition_depths[j]) / transition_widths[j] ) )*density_jumps[j];
-                  phase_function_t += 0.5 * ( 1. + tanh( ( z-transition_depths[j]) / transition_widths[j] ) )*temperature_jumps[j];      
+                  phase_function_rho += 0.5 * ( 1. + tanh( ( (z*max_depth) - transition_depths[j]) / transition_widths[j] ) )*density_jumps[j];
+                  phase_function_t += 0.5 * ( 1. + tanh( ( (z*max_depth) - transition_depths[j]) / transition_widths[j] ) )*temperature_jumps[j];      
                 }
 
               // Calculate Dissipation number
