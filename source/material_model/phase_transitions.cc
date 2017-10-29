@@ -579,6 +579,10 @@ namespace aspect
             prm.declare_entry ("Dislocation activation volume", "1.4e-005",
                                Patterns::List (Patterns::Double(0)),
                                "Activation volume for dislocation viscosity." "Units: m^3/mol");
+           prm.declare_entry ("Dislocation creep exponent", "3.5",
+                             Patterns::List (Patterns::Double(0)),
+                             "Power-law exponent $n_{dis}$ for dislocation creep. "
+                             "Units: none.");
 
             //Diffusion viscosity parameters
             prm.declare_entry ("Diffusion prefactor", "1.25e-015",
@@ -590,6 +594,11 @@ namespace aspect
             prm.declare_entry ("Diffusion activation volume", "6e-6",
                                Patterns::List (Patterns::Double(0)),
                                "Diffusion activation volume for viscosity equation." "Units: m^3/mol");
+          prm.declare_entry ("Diffusion creep grain size exponent", "3",
+                             Patterns::List (Patterns::Double(0)),
+                             "Diffusion creep grain size exponent $p_{diff}$ that determines the "
+                             "dependence of vescosity on grain size. "
+                             "Units: none.");
 
             // Additional viscosity parameters
             prm.declare_entry ("Maximum viscosity","1.0e24",Patterns::Double(0),
