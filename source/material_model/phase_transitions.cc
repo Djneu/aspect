@@ -480,7 +480,107 @@ namespace aspect
                                "The value of the compressibility $\\kappa$. "
                                "Units: $1/Pa$.");
 
-            //viscosity parameters
+            // Grain size rheology parameters 
+            prm.declare_entry ("Grain growth activation energy", "3.5e5",
+                               Patterns::List (Patterns::Double(0)),
+                               "The activation energy for grain growth $E_g$. "
+                               "Units: $J/mol$.");
+            prm.declare_entry ("Grain growth activation volume", "8e-6",
+                               Patterns::List (Patterns::Double(0)),
+                               "The activation volume for grain growth $E_g$. "
+                               "Units: $m^3/mol$.");
+            prm.declare_entry ("Grain growth exponent", "3",
+                               Patterns::List (Patterns::Double(0)),
+                               "Exponent of the grain growth law $p_g$. This is an experimentally determined "
+                               "grain growth constant. "
+                               "Units: none.");
+            prm.declare_entry ("Grain growth rate constant", "1.5e-5",
+                               Patterns::List (Patterns::Double(0)),
+                               "Prefactor of the Ostwald ripening grain growth law $G_0$. "
+                               "This is dependent on water content, which is assumed to be "
+                               "50 H/10^6 Si for the default value. "
+                               "Units: $m^{p_g}/s$.");
+            prm.declare_entry ("Reciprocal required strain", "10",
+                               Patterns::List (Patterns::Double(0)),
+                               "This parameters $\\lambda$ gives an estimate of the strain necessary "
+                               "to achieve a new grain size. ");
+            prm.declare_entry ("Recrystallized grain size", "",
+                               Patterns::List (Patterns::Double(0)),
+                               "The grain size $d_{ph}$ to that a phase will be reduced to when crossing a phase transition. "
+                               "When set to zero, grain size will not be reduced. "
+                               "Units: m.");
+            prm.declare_entry ("Use paleowattmeter", "true",
+                               Patterns::Bool (),
+                               "A flag indicating whether the computation should be use the "
+                               "paleowattmeter approach of Austin and Evans (2007) for grain size reduction "
+                               "in the dislocation creep regime (if true) or the paleopiezometer aprroach "
+                               "from Hall and Parmetier (2003) (if false).");
+            prm.declare_entry ("Average specific grain boundary energy", "1.0",
+                               Patterns::List (Patterns::Double(0)),
+                               "The average specific grain boundary energy $\\gamma$. "
+                               "Units: J/m^2.");
+            prm.declare_entry ("Work fraction for boundary area change", "0.1",
+                               Patterns::List (Patterns::Double(0)),
+                               "The fraction $\\chi$ of work done by dislocation creep to change the grain boundary area. "
+                               "Units: J/m^2.");
+            prm.declare_entry ("Geometric constant", "3",
+                               Patterns::List (Patterns::Double(0)),
+                               "Geometric constant $c$ used in the paleowattmeter grain size reduction law. "
+                               "Units: none.");
+            prm.declare_entry ("Grain size", "0.003",Patterns::List (Patterns::Double(0)),
+                               "Stabilizes strain dependent viscosity. Units: m");
+          prm.declare_entry ("Minimum grain size", "1e-5",
+                             Patterns::Double (0),
+                             "The minimum grain size that is used for the material model. This parameter "
+                             "is introduced to limit local viscosity contrasts, but still allows for a widely "
+                             "varying viscosity over the whole mantle range. "
+                             "Units: Pa s.");
+          prm.declare_entry ("Lower mantle grain size scaling", "1.0",
+                             Patterns::Double (0),
+                             "A scaling factor for the grain size in the lower mantle. In models where the "
+                             "high grain size contrast between the upper and lower mantle causes numerical "
+                             "problems, the grain size in the lower mantle can be scaled to a larger value, "
+                             "simultaneously scaling the viscosity prefactors and grain growth parameters "
+                             "to keep the same physical behavior. Differences to the original formulation "
+                             "only occur when material with a smaller grain size than the recrystallization "
+                             "grain size cross the upper-lower mantle boundary. "
+                             "The real grain size can be obtained by dividing the model grain size by this value. "
+                             "Units: none.");
+          prm.declare_entry ("Advect logarithm of grain size", "false",
+                             Patterns::Bool (),
+                             "Whether to advect the logarithm of the grain size or the "
+                             "grain size. The equation and the physics are the same, "
+                             "but for problems with high grain size gradients it might "
+                             "be preferable to advect the logarithm. ");
+
+
+            // Discloation viscosity parameters
+            prm.declare_entry ("Dislocation viscosity iteration threshold", "1e-3",
+                               Patterns::Double(0),
+                               "We need to perform an iteration inside the computation "
+                               "of the dislocation viscosity, because it depends on the "
+                               "dislocation strain rate, which depends on the dislocation "
+                               "viscosity itself. This number determines the termination "
+                               "accuracy, i.e. if the dislocation viscosity changes by less "
+                               "than this factor we terminate the iteration.");
+            prm.declare_entry ("Dislocation viscosity iteration number", "10",
+                               Patterns::Integer(0),
+                               "We need to perform an iteration inside the computation "
+                               "of the dislocation viscosity, because it depends on the "
+                               "dislocation strain rate, which depends on the dislocation "
+                               "viscosity itself. This number determines the maximum "
+                               "number of iterations that are performed. ");
+            prm.declare_entry ("Dislocation prefactor", "1.57e-017",
+                               Patterns::List (Patterns::Double(0)),
+                               "Discloation viscosity prefactor" "Units: None");
+            prm.declare_entry ("Dislocation activation energy", "530000",
+                               Patterns::List (Patterns::Double(0)),
+                               "Activation energy for dislocation viscosity." "Units: J/mol");
+            prm.declare_entry ("Dislocation activation volume", "1.4e-005",
+                               Patterns::List (Patterns::Double(0)),
+                               "Activation volume for dislocation viscosity." "Units: m^3/mol");
+
+            //Diffusion viscosity parameters
             prm.declare_entry ("Diffusion prefactor", "1.25e-015",
                                Patterns::List (Patterns::Double(0)),
                                "Diffusion viscosity prefactor with first entry being diffusion, second dislocation" "Units: None");
@@ -489,22 +589,13 @@ namespace aspect
                                "Activation energy for viscosity equation." "Units: J/mol");
             prm.declare_entry ("Diffusion activation volume", "6e-6",
                                Patterns::List (Patterns::Double(0)),
-                               "Dislocation activation volume for viscosity equation." "Units: m^3/mol");
-            prm.declare_entry ("Dislocation prefactor", "1.57e-017",
-                               Patterns::List (Patterns::Double(0)),
-                               "Viscosity prefactor with first entry being diffusion, second dislocation" "Units: None");
-            prm.declare_entry ("Dislocation activation energy", "530000",
-                               Patterns::List (Patterns::Double(0)),
-                               "Activation energy for viscosity equation." "Units: J/mol");
-            prm.declare_entry ("Dislocation activation volume", "1.4e-005",
-                               Patterns::List (Patterns::Double(0)),
-                               "Activation volume for viscosity equation." "Units: m^3/mol");
+                               "Diffusion activation volume for viscosity equation." "Units: m^3/mol");
+
+            // Additional viscosity parameters
             prm.declare_entry ("Maximum viscosity","1.0e24",Patterns::Double(0),
                                "Reference strain rate for first time step. Units: Kg/m/s");
             prm.declare_entry ("Minimum viscosity", "1.0e18", Patterns::Double(0),
                                "Stabilizes strain dependent viscosity. Units: Kg/m/s");
-            prm.declare_entry ("Grain size", "0.003",Patterns::List (Patterns::Double(0)),
-                               "Stabilizes strain dependent viscosity. Units: m");
 
             //thermal expansivity and conductivity parameters
             prm.declare_entry ("a0", "2.68e-5",
@@ -607,7 +698,31 @@ namespace aspect
           reference_specific_heat    = prm.get_double ("Reference specific heat");
           thermal_alpha              = prm.get_double ("Thermal expansion coefficient");
 
+          // grain evolution parameters
+          grain_growth_activation_energy        = Utilities::string_to_double
+                                                  (Utilities::split_string_list(prm.get ("Grain growth activation energy")));
+          grain_growth_activation_volume        = Utilities::string_to_double
+                                                  (Utilities::split_string_list(prm.get ("Grain growth activation volume")));
+          grain_growth_rate_constant            = Utilities::string_to_double
+                                                  (Utilities::split_string_list(prm.get ("Grain growth rate constant")));
+          grain_growth_exponent                 = Utilities::string_to_double
+                                                  (Utilities::split_string_list(prm.get ("Grain growth exponent")));
+          reciprocal_required_strain            = Utilities::string_to_double
+                                                  (Utilities::split_string_list(prm.get ("Reciprocal required strain")));
+          min_grain_size                        = prm.get_double ("Minimum grain size");
+          pv_grain_size_scaling                 = prm.get_double ("Lower mantle grain size scaling");
+          use_paleowattmeter                    = prm.get_bool ("Use paleowattmeter");
+          grain_boundary_energy                 = Utilities::string_to_double
+                                                  (Utilities::split_string_list(prm.get ("Average specific grain boundary energy")));
+          boundary_area_change_work_fraction    = Utilities::string_to_double
+                                                  (Utilities::split_string_list(prm.get ("Work fraction for boundary area change")));
+          geometric_constant                    = Utilities::string_to_double
+                                                  (Utilities::split_string_list(prm.get ("Geometric constant")));
+          advect_log_gransize                   = prm.get_bool ("Advect logarithm of grain size");
+
           //viscosity parameters
+          dislocation_viscosity_iteration_threshold = prm.get_double("Dislocation viscosity iteration threshold");
+          dislocation_viscosity_iteration_number = prm.get_integer("Dislocation viscosity iteration number");
           max_eta                              = prm.get_double ("Maximum viscosity");
           min_eta                              = prm.get_double("Minimum viscosity");
           grain_size                           = Utilities::string_to_double
@@ -618,13 +733,16 @@ namespace aspect
                                                  (Utilities::split_string_list(prm.get ("Diffusion activation energy")));
           diffusion_activation_volume          = Utilities::string_to_double
                                                  (Utilities::split_string_list(prm.get ("Diffusion activation volume")));
+          diffusion_creep_grain_size_exponent   = Utilities::string_to_double
+                                                  (Utilities::split_string_list(prm.get ("Diffusion creep grain size exponent")));
           dislocation_prefactor                = Utilities::string_to_double
                                                  (Utilities::split_string_list(prm.get ("Dislocation prefactor")));
           dislocation_activation_energy        = Utilities::string_to_double
                                                  (Utilities::split_string_list(prm.get ("Dislocation activation energy")));
           dislocation_activation_volume        = Utilities::string_to_double
                                                  (Utilities::split_string_list(prm.get ("Dislocation activation volume")));
-
+          dislocation_creep_exponent            = Utilities::string_to_double
+                                                  (Utilities::split_string_list(prm.get ("Dislocation creep exponent")));
 
           if(diffusion_prefactor.size() != diffusion_activation_energy.size() ||
              diffusion_prefactor.size() != diffusion_activation_volume.size() || 

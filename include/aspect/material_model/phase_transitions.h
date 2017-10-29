@@ -59,7 +59,30 @@ namespace aspect
         double reference_compressibility;
         double reference_specific_heat;
 
+
+        // grain evolution parameters
+        double gas_constant; // J/(K*mol)
+        std::vector<double> grain_growth_activation_energy;
+        std::vector<double> grain_growth_activation_volume;
+        std::vector<double> grain_growth_rate_constant;
+        std::vector<double> grain_growth_exponent;
+        std::vector<double> reciprocal_required_strain;
+        std::vector<double> recrystallized_grain_size;
+        double min_grain_size;
+        double pv_grain_size_scaling;
+
+        bool advect_log_gransize;
+
+        // for paleowattmeter
+        bool use_paleowattmeter;
+        std::vector<double> grain_boundary_energy;
+        std::vector<double> boundary_area_change_work_fraction;
+        std::vector<double> geometric_constant;
+
         //viscosity variables
+        double dislocation_viscosity_iteration_threshold;
+        unsigned int dislocation_viscosity_iteration_number;
+        std::vector<double> dislocation_creep_exponent;
         double eta;
         double max_eta;
         double min_eta;
@@ -67,6 +90,7 @@ namespace aspect
         std::vector<double> diffusion_activation_energy;
         std::vector<double> diffusion_activation_volume;
         std::vector<double> diffusion_prefactor;
+        std::vector<double> diffusion_creep_grain_size_exponent;
         std::vector<double> dislocation_activation_energy;
         std::vector<double> dislocation_activation_volume;
         std::vector<double> dislocation_prefactor;
