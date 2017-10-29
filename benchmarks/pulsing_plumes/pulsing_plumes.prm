@@ -20,12 +20,12 @@ subsection Material model
   set Model name = Phase transitions
 
   subsection Phase transitions
-    set Thermal expansion coefficient = 3e-5
+    set Thermal expansion coefficient = 0.0
     set Viscosity                     = 1e20
     set Compressibility               = 4e-12
     set Reference density             = 3300
     set Reference temperature         = 1600
-    set Thermal conductivity          = 4.125
+    set Thermal conductivity          = 0.0
     set Reference specific heat       = 1250
 
     #viscosity parameters
@@ -56,7 +56,7 @@ subsection Material model
     set Phase transition temperature jumps             = 40, -40
     set Phase transition depths                        = 4e5, 6.7e5,
     set Phase transition temperatures                  = 1803, 1902
-    set Phase transition Clapeyron slopes              = 3.8e6, -2e6,
+    set Phase transition Clapeyron slopes              = 3.8e6, -4e6,
     set Phase transition widths                        = 30000,30000
     set Viscosity prefactors                           = 1, 1, 1 
 
@@ -121,7 +121,7 @@ end
 subsection Boundary temperature model
   set List of model names = spherical constant
   subsection Spherical constant
-    set Inner temperature = 2450
+    set Inner temperature = 3341
     set Outer temperature = 1600
   end
 end
@@ -132,11 +132,11 @@ subsection Initial temperature model
   set List of model names = adiabatic,
 
   subsection Adiabatic
-    set Age bottom boundary layer = 0 #3e8
-    set Age top boundary layer    =  0 #1e8
-    set Amplitude                 = 0 #1245
+    set Age bottom boundary layer = 3e8
+    set Age top boundary layer    =  1e8
+    set Amplitude                 = 1245
     set Position                  = center
-    set Radius                    = 0 #1e5
+    set Radius                    = 1e5
   end
 end
 
@@ -168,7 +168,7 @@ subsection Mesh refinement
   set Refinement fraction                = 0.8
   set Coarsening fraction                = 0.05
   set Initial adaptive refinement        = 1
-  set Initial global refinement          = 5
+  set Initial global refinement          = 6
   set Minimum refinement level           = 4
   set Strategy                           = temperature, viscosity
   set Time steps between mesh refinement = 5

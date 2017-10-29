@@ -76,7 +76,7 @@ namespace aspect
                                      -1;
 
       // Initialize variable for density
-      double density;
+      double density = reference_rho;
 
       // now integrate downward using the explicit Euler method for simplicity
       //
@@ -100,7 +100,7 @@ namespace aspect
             {
 
               // Using surface (reference) value of thermal expansivity
-              const double alpha = out.thermal_expansion_coefficients[0];
+              const double alpha = 2e-5; //out.thermal_expansion_coefficients[0];
 
               // Handle the case that cp is zero (happens in simple Stokes test problems like sol_cx). By setting
               // 1/cp = 0.0 we will have a constant temperature profile with depth.
@@ -112,27 +112,35 @@ namespace aspect
               // approximation here.
               const double gravity = gravity_direction * this->get_gravity_model().gravity_vector(in.position[0]).norm();
 
+              // Calculate Dissipation number and Grunheissen parameter 
+              const double grun = alpha / ( reference_compressibility * reference_rho * reference_specific_heat );
+              const double di = ( alpha * gravity * this->get_geometry_model().maximal_depth() ) / reference_specific_heat; 
+
               // Calculate current pressure (using previous density)
               pressures[i] = pressures[i-1] + density * gravity * delta_z;
 
               double phase_function_rho = 0.;
               double phase_function_t = 0.;
+              double entropy_change = 0.;
+              double temperature_jump = 0.;
               for (unsigned int j=0; j<transition_depths.size(); ++j)
                 {
                   phase_function_rho += 0.5 * ( 1. + tanh( ( (z*max_depth) - transition_depths[j]) / transition_widths[j] ) )*density_jumps[j];
-                  phase_function_t += 0.5 * ( 1. + tanh( ( (z*max_depth) - transition_depths[j]) / transition_widths[j] ) )*temperature_jumps[j];      
+
+                  entropy_change = transition_slopes[j] * density_jumps[j] / std::pow(reference_rho, 2);
+                  temperature_jump = this->get_adiabatic_surface_temperature() * std::exp( di * transition_depths[j] / max_depth )
+                                       * entropy_change * one_over_cp;
+                  phase_function_t += 0.5 * ( 1. + tanh( ( (z*max_depth) - transition_depths[j]) / transition_widths[j] ) )*temperature_jump;      
                 }
 
-              // Calculate Dissipation number
-              const double di = ( alpha * gravity * this->get_geometry_model().maximal_depth() ) / reference_specific_heat; 
-              const double grun = alpha / ( reference_compressibility * reference_rho * reference_specific_heat );
+
               // Recalculate density. Divide by "1" is Gruenheissen parameter
              // density = reference_rho * std::pow( ( ( (delta * di * z ) / 1. ) + 1. ), 1 / delta ) +  phase_function_rho;
               density = reference_rho * std::exp( di * z / grun ) + phase_function_rho;
 
               temperatures[i] = (this->include_adiabatic_heating())
                                 ?
-                                this->get_adiabatic_surface_temperature() * std::pow( ( ( (delta * di * z ) ) + 1. ), 1 / delta ) +  phase_function_t
+                                this->get_adiabatic_surface_temperature() * std::exp( di * z) +  phase_function_t
                                 :
                                 this->get_adiabatic_surface_temperature();
             }
