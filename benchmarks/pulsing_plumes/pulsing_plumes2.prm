@@ -60,6 +60,7 @@ subsection Material model
     set Phase transition widths                        = 30000,30000
     set Viscosity prefactors                           = 1, 1, 1 
 
+    set Maximum temperature dependence of viscosity         = 1e6
     set Average specific grain boundary energy         = 1.0,1.0,1.0
     set Dislocation creep exponent                     = 1.0, 1.0, 1.0
     set Diffusion creep grain size exponent            = 3, 3, 3
