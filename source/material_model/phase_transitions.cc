@@ -177,10 +177,10 @@ namespace aspect
     template <int dim>
     double
     PhaseTransitions<dim>::
-    phase_function_derivative (const Point<dim> &,
+    Pphase_function_derivative (const Point<dim> &,
                                const double temperature,
                                const double pressure,
-                               const int phase) const
+                               unsigned int phase) const
     {
       double transition_pressure;
       double pressure_width;
@@ -214,6 +214,44 @@ namespace aspect
                                        * std::tanh(pressure_deviation / pressure_width));
     }
 
+    template <int dim>
+    double
+    PhaseTransitions<dim>::
+    Tphase_function_derivative (const Point<dim> &,
+                               const double temperature,
+                               const double pressure,
+                               unsigned int phase) const
+    {
+      double transition_pressure;
+      double pressure_width;
+      double width_temp;
+
+      // we already should have the adiabatic conditions here
+      AssertThrow (this->get_adiabatic_conditions().is_initialized(),
+                   ExcMessage("need adiabatic conditions to incorporate phase transitions"));
+
+      // first, get the pressure at which the phase transition occurs normally
+
+      //converting depth and width given to pressures
+      const Point<dim,double> transition_point = this->get_geometry_model().representative_point(transition_depths[phase]);
+      const Point<dim,double> transition_plus_width = this->get_geometry_model().representative_point(transition_depths[phase] + 0.5 * transition_widths[phase]);
+      const Point<dim,double> transition_minus_width = this->get_geometry_model().representative_point(transition_depths[phase] - 0.5 * transition_widths[phase]);
+      transition_pressure = this->get_adiabatic_conditions().pressure(transition_point);
+      pressure_width = (this->get_adiabatic_conditions().pressure(transition_plus_width)
+                        - this->get_adiabatic_conditions().pressure(transition_minus_width));
+      width_temp = transition_widths[phase];
+
+      // then calculate the deviation from the transition point (both in temperature
+      // and in pressure)
+      double pressure_deviation = pressure - transition_pressure
+                                  - transition_slopes[phase] * (temperature - transition_temperatures[phase]);
+   
+      // last, calculate the analytical derivative of the phase function
+      if (width_temp==0)
+        return 0;
+      else
+        return (( -0.5 * transition_slopes[phase] ) / pressure_width) * (1.0 - std::pow(std::tanh(pressure_deviation / pressure_width) , 2 ));
+    }
 
 
     template <int dim>
@@ -257,7 +295,7 @@ namespace aspect
         const Point<dim> position = in.position[i];
         unsigned int number_of_phase_transitions = transition_depths.size();
         unsigned int ol_index = get_phase_index(position, temperature, pressure);
-   
+        double depth = this->get_geometry_model().depth(position);
 
 
         //constant properties
@@ -320,20 +358,28 @@ namespace aspect
         }  
 
         //density equation with pressure and temperature dependence, likely will change when adiabatic conditions are introduced.
-        double density_temperature_dependence = 1.0;
-        if (this->include_adiabatic_heating ())
-          {
-            // temperature dependence is 1 - alpha * (T - T(adiabatic))
-            density_temperature_dependence -= (temperature - this->get_adiabatic_conditions().temperature(position))
-                                              * alpha;
-          }
-        else
-            density_temperature_dependence -= temperature * alpha;
+         double density_phase_deviation = 0;
+         if (this->get_adiabatic_conditions().is_initialized() && this->include_latent_heat())
+           for (unsigned int ph=0; ph<number_of_phase_transitions; ++ph)
+             {
+                // calculate derivative of the phase function
+                const double phase_derivative = Tphase_function_derivative(position,
+                                                                       temperature,
+                                                                       pressure,
+                                                                       ph); 
 
-          const double kappa = reference_compressibility;
-          const double density_pressure_dependence = reference_rho * kappa * (pressure - this->get_surface_pressure());
-          out.densities[i] = (reference_rho + density_pressure_dependence + density_phase_dependence)
-                               * density_temperature_dependence;
+               density_phase_deviation += phase_derivative*density_jumps[ph];
+             }
+
+          const double temperature_deviation = temperature - this->get_adiabatic_conditions().temperature(position);
+          const double pressure_dev = pressure - this->get_adiabatic_conditions().pressure(position);
+          double density_profile = reference_rho;
+          if(this->get_adiabatic_conditions().is_initialized())
+              density_profile = this->get_adiabatic_conditions().density(position);
+        
+          out.densities[i] = density_profile * (1 - alpha * temperature_deviation + reference_compressibility * pressure_dev)
+                                  + density_phase_deviation * temperature_deviation ;
+
          //out.viscosities[i] = std::min(std::max(min_eta, viscosity * viscosity_phase_dependence), max_eta);
            out.viscosities[i] = viscosity;
 
@@ -350,7 +396,7 @@ namespace aspect
             for (unsigned int phase=0; phase<number_of_phase_transitions; ++phase)
               {
                 // calculate derivative of the phase function
-                const double PhaseFunctionDerivative = phase_function_derivative(position,
+                const double PhaseFunctionDerivative = Pphase_function_derivative(position,
                                                                                  temperature,
                                                                                  pressure,
                                                                                  phase);

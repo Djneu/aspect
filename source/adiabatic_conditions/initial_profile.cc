@@ -125,10 +125,10 @@ namespace aspect
 
               // Calculate Dissipation number
               const double di = ( alpha * gravity * this->get_geometry_model().maximal_depth() ) / reference_specific_heat; 
-
+              const double grun = alpha / ( reference_compressibility * reference_rho * reference_specific_heat );
               // Recalculate density. Divide by "1" is Gruenheissen parameter
-              density = reference_rho * std::pow( ( ( (delta * di * z ) / 1. ) + 1. ), 1 / delta ) +  phase_function_rho;
-              
+             // density = reference_rho * std::pow( ( ( (delta * di * z ) / 1. ) + 1. ), 1 / delta ) +  phase_function_rho;
+              density = reference_rho * std::exp( di * z / grun ) + phase_function_rho;
 
               temperatures[i] = (this->include_adiabatic_heating())
                                 ?

@@ -108,10 +108,18 @@ namespace aspect
 
         virtual
         double
-        phase_function_derivative (const Point<dim> &position,
+        Pphase_function_derivative (const Point<dim> &position,
                                    const double temperature,
                                    const double pressure,
-                                   const int phase) const;
+                                   unsigned int phase) const;
+
+        virtual
+        double
+        Tphase_function_derivative (const Point<dim> &position,
+                                   const double temperature,
+                                   const double pressure,
+                                   unsigned int phase) const;
+
         virtual
         unsigned int
         get_phase_index (const Point<dim> &position,
