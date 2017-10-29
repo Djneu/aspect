@@ -4,7 +4,7 @@
 
 set Dimension                              = 2
 set Use years in output instead of seconds = true
-set End time                               = 1e7
+set End time                               = 5e8
 set Output directory                       = moretests
 
 set Linear solver tolerance                = 1e-4
