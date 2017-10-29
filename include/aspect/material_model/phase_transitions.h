@@ -83,6 +83,7 @@ namespace aspect
         double dislocation_viscosity_iteration_threshold;
         unsigned int dislocation_viscosity_iteration_number;
         std::vector<double> dislocation_creep_exponent;
+        double max_temperature_dependence_of_eta;
         double eta;
         double max_eta;
         double min_eta;

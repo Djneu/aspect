@@ -601,6 +601,14 @@ namespace aspect
                              "Units: none.");
 
             // Additional viscosity parameters
+          prm.declare_entry ("Maximum temperature dependence of viscosity", "100",
+                             Patterns::Double (0),
+                             "The factor by which viscosity at adiabatic temperature and ambient temperature "
+                             "are allowed to differ (a value of x means that the viscosity can be x times higher "
+                             "or x times lower compared to the value at adiabatic temperature. This parameter "
+                             "is introduced to limit local viscosity contrasts, but still allow for a widely "
+                             "varying viscosity over the whole mantle range. "
+                             "Units: none.");
             prm.declare_entry ("Maximum viscosity","1.0e24",Patterns::Double(0),
                                "Reference strain rate for first time step. Units: Kg/m/s");
             prm.declare_entry ("Minimum viscosity", "1.0e18", Patterns::Double(0),
@@ -732,6 +740,7 @@ namespace aspect
           //viscosity parameters
           dislocation_viscosity_iteration_threshold = prm.get_double("Dislocation viscosity iteration threshold");
           dislocation_viscosity_iteration_number = prm.get_integer("Dislocation viscosity iteration number");
+          max_temperature_dependence_of_eta     = prm.get_double ("Maximum temperature dependence of viscosity");
           max_eta                              = prm.get_double ("Maximum viscosity");
           min_eta                              = prm.get_double("Minimum viscosity");
           grain_size                           = Utilities::string_to_double
