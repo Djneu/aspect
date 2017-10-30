@@ -403,7 +403,7 @@ namespace aspect
       const double diffusion_strain_rate_dependence = (1.0 - 1) / 1;
       double vdiff = pow(diffusion_prefactor[phase],-1.0/1)
              * std::pow(second_strain_rate_invariant, diffusion_strain_rate_dependence)
-             * pow(grain_size[phase], 3/1)
+             * pow(constant_grain_size[phase], 3/1)
              * diffusion_energy_term;
 
 
@@ -624,12 +624,23 @@ namespace aspect
     {
       for (unsigned int i=0; i < in.position.size(); ++i)
       {
+
         const double temperature = in.temperature[i];
         const double pressure = in.pressure[i];
         const Point<dim> position = in.position[i];
         unsigned int number_of_phase_transitions = transition_depths.size();
         unsigned int ol_index = get_phase_index(position, temperature, pressure);
         double depth = this->get_geometry_model().depth(position);
+
+        // Reset entropy derivatives
+        out.entropy_derivative_pressure[i] = 0;
+        out.entropy_derivative_temperature[i] = 0;
+
+        // Reset all reaction terms
+        for (unsigned int c=0; c < in.composition[i].size(); ++c )
+          {
+            out.reaction_terms[i][c]            = 0;
+          }
 
     	// convert the grain size from log to normal
     	std::vector<double> composition (in.composition[i]);
@@ -766,7 +777,7 @@ namespace aspect
         //   out.viscosities[i] = viscosity;
 
 
-        // Calculate entropy derivative
+        // Calculate entropy derivative for phase_changes
         {
           double entropy_gradient_pressure = 0.0;
           double entropy_gradient_temperature = 0.0;
@@ -793,8 +804,19 @@ namespace aspect
                 entropy_gradient_pressure += PhaseFunctionDerivative * entropy_change;
                 entropy_gradient_temperature -= PhaseFunctionDerivative * entropy_change * transition_slopes[phase];
               }
+
+          // Entropy derivatives for phase changes
           out.entropy_derivative_pressure[i] = entropy_gradient_pressure;
           out.entropy_derivative_temperature[i] = entropy_gradient_temperature;
+
+          // Melting 
+          out.entropy_derivative_pressure[i] += entropy_derivative_melt (in.temperature[i], in.pressure[i], composition,
+                                                                   in.position[i], NonlinearDependence::pressure) ; // for pressure dependence
+
+          out.entropy_derivative_temperature[i] += entropy_derivative_melt (in.temperature[i], in.pressure[i], composition,
+                                                                      in.position[i], NonlinearDependence::temperature) ; // for temperature dependence
+
+
         }
 
         // TODO: make this more general for not just olivine grains
@@ -815,6 +837,161 @@ namespace aspect
 
       }
     }
+
+    template <int dim>
+    double
+    PhaseTransitions<dim>::
+    entropy_derivative_melt (const double temperature,
+                             const double pressure,
+                             const std::vector<double> &compositional_fields,
+                             const Point<dim> &position,
+                             const NonlinearDependence::Dependence dependence) const
+    {
+      double entropy_gradient = 0.0;
+
+      // calculate latent heat of melting
+      // we need the change of melt fraction in dependence of pressure and temperature
+
+      // for peridotite after Katz, 2003
+      const double T_solidus        = A1 + 273.15
+                                      + A2 * pressure
+                                      + A3 * pressure * pressure;
+      const double T_lherz_liquidus = B1 + 273.15
+                                      + B2 * pressure
+                                      + B3 * pressure * pressure;
+      const double T_liquidus       = C1 + 273.15
+                                      + C2 * pressure
+                                      + C3 * pressure * pressure;
+
+      const double dT_solidus_dp        = A2 + 2 * A3 * pressure;
+      const double dT_lherz_liquidus_dp = B2 + 2 * B3 * pressure;
+      const double dT_liquidus_dp       = C2 + 2 * C3 * pressure;
+
+      const double peridotite_fraction = (this->n_compositional_fields()>0
+                                          ?
+                                          1.0 - compositional_fields[0]
+                                          :
+                                          1.0);
+
+      if (temperature > T_solidus && temperature < T_liquidus && pressure < 1.3e10)
+        {
+          // melt fraction when clinopyroxene is still present
+          double melt_fraction_derivative_temperature
+            = beta * pow((temperature - T_solidus)/(T_lherz_liquidus - T_solidus),beta-1)
+              / (T_lherz_liquidus - T_solidus);
+
+          double melt_fraction_derivative_pressure
+            = beta * pow((temperature - T_solidus)/(T_lherz_liquidus - T_solidus),beta-1)
+              * (dT_solidus_dp * (temperature - T_lherz_liquidus)
+                 + dT_lherz_liquidus_dp * (T_solidus - temperature))
+              / pow(T_lherz_liquidus - T_solidus,2);
+
+          // melt fraction after melting of all clinopyroxene
+          const double R_cpx = r1 + r2 * pressure;
+          const double F_max = M_cpx / R_cpx;
+
+          if (peridotite_melt_fraction(temperature, pressure, compositional_fields, position) > F_max)
+            {
+              const double T_max = std::pow(F_max,1.0/beta) * (T_lherz_liquidus - T_solidus) + T_solidus;
+              const double dF_max_dp = - M_cpx * std::pow(r1 + r2 * pressure,-2) * r2;
+              const double dT_max_dp = dT_solidus_dp
+                                       + 1.0/beta * std::pow(F_max,1.0/beta - 1.0) * dF_max_dp * (T_lherz_liquidus - T_solidus)
+                                       + std::pow(F_max,1.0/beta) * (dT_lherz_liquidus_dp - dT_solidus_dp);
+
+              melt_fraction_derivative_temperature
+                = (1.0 - F_max) * beta * std::pow((temperature - T_max)/(T_liquidus - T_max),beta-1)
+                  / (T_liquidus - T_max);
+
+              melt_fraction_derivative_pressure
+                = dF_max_dp
+                  - dF_max_dp * std::pow((temperature - T_max)/(T_liquidus - T_max),beta)
+                  + (1.0 - F_max) * beta * std::pow((temperature - T_max)/(T_liquidus - T_max),beta-1)
+                  * (dT_max_dp * (T_max - T_liquidus) - (dT_liquidus_dp - dT_max_dp) * (temperature - T_max)) / std::pow(T_liquidus - T_max, 2);
+            }
+
+          double melt_fraction_derivative = 0;
+          if (dependence == NonlinearDependence::temperature)
+            melt_fraction_derivative = melt_fraction_derivative_temperature;
+          else if (dependence == NonlinearDependence::pressure)
+            melt_fraction_derivative = melt_fraction_derivative_pressure;
+          else
+            AssertThrow(false, ExcMessage("Error in calculating melt fraction derivative: not implemented"));
+
+          entropy_gradient += melt_fraction_derivative * peridotite_melting_entropy_change * peridotite_fraction;
+        }
+
+      return entropy_gradient;
+    }
+
+
+    template <int dim>
+    void
+    PhaseTransitions<dim>::
+    melt_fractions (const MaterialModel::MaterialModelInputs<dim> &in,
+                    std::vector<double> &melt_fractions) const
+    {
+      for (unsigned int q=0; q<in.temperature.size(); ++q)
+        melt_fractions[q] = melt_fraction(in.temperature[q],
+                                          std::max(0.0, in.pressure[q]),
+                                          in.composition[q],
+                                          in.position[q]);
+      return;
+    }
+
+    template <int dim>
+    double
+    PhaseTransitions<dim>::
+    peridotite_melt_fraction (const double temperature,
+                              const double pressure,
+                              const std::vector<double> &,
+                              const Point<dim> &) const
+    {
+      // anhydrous melting of peridotite after Katz, 2003
+      const double T_solidus  = A1 + 273.15
+                                + A2 * pressure
+                                + A3 * pressure * pressure;
+      const double T_lherz_liquidus = B1 + 273.15
+                                      + B2 * pressure
+                                      + B3 * pressure * pressure;
+      const double T_liquidus = C1 + 273.15
+                                + C2 * pressure
+                                + C3 * pressure * pressure;
+
+      // melt fraction for peridotite with clinopyroxene
+      double peridotite_melt_fraction;
+      if (temperature < T_solidus || pressure > 1.3e10)
+        peridotite_melt_fraction = 0.0;
+      else if (temperature > T_lherz_liquidus)
+        peridotite_melt_fraction = 1.0;
+      else
+        peridotite_melt_fraction = std::pow((temperature - T_solidus) / (T_lherz_liquidus - T_solidus),beta);
+
+      // melt fraction after melting of all clinopyroxene
+      const double R_cpx = r1 + r2 * pressure;
+      const double F_max = M_cpx / R_cpx;
+
+      if (peridotite_melt_fraction > F_max && temperature < T_liquidus)
+        {
+          const double T_max = std::pow(F_max,1/beta) * (T_lherz_liquidus - T_solidus) + T_solidus;
+          peridotite_melt_fraction = F_max + (1 - F_max) * pow((temperature - T_max) / (T_liquidus - T_max),beta);
+        }
+      return peridotite_melt_fraction;
+
+    }
+
+    template <int dim>
+    double
+    PhaseTransitions<dim>::
+    melt_fraction (const double temperature,
+                   const double pressure,
+                   const std::vector<double> &composition, /*composition*/
+                   const Point<dim> &position) const
+    {
+      return peridotite_melt_fraction(temperature, pressure, composition, position);
+
+    }
+
+
 
 
     template <int dim>
@@ -922,29 +1099,29 @@ namespace aspect
                                "Units: none.");
             prm.declare_entry ("Grain size", "0.003",Patterns::List (Patterns::Double(0)),
                                "Stabilizes strain dependent viscosity. Units: m");
-          prm.declare_entry ("Minimum grain size", "1e-5",
-                             Patterns::Double (0),
-                             "The minimum grain size that is used for the material model. This parameter "
-                             "is introduced to limit local viscosity contrasts, but still allows for a widely "
-                             "varying viscosity over the whole mantle range. "
-                             "Units: Pa s.");
-          prm.declare_entry ("Lower mantle grain size scaling", "1.0",
-                             Patterns::Double (0),
-                             "A scaling factor for the grain size in the lower mantle. In models where the "
-                             "high grain size contrast between the upper and lower mantle causes numerical "
-                             "problems, the grain size in the lower mantle can be scaled to a larger value, "
-                             "simultaneously scaling the viscosity prefactors and grain growth parameters "
-                             "to keep the same physical behavior. Differences to the original formulation "
-                             "only occur when material with a smaller grain size than the recrystallization "
-                             "grain size cross the upper-lower mantle boundary. "
-                             "The real grain size can be obtained by dividing the model grain size by this value. "
-                             "Units: none.");
-          prm.declare_entry ("Advect logarithm of grain size", "false",
-                             Patterns::Bool (),
-                             "Whether to advect the logarithm of the grain size or the "
-                             "grain size. The equation and the physics are the same, "
-                             "but for problems with high grain size gradients it might "
-                             "be preferable to advect the logarithm. ");
+            prm.declare_entry ("Minimum grain size", "1e-5",
+                               Patterns::Double (0),
+                               "The minimum grain size that is used for the material model. This parameter "
+                               "is introduced to limit local viscosity contrasts, but still allows for a widely "
+                               "varying viscosity over the whole mantle range. "
+                               "Units: Pa s.");
+            prm.declare_entry ("Lower mantle grain size scaling", "1.0",
+                               Patterns::Double (0),
+                               "A scaling factor for the grain size in the lower mantle. In models where the "
+                               "high grain size contrast between the upper and lower mantle causes numerical "
+                               "problems, the grain size in the lower mantle can be scaled to a larger value, "
+                               "simultaneously scaling the viscosity prefactors and grain growth parameters "
+                               "to keep the same physical behavior. Differences to the original formulation "
+                               "only occur when material with a smaller grain size than the recrystallization "
+                               "grain size cross the upper-lower mantle boundary. "
+                               "The real grain size can be obtained by dividing the model grain size by this value. "
+                               "Units: none.");
+            prm.declare_entry ("Advect logarithm of grain size", "false",
+                               Patterns::Bool (),
+                               "Whether to advect the logarithm of the grain size or the "
+                               "grain size. The equation and the physics are the same, "
+                               "but for problems with high grain size gradients it might "
+                               "be preferable to advect the logarithm. ");
 
 
             // Discloation viscosity parameters
@@ -987,11 +1164,11 @@ namespace aspect
             prm.declare_entry ("Diffusion activation volume", "6e-6",
                                Patterns::List (Patterns::Double(0)),
                                "Diffusion activation volume for viscosity equation." "Units: m^3/mol");
-          prm.declare_entry ("Diffusion creep grain size exponent", "3",
-                             Patterns::List (Patterns::Double(0)),
-                             "Diffusion creep grain size exponent $p_{diff}$ that determines the "
-                             "dependence of vescosity on grain size. "
-                             "Units: none.");
+            prm.declare_entry ("Diffusion creep grain size exponent", "3",
+                               Patterns::List (Patterns::Double(0)),
+                               "Diffusion creep grain size exponent $p_{diff}$ that determines the "
+                               "dependence of vescosity on grain size. "
+                               "Units: none.");
 
             // Additional viscosity parameters
           prm.declare_entry ("Maximum temperature dependence of viscosity", "100",
@@ -1085,6 +1262,104 @@ namespace aspect
                                "List must have one more entry than Phase transition depths. "
                                "Units: non-dimensional.");
 
+            // Melting parameters
+            prm.declare_entry ("Thermal expansion coefficient of melt", "6.8e-5",
+                               Patterns::Double (0),
+                               "The value of the thermal expansion coefficient $\\alpha_f$. "
+                               "Units: $1/K$.");
+          prm.declare_entry ("A1", "1085.7",
+                             Patterns::Double (),
+                             "Constant parameter in the quadratic "
+                             "function that approximates the solidus "
+                             "of peridotite. "
+                             "Units: $°C$.");
+          prm.declare_entry ("A2", "1.329e-7",
+                             Patterns::Double (),
+                             "Prefactor of the linear pressure term "
+                             "in the quadratic function that approximates "
+                             "the solidus of peridotite. "
+                             "Units: $°C/Pa$.");
+          prm.declare_entry ("A3", "-5.1e-18",
+                             Patterns::Double (),
+                             "Prefactor of the quadratic pressure term "
+                             "in the quadratic function that approximates "
+                             "the solidus of peridotite. "
+                             "Units: $°C/(Pa^2)$.");
+          prm.declare_entry ("B1", "1475.0",
+                             Patterns::Double (),
+                             "Constant parameter in the quadratic "
+                             "function that approximates the lherzolite "
+                             "liquidus used for calculating the fraction "
+                             "of peridotite-derived melt. "
+                             "Units: $°C$.");
+          prm.declare_entry ("B2", "8.0e-8",
+                             Patterns::Double (),
+                             "Prefactor of the linear pressure term "
+                             "in the quadratic function that approximates "
+                             "the  lherzolite liquidus used for "
+                             "calculating the fraction of peridotite-"
+                             "derived melt. "
+                             "Units: $°C/Pa$.");
+          prm.declare_entry ("B3", "-3.2e-18",
+                             Patterns::Double (),
+                             "Prefactor of the quadratic pressure term "
+                             "in the quadratic function that approximates "
+                             "the  lherzolite liquidus used for "
+                             "calculating the fraction of peridotite-"
+                             "derived melt. "
+                             "Units: $°C/(Pa^2)$.");
+          prm.declare_entry ("C1", "1780.0",
+                             Patterns::Double (),
+                             "Constant parameter in the quadratic "
+                             "function that approximates the liquidus "
+                             "of peridotite. "
+                             "Units: $°C$.");
+          prm.declare_entry ("C2", "4.50e-8",
+                             Patterns::Double (),
+                             "Prefactor of the linear pressure term "
+                             "in the quadratic function that approximates "
+                             "the liquidus of peridotite. "
+                             "Units: $°C/Pa$.");
+          prm.declare_entry ("C3", "-2.0e-18",
+                             Patterns::Double (),
+                             "Prefactor of the quadratic pressure term "
+                             "in the quadratic function that approximates "
+                             "the liquidus of peridotite. "
+                             "Units: $°C/(Pa^2)$.");
+          prm.declare_entry ("r1", "0.5",
+                             Patterns::Double (),
+                             "Constant in the linear function that "
+                             "approximates the clinopyroxene reaction "
+                             "coefficient. "
+                             "Units: non-dimensional.");
+          prm.declare_entry ("r2", "8e-11",
+                             Patterns::Double (),
+                             "Prefactor of the linear pressure term "
+                             "in the linear function that approximates "
+                             "the clinopyroxene reaction coefficient. "
+                             "Units: $1/Pa$.");
+          prm.declare_entry ("beta", "1.5",
+                             Patterns::Double (),
+                             "Exponent of the melting temperature in "
+                             "the melt fraction calculation. "
+                             "Units: non-dimensional.");
+          prm.declare_entry ("Peridotite melting entropy change", "-300",
+                             Patterns::Double (),
+                             "The entropy change for the phase transition "
+                             "from solid to melt of peridotite. "
+                             "Units: $J/(kg K)$.");
+          prm.declare_entry ("Mass fraction cpx", "0.15",
+                             Patterns::Double (),
+                             "Mass fraction of clinopyroxene in the "
+                             "peridotite to be molten. "
+                             "Units: non-dimensional.");
+          prm.declare_entry ("Relative density of melt", "0.9",
+                             Patterns::Double (),
+                             "The relative density of melt compared to the "
+                             "solid material. This means, the density change "
+                             "upon melting is this parameter times the density "
+                             "of solid material."
+                             "Units: non-dimensional.");
 
           }
           prm.leave_subsection();
@@ -1129,6 +1404,8 @@ namespace aspect
           geometric_constant                    = Utilities::string_to_double
                                                   (Utilities::split_string_list(prm.get ("Geometric constant")));
           advect_log_gransize                   = prm.get_bool ("Advect logarithm of grain size");
+          recrystallized_grain_size = Utilities::string_to_double
+                                      (Utilities::split_string_list(prm.get ("Recrystallized grain size")));
 
           //viscosity parameters
           dislocation_viscosity_iteration_threshold = prm.get_double("Dislocation viscosity iteration threshold");
@@ -1136,8 +1413,8 @@ namespace aspect
           max_temperature_dependence_of_eta     = prm.get_double ("Maximum temperature dependence of viscosity");
           max_eta                              = prm.get_double ("Maximum viscosity");
           min_eta                              = prm.get_double("Minimum viscosity");
-          grain_size                           = Utilities::string_to_double
-                                                 (Utilities::split_string_list(prm.get ("Grain size")));
+          constant_grain_size                  = Utilities::string_to_double
+                                                 (Utilities::split_string_list(prm.get ("Constant grain size")));
           diffusion_prefactor                  = Utilities::string_to_double
                                                  (Utilities::split_string_list(prm.get ("Diffusion prefactor")));
           diffusion_activation_energy          = Utilities::string_to_double
@@ -1219,6 +1496,25 @@ namespace aspect
             {
               phase_prefactors[phase] /= phase_prefactors[phase-1];
             }
+
+          // Melting section
+          melt_thermal_alpha         = prm.get_double ("Thermal expansion coefficient of melt");
+          A1              = prm.get_double ("A1");
+          A2              = prm.get_double ("A2");
+          A3              = prm.get_double ("A3");
+          B1              = prm.get_double ("B1");
+          B2              = prm.get_double ("B2");
+          B3              = prm.get_double ("B3");
+          C1              = prm.get_double ("C1");
+          C2              = prm.get_double ("C2");
+          C3              = prm.get_double ("C3");
+          r1              = prm.get_double ("r1");
+          r2              = prm.get_double ("r2");
+          beta            = prm.get_double ("beta");
+          peridotite_melting_entropy_change
+            = prm.get_double ("Peridotite melting entropy change");
+          relative_melt_density = prm.get_double ("Relative density of melt");
+
         }
         prm.leave_subsection();
       }
