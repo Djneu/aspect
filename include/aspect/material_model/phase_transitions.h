@@ -23,6 +23,7 @@
 
 #include <aspect/material_model/interface.h>
 #include <aspect/simulator_access.h>
+#include <aspect/melt.h>
 
 namespace aspect
 {
@@ -33,7 +34,7 @@ namespace aspect
     /*Beginning of material model to test viscosity and density changes.
     */
     template <int dim>
-    class PhaseTransitions : public MaterialModel::Interface<dim>, public ::aspect::SimulatorAccess<dim>
+    class PhaseTransitions : public MaterialModel::Interface<dim>, public ::aspect::SimulatorAccess<dim>, public MaterialModel::MeltFractionModel<dim>
     {
       public:
 
@@ -53,12 +54,81 @@ namespace aspect
         void
         parse_parameters (ParameterHandler &prm);
 
+        /**
+         * @}
+         */
+
+        virtual void melt_fractions (const MaterialModel::MaterialModelInputs<dim> &in,
+                                     std::vector<double> &melt_fractions) const;
+
       private:
         double reference_rho;
         double reference_T;
         double reference_compressibility;
         double reference_specific_heat;
 
+ 
+        // Start of melting parameters
+
+        // Melt thermal expansivity
+        double melt_thermal_alpha;
+
+        /**
+         * Parameters for anhydrous melting of peridotite after Katz, 2003
+         */
+
+        // for the solidus temperature
+        double A1;   // °C
+        double A2; // °C/Pa
+        double A3; // °C/(Pa^2)
+
+        // for the lherzolite liquidus temperature
+        double B1;   // °C
+        double B2;   // °C/Pa
+        double B3; // °C/(Pa^2)
+
+        // for the liquidus temperature
+        double C1;   // °C
+        double C2;  // °C/Pa
+        double C3; // °C/(Pa^2)
+
+        // for the reaction coefficient of pyroxene
+        double r1;     // cpx/melt
+        double r2;     // cpx/melt/GPa
+        double M_cpx;  // mass fraction of pyroxene
+
+        // melt fraction exponent
+        double beta;
+
+        // entropy change upon melting
+        double peridotite_melting_entropy_change;
+
+        // the relative density of molten material (compared to solid)
+        double relative_melt_density;
+
+        /**
+         * Percentage of material that is molten. Melting model after Katz,
+         * 2003 (for peridotite) and Sobolev et al., 2011 (for pyroxenite)
+         */
+        virtual
+        double
+        melt_fraction (const double temperature,
+                       const double pressure,
+                       const std::vector<double> &compositional_fields,
+                       const Point<dim> &position) const;
+
+        virtual
+        double
+        peridotite_melt_fraction (const double temperature,
+                                  const double pressure,
+                                  const std::vector<double> &compositional_fields,
+                                  const Point<dim> &position) const;
+        double
+        entropy_derivative_melt ( const double temperature,
+                                  const double pressure,
+                                  const std::vector<double> &compositional_fields,
+                                  const Point<dim> &position,
+                                  const NonlinearDependence::Dependence dependence) const;
 
         // grain evolution parameters
         double gas_constant; // J/(K*mol)
@@ -87,7 +157,7 @@ namespace aspect
         double eta;
         double max_eta;
         double min_eta;
-        std::vector<double> grain_size;
+        std::vector<double> constant_grain_size;
         std::vector<double> diffusion_activation_energy;
         std::vector<double> diffusion_activation_volume;
         std::vector<double> diffusion_prefactor;
