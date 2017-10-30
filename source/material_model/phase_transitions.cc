@@ -1520,6 +1520,7 @@ namespace aspect
           peridotite_melting_entropy_change
             = prm.get_double ("Peridotite melting entropy change");
           relative_melt_density = prm.get_double ("Relative density of melt");
+          M_cpx           = prm.get_double ("Mass fraction cpx");
 
         }
         prm.leave_subsection();
