@@ -57,7 +57,7 @@ subsection Material model
 
     set Maximum viscosity             = 1e24
     set Minimum viscosity             = 1e18
-    set Grain size                    = 0.002235, 0.000818, 0.000026                       #0.002235, 0.000818, 0.000288, 0.000026
+    set Constant grain size                    = 0.002235, 0.000818, 0.000026                       #0.002235, 0.000818, 0.000288, 0.000026
 
     #coefficients for thermal expansivity and conductivity
     set a0                            = 3.15e-5, 2.84e-5, 2.68e-5,                #3.15e-5, 2.84e-5, 2.68e-5, 2.68e-5, 

@@ -876,14 +876,17 @@ namespace aspect
       // We only consider peridotite melting (no pyroxenite)
       const double peridotite_fraction = 1.0;
 
+      double melt_fraction_derivative_pressure = 0.;
+      double melt_fraction_derivative_temperature = 0.;
+
       if (temperature > T_solidus && temperature < T_liquidus && pressure < 1.3e10)
         {
           // melt fraction when clinopyroxene is still present
-          double melt_fraction_derivative_temperature
+          melt_fraction_derivative_temperature
             = beta * pow((temperature - T_solidus)/(T_lherz_liquidus - T_solidus),beta-1)
               / (T_lherz_liquidus - T_solidus);
 
-          double melt_fraction_derivative_pressure
+          melt_fraction_derivative_pressure
             = beta * pow((temperature - T_solidus)/(T_lherz_liquidus - T_solidus),beta-1)
               * (dT_solidus_dp * (temperature - T_lherz_liquidus)
                  + dT_lherz_liquidus_dp * (T_solidus - temperature))
