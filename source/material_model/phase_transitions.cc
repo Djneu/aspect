@@ -836,6 +836,10 @@ namespace aspect
                 if(advect_log_gransize)
                   out.reaction_terms[i][c] = - out.reaction_terms[i][c] / composition[c];
               }
+              else if (this->introspection().name_for_compositional_index(c) == "peridotite_melt_fraction")
+                {
+                  out.reaction_terms[i][c] = peridotite_melt_fraction(in.temperature[i], in.pressure[i], composition, in.position[i]) - in.composition[i][c]; 
+                }
               else
                 out.reaction_terms[i][c] = 0.0;
             }
