@@ -27,6 +27,340 @@ namespace aspect
 {
   namespace MaterialModel
   {
+
+
+    template <int dim>
+    void
+    PhaseTransitions<dim>::
+    convert_log_grain_size (const bool normal_to_log,
+                            std::vector<double> &composition) const
+    {
+      // get grain size and limit it to a global minimum
+      const std::string field_name = "olivine_grain_size";
+      if(!this->introspection().compositional_name_exists(field_name))
+    	return;
+
+      double grain_size = composition[this->introspection().compositional_index_for_name(field_name)];
+
+      if (normal_to_log)
+    	grain_size = -std::log(std::max(grain_size,min_grain_size));
+      else
+      	grain_size = std::max(std::exp(-grain_size),min_grain_size);
+
+      composition[this->introspection().compositional_index_for_name(field_name)] = grain_size;
+
+      return;
+    }
+
+
+    template <int dim>
+    double
+    PhaseTransitions<dim>::
+    grain_size_growth_rate (const double                  temperature,
+                            const double                  pressure,
+                            const std::vector<double>    &compositional_fields,
+                            const SymmetricTensor<2,dim> &strain_rate,
+                            const Tensor<1,dim>          &velocity,
+                            const Point<dim>             &position,
+                            const unsigned int            field_index,
+                            const int                     crossed_transition) const
+    {
+      // we want to iterate over the grain size evolution here, as we solve in fact an ordinary differential equation
+      // and it is not correct to use the starting grain size (and introduces instabilities)
+      const double original_grain_size = compositional_fields[field_index];
+      if((original_grain_size != original_grain_size) || this->get_timestep() == 0.0
+                                                      || original_grain_size < std::numeric_limits<double>::min())
+        return 0.0;
+
+      // set up the parameters for the sub-timestepping of grain size evolution
+      std::vector<double> current_composition = compositional_fields;
+      double grain_size = original_grain_size;
+      double grain_size_change = 0.0;
+      const double timestep = this->get_timestep();
+      double grain_growth_timestep = 500 * 3600 * 24 * 365.25; // 500 yrs
+      double time = 0;
+
+      // find out in which phase we are
+      const unsigned int ol_index = get_phase_index(position, temperature, pressure);
+
+      // we keep the dislocation viscosity of the last iteration as guess
+      // for the next one
+      double current_dislocation_viscosity = 0.0;
+
+      do
+        {
+          time += grain_growth_timestep;
+
+          if(timestep - time < 0)
+            {
+              grain_growth_timestep = timestep - (time - grain_growth_timestep);
+              time = timestep;
+            }
+
+          // grain size growth due to Ostwald ripening
+          const double m = grain_growth_exponent[ol_index];
+          const double grain_size_growth_rate = grain_growth_rate_constant[ol_index] / (m * pow(grain_size,m-1))
+                                   * exp(- (grain_growth_activation_energy[ol_index] + pressure * grain_growth_activation_volume[ol_index])
+                                       / (gas_constant * temperature));
+          const double grain_size_growth = grain_size_growth_rate * grain_growth_timestep;
+
+          // grain size reduction in dislocation creep regime
+          const SymmetricTensor<2,dim> shear_strain_rate = strain_rate - 1./dim * trace(strain_rate) * unit_symmetric_tensor<dim>();
+          const double second_strain_rate_invariant = std::sqrt(std::abs(second_invariant(shear_strain_rate)));
+
+          const double current_diffusion_viscosity   = diffusion_viscosity(temperature, pressure, current_composition, strain_rate, position);
+          current_dislocation_viscosity              = dislocation_viscosity(temperature, pressure, current_composition, strain_rate, position, current_dislocation_viscosity);
+
+          double current_viscosity;
+          if(std::abs(second_strain_rate_invariant) > 1e-30)
+            current_viscosity = current_dislocation_viscosity * current_diffusion_viscosity / (current_dislocation_viscosity + current_diffusion_viscosity);
+          else
+            current_viscosity = current_diffusion_viscosity;
+
+          const double dislocation_strain_rate = second_strain_rate_invariant
+              * current_viscosity / current_dislocation_viscosity;
+
+          double grain_size_reduction = 0.0;
+
+          if (use_paleowattmeter)
+            {
+              // paleowattmeter: Austin and Evans (2007): Paleowattmeters: A scaling relation for dynamically recrystallized grain size. Geology 35, 343-346
+              const double stress = 2.0 * second_strain_rate_invariant * current_viscosity;
+              const double grain_size_reduction_rate = 2.0 * stress * boundary_area_change_work_fraction[ol_index] * dislocation_strain_rate * pow(grain_size,2)
+              / (geometric_constant[ol_index] * grain_boundary_energy[ol_index]);
+              grain_size_reduction = grain_size_reduction_rate * grain_growth_timestep;
+            }
+          else
+            {
+              //TODO: check equations! are we missing a factor 2 from the conversion between strain_rate and second invariant of strain_rate?
+              // paleopiezometer: Hall and Parmentier (2003): Influence of grain size evolution on convective instability. Geochem. Geophys. Geosyst., 4(3).
+              grain_size_reduction = reciprocal_required_strain[ol_index] * dislocation_strain_rate * grain_size * grain_growth_timestep;
+            }
+
+          grain_size_change = grain_size_growth - grain_size_reduction;
+
+          if ((grain_size_change / grain_size < 0.001 && grain_size_growth / grain_size < 0.1
+            && grain_size_reduction / grain_size < 0.1) || grain_size == 0.0)
+            grain_growth_timestep *= 2;
+          else if (grain_size_change / grain_size > 0.1 || grain_size_growth / grain_size > 0.5
+              || grain_size_reduction / grain_size > 0.5)
+            {
+              grain_size_change = 0.0;
+              time -= grain_growth_timestep;
+              grain_growth_timestep /= 2.0;
+            }
+
+          grain_size += grain_size_change;
+          current_composition[field_index] = grain_size;
+
+          if (grain_size < 0)
+            {
+            std::cout << "Grain size smaller 0:  " << grain_size << " ," << grain_size_growth
+                << " ," << grain_size_reduction << ", timestep: " << grain_growth_timestep << "! \n ";
+            break;
+            }
+        }
+      while (time < timestep);
+
+      // reduce grain size to recrystallized_grain_size when crossing phase transitions
+      // if the distance in radial direction a grain moved compared to the last time step
+      // is crossing a phase transition, reduce grain size
+
+      // TODO: recrystallize first, and then do grain size growth/reduction for grains that crossed the transition
+      // in dependence of the distance they have moved
+      double phase_grain_size_reduction = 0.0;
+      if (this->introspection().name_for_compositional_index(field_index) == "olivine_grain_size"
+          &&
+          this->get_timestep_number() > 0)
+        {
+          // check if material has crossed any phase transition, if yes, reset grain size
+          if (crossed_transition != -1)
+            if (recrystallized_grain_size[crossed_transition] > 0.0)
+              phase_grain_size_reduction = grain_size - recrystallized_grain_size[crossed_transition];
+        }
+      else if (this->introspection().name_for_compositional_index(field_index) == "pyroxene_grain_size")
+        {
+          phase_grain_size_reduction = 0.0;
+        }
+
+      if (grain_size < 5.e-6)
+        {
+          std::cout << "Grain size is " << grain_size << "! It needs to be larger than 5e-6.\n";
+          grain_size = 5e-6;
+        }
+
+      return grain_size - original_grain_size - phase_grain_size_reduction;
+    }
+
+
+    template <int dim>
+    double
+    PhaseTransitions<dim>::
+    diffusion_viscosity (const double                  temperature,
+                         const double                  pressure,
+                         const std::vector<double>    &composition,
+                         const SymmetricTensor<2,dim> &strain_rate,
+                         const Point<dim>             &position) const
+    {
+      const SymmetricTensor<2,dim> shear_strain_rate = strain_rate - 1./dim * trace(strain_rate) * unit_symmetric_tensor<dim>();
+      const double second_strain_rate_invariant = std::sqrt(std::abs(second_invariant(shear_strain_rate)));
+
+      // TODO: make this more general, for more phases we have to average grain size somehow
+      // TODO: default when field is not given & warning
+      // limit the grain size to a global minimum
+      const std::string field_name = "olivine_grain_size";
+      const double grain_size = this->introspection().compositional_name_exists(field_name)
+                                ?
+                                composition[this->introspection().compositional_index_for_name(field_name)]
+                                :
+                                0.0;
+
+      // Currently this will never be called without adiabatic_conditions initialized, but just in case
+      const double adiabatic_pressure = this->get_adiabatic_conditions().is_initialized()
+                                        ?
+                                        this->get_adiabatic_conditions().pressure(position)
+                                        :
+                                        pressure;
+
+      // find out in which phase we are
+      const unsigned int ol_index = get_phase_index(position, temperature, adiabatic_pressure);
+
+      // TODO: we use the prefactors from Behn et al., 2009 as default values, but their laws use the strain rate
+      // and we use the second invariant --> check if the prefactors should be changed
+      double energy_term = exp((diffusion_activation_energy[ol_index] + diffusion_activation_volume[ol_index] * adiabatic_pressure)
+                         / (1.0 * gas_constant * temperature));
+      if (this->get_adiabatic_conditions().is_initialized())
+        {
+          const double adiabatic_energy_term
+            = exp((diffusion_activation_energy[ol_index] + diffusion_activation_volume[ol_index] * adiabatic_pressure)
+              / (1.0 * gas_constant * this->get_adiabatic_conditions().temperature(position)));
+
+          const double temperature_dependence = energy_term / adiabatic_energy_term;
+          if (temperature_dependence > max_temperature_dependence_of_eta)
+            energy_term = adiabatic_energy_term * max_temperature_dependence_of_eta;
+          if (temperature_dependence < 1.0 / max_temperature_dependence_of_eta)
+            energy_term = adiabatic_energy_term / max_temperature_dependence_of_eta;
+        }
+
+      //const double strain_rate_dependence = (1.0 - diffusion_creep_exponent[ol_index]) / diffusion_creep_exponent[ol_index];
+      const double strain_rate_dependence = 0.;
+
+      return pow(diffusion_prefactor[ol_index],-1.0/1.0)
+             * std::pow(second_strain_rate_invariant,strain_rate_dependence)
+             * pow(grain_size, diffusion_creep_grain_size_exponent[ol_index]/1.0)
+             * energy_term;
+    }
+
+    template <int dim>
+    double
+    PhaseTransitions<dim>::
+    dislocation_viscosity (const double      temperature,
+                           const double      pressure,
+                           const std::vector<double> &composition,
+                           const SymmetricTensor<2,dim> &strain_rate,
+                           const Point<dim> &position,
+                           const double viscosity_guess) const
+    {
+      const double diff_viscosity = diffusion_viscosity(temperature,pressure,composition,strain_rate,position) ;
+
+      // Start the iteration with the full strain rate
+      double dis_viscosity;
+      if (viscosity_guess == 0)
+        dis_viscosity = dislocation_viscosity_fixed_strain_rate(temperature,pressure,std::vector<double>(),strain_rate,position);
+      else
+        dis_viscosity = viscosity_guess;
+
+      double dis_viscosity_old = 0;
+      unsigned int i = 0;
+      while (std::abs((dis_viscosity-dis_viscosity_old) / dis_viscosity) > dislocation_viscosity_iteration_threshold && i < dislocation_viscosity_iteration_number)
+          {
+          SymmetricTensor<2,dim> dislocation_strain_rate = diff_viscosity
+                                             / (diff_viscosity + dis_viscosity) * strain_rate;
+          dis_viscosity_old = dis_viscosity;
+          dis_viscosity = dislocation_viscosity_fixed_strain_rate(temperature,
+                                                                  pressure,
+                                                                  std::vector<double>(),
+                                                                  dislocation_strain_rate,
+                                                                  position);
+          i++;
+          }
+      return dis_viscosity;
+    }
+
+    template <int dim>
+    double
+    PhaseTransitions<dim>::
+    viscosity (const double temperature,
+               const double pressure,
+               const std::vector<double> &composition,
+               const SymmetricTensor<2,dim> &strain_rate,
+               const Point<dim> &position) const
+    {
+      //TODO: add assert
+      /*if (this->get_timestep_number() > 0)
+        Assert (grain_size >= 1.e-6, ExcMessage ("Error: The grain size should not be smaller than 1e-6 m."));*/
+
+      const SymmetricTensor<2,dim> shear_strain_rate = strain_rate - 1./dim * trace(strain_rate) * unit_symmetric_tensor<dim>();
+      const double second_strain_rate_invariant = std::sqrt(std::abs(second_invariant(shear_strain_rate)));
+
+      const double diff_viscosity = diffusion_viscosity(temperature, pressure, composition, strain_rate, position);
+
+      double effective_viscosity;
+      if(std::abs(second_strain_rate_invariant) > 1e-30)
+        {
+          const double disl_viscosity = dislocation_viscosity(temperature, pressure, composition, strain_rate, position);
+          effective_viscosity = disl_viscosity * diff_viscosity / (disl_viscosity + diff_viscosity);
+        }
+      else
+        effective_viscosity = diff_viscosity;
+      return effective_viscosity;
+    }
+
+    template <int dim>
+    double
+    PhaseTransitions<dim>::
+    dislocation_viscosity_fixed_strain_rate (const double      temperature,
+                                             const double      pressure,
+                                             const std::vector<double> &,
+                                             const SymmetricTensor<2,dim> &dislocation_strain_rate,
+                                             const Point<dim> &position) const
+    {
+      const SymmetricTensor<2,dim> shear_strain_rate = dislocation_strain_rate - 1./dim * trace(dislocation_strain_rate) * unit_symmetric_tensor<dim>();
+      const double second_strain_rate_invariant = std::sqrt(std::abs(second_invariant(shear_strain_rate)));
+
+      // Currently this will never be called without adiabatic_conditions initialized, but just in case
+      const double adiabatic_pressure = this->get_adiabatic_conditions().is_initialized()
+                                        ?
+                                        this->get_adiabatic_conditions().pressure(position)
+                                        :
+                                        pressure;
+
+      // find out in which phase we are
+      const unsigned int ol_index = get_phase_index(position, temperature, adiabatic_pressure);
+
+      double energy_term = exp((dislocation_activation_energy[ol_index] + dislocation_activation_volume[ol_index] * adiabatic_pressure)
+                         / (dislocation_creep_exponent[ol_index] * gas_constant * temperature));
+      if (this->get_adiabatic_conditions().is_initialized())
+        {
+          const double adiabatic_energy_term
+            = exp((dislocation_activation_energy[ol_index] + dislocation_activation_volume[ol_index] * adiabatic_pressure)
+              / (dislocation_creep_exponent[ol_index] * gas_constant * this->get_adiabatic_conditions().temperature(position)));
+
+          const double temperature_dependence = energy_term / adiabatic_energy_term;
+          if (temperature_dependence > max_temperature_dependence_of_eta)
+            energy_term = adiabatic_energy_term * max_temperature_dependence_of_eta;
+          if (temperature_dependence < 1.0 / max_temperature_dependence_of_eta)
+            energy_term = adiabatic_energy_term / max_temperature_dependence_of_eta;
+        }
+
+      const double strain_rate_dependence = (1.0 - dislocation_creep_exponent[ol_index]) / dislocation_creep_exponent[ol_index];
+
+      return pow(dislocation_prefactor[ol_index],-1.0/dislocation_creep_exponent[ol_index])
+             * std::pow(second_strain_rate_invariant,strain_rate_dependence)
+             * energy_term;
+    }
+
+
     //temperature and pressure dependent viscosity, set up similar to damage_rheology material model
     template <int dim>
     double
@@ -297,6 +631,68 @@ namespace aspect
         unsigned int ol_index = get_phase_index(position, temperature, pressure);
         double depth = this->get_geometry_model().depth(position);
 
+    	// convert the grain size from log to normal
+    	std::vector<double> composition (in.composition[i]);
+    	if(advect_log_gransize)
+          convert_log_grain_size(false,composition);
+    	else
+    	  for (unsigned int c=0;c<composition.size();++c)
+    	    composition[c] = std::max(min_grain_size,composition[c]);
+
+
+        // set up an integer that tells us which phase transition has been crossed inside of the cell
+        int crossed_transition(-1);
+
+        if (this->get_adiabatic_conditions().is_initialized())
+          for (unsigned int phase=0;phase<transition_depths.size();++phase)
+            {
+              // first, get the pressure at which the phase transition occurs normally
+              const Point<dim,double> transition_point = this->get_geometry_model().representative_point(transition_depths[phase]);
+              const Point<dim,double> transition_plus_width = this->get_geometry_model().representative_point(transition_depths[phase] + transition_widths[phase]);
+              const Point<dim,double> transition_minus_width = this->get_geometry_model().representative_point(transition_depths[phase] - transition_widths[phase]);
+              const double transition_pressure = this->get_adiabatic_conditions().pressure(transition_point);
+              const double pressure_width = 0.5 * (this->get_adiabatic_conditions().pressure(transition_plus_width)
+                                                   - this->get_adiabatic_conditions().pressure(transition_minus_width));
+
+
+              // then calculate the deviation from the transition point (both in temperature
+              // and in pressure)
+              double pressure_deviation = in.pressure[i] - transition_pressure
+                                          - transition_slopes[phase] * (in.temperature[i] - transition_temperatures[phase]);
+
+              if ((std::abs(pressure_deviation) < pressure_width)
+                &&
+                ((in.velocity[i] * this->get_gravity_model().gravity_vector(in.position[i])) * pressure_deviation > 0))
+                crossed_transition = phase;
+            }
+        else
+          for (unsigned int j=0; j<in.position.size(); ++j)
+            for (unsigned int k=0;k<transition_depths.size();++k)
+              if((phase_function(in.position[i], in.temperature[i], in.pressure[i], k)
+                  != phase_function(in.position[j], in.temperature[j], in.pressure[j], k))
+                  &&
+                  ((in.velocity[i] * this->get_gravity_model().gravity_vector(in.position[i]))
+                  * ((in.position[i] - in.position[j]) * this->get_gravity_model().gravity_vector(in.position[i])) > 0))
+                crossed_transition = k;
+
+        //calculating viscosity
+        //double viscosity=0;
+        //if(in.strain_rate.size())
+        //{           
+        //              viscosity = std::min(std::max(min_eta,calculate_viscosity(pressure,
+        //                                                               temperature,
+        //                                                               position,
+        //                                                               in.strain_rate[i],
+        //                                                               ol_index)),max_eta);
+        //}
+
+        if (in.strain_rate.size() > 0)
+          out.viscosities[i] = std::min(std::max(min_eta,viscosity(in.temperature[i],
+                                                                     in.pressure[i],
+                                                                     composition,
+                                                                     in.strain_rate[i],
+                                                                     in.position[i])),max_eta);
+
 
         //constant properties
         out.compressibilities[i] = reference_compressibility;
@@ -329,20 +725,6 @@ namespace aspect
         }
         out.thermal_expansion_coefficients[i] = alpha;
         out.thermal_conductivities[i] = conductivity;  
-
-
-        //calculating viscosity
-        double viscosity=0;
-        if(in.strain_rate.size())
-        {
-                      viscosity = std::min(std::max(min_eta,calculate_viscosity(pressure,
-                                                                       temperature,
-                                                                       position,
-                                                                       in.strain_rate[i],
-                                                                       ol_index)),max_eta);
-        }
-
-
    
         double density_phase_dependence = 0.0;
         double viscosity_phase_dependence = 1.0;
@@ -381,7 +763,7 @@ namespace aspect
                                   + density_phase_deviation * temperature_deviation ;
 
          //out.viscosities[i] = std::min(std::max(min_eta, viscosity * viscosity_phase_dependence), max_eta);
-           out.viscosities[i] = viscosity;
+        //   out.viscosities[i] = viscosity;
 
 
         // Calculate entropy derivative
@@ -415,10 +797,21 @@ namespace aspect
           out.entropy_derivative_temperature[i] = entropy_gradient_temperature;
         }
 
+        // TODO: make this more general for not just olivine grains
+        if (in.strain_rate.size() > 0)
+          for (unsigned int c=0;c<composition.size();++c)
+            {
+              if (this->introspection().name_for_compositional_index(c) == "olivine_grain_size")
+              {
+                out.reaction_terms[i][c] = grain_size_growth_rate(in.temperature[i], in.pressure[i], composition,
+                    in.strain_rate[i], in.velocity[i], in.position[i], c, crossed_transition);
+                if(advect_log_gransize)
+                  out.reaction_terms[i][c] = - out.reaction_terms[i][c] / composition[c];
+              }
+              else
+                out.reaction_terms[i][c] = 0.0;
+            }
 
-        // Assign reaction terms
-        for (unsigned int c=0; c<in.composition[i].size(); ++c)
-          out.reaction_terms[i][c] = 0.0;
 
       }
     }
