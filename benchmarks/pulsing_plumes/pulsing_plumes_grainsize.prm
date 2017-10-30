@@ -29,7 +29,7 @@ subsection Initial composition model
     set Variable names      = r, phi
     set Function constants  = pi=3.1415926,depth=6336000,inner=3481000
     #set Function expression = if(sqrt(x*x+z*z)>depth-520000,if(sqrt(x*x+z*z)>depth-410000,6.9078-(0.80472+0.80472*tanh((sqrt(x*x+z*z)-depth+200000)/30000)),7.2644),8.5172)
-    set Function expression = if(r>depth-400000,6.9078-(0.80472+0.80472*tanh((r-depth+200000)/30000)),8.5172)
+    set Function expression = if(r>depth-400000,6.9078-(0.80472+0.80472*tanh((r-depth+200000)/30000)),9.9035-(0.693+0.693*tanh((r-depth+600000)/30000)))
   end
 
 end
@@ -39,7 +39,7 @@ subsection Material model
 
   subsection Phase transitions
     set Thermal expansion coefficient = 0.0
-    set Viscosity                     = 1e20
+    set Viscosity                     = 1e22
     set Compressibility               = 4e-12
     set Reference density             = 3300
     set Reference temperature         = 1600
@@ -47,16 +47,16 @@ subsection Material model
     set Reference specific heat       = 1250
 
     #viscosity parameters
-    set Diffusion prefactor             = 1.25E-015, 6.12E-022, 5.4E-028                      #1.25E-015, 6.12E-022, 2.94E-022, 5.4E-028
-    set Diffusion activation energy     = 375000, 231000, 299000                                 #375000, 231000, 270000, 299000 
-    set Diffusion activation volume     = 6e-6, 6e-6, 1.5e-6                                         #6e-6, 6e-6, 6e-6, 1.5e-6 
+    set Diffusion prefactor             = 1.25E-015, 6.12E-022, 1.8e-27                      #1.25E-015, 6.12E-022, 2.94E-022, 5.4E-028
+    set Diffusion activation energy     = 375000, 231000, 286000                                 #375000, 231000, 270000, 299000 
+    set Diffusion activation volume     = 6e-6, 6e-6, 2e-6                                         #6e-6, 6e-6, 6e-6, 1.5e-6 
 
     set Dislocation prefactor           = 8.33E-017, 2.05e-12, 1.e-40                         #8.33E-017, 2.05e-12, 2.05e-19, 1.e-40
     set Dislocation activation energy   = 530000, 530000, 530000                                #530000, 530000, 530000, 530000
     set Dislocation activation volume   = 1.40E-005, 1.70E-005, 0.0                           #1.40E-005, 1.70E-005, 1.70E-005, 0.0 
 
-    set Maximum viscosity             = 1e22
-    set Minimum viscosity             = 1e20
+    set Maximum viscosity             = 1e24
+    set Minimum viscosity             = 1e18
     set Grain size                    = 0.002235, 0.000818, 0.000026                       #0.002235, 0.000818, 0.000288, 0.000026
 
     #coefficients for thermal expansivity and conductivity
@@ -75,7 +75,7 @@ subsection Material model
     set Phase transition depths                        = 4e5, 6.7e5,
     set Phase transition temperatures                  = 1803, 1902
     set Phase transition Clapeyron slopes              = 3.8e6, -4e6,
-    set Phase transition widths                        = 30000,30000
+    set Phase transition widths                        = 30000, 30000 
     set Viscosity prefactors                           = 1, 1, 1 
 
     set Maximum temperature dependence of viscosity         = 1e6
@@ -84,17 +84,17 @@ subsection Material model
     set Diffusion creep grain size exponent            = 3, 3, 3
     
     set Geometric constant = 3, 3, 3
-    set Grain growth activation energy = 400000, 662000, 299000
-    set Grain growth activation volume = 0.0, 0.0, 1.5e-6
-    set Grain growth exponent          = 3,3, 5.0
-    set Grain growth rate constant     = 1.92e-10, 3.02e-4, 5.00e-026
-    set Recrystallized grain size      = 0.0, 1e-4
+    set Grain growth activation energy = 400000, 662000, 321000
+    set Grain growth activation volume = 0.0, 0.0, 0.0
+    set Grain growth exponent          = 3,3, 10.6
+    set Grain growth rate constant     = 1.92e-10, 3.02e-4, 3.98e-058
+    set Recrystallized grain size      = 0.0, 2e-5
     set Use paleowattmeter             = true
     
     set Work fraction for boundary area change = 0.1, 0.1, 0.1
     set Advect logarithm of grain size          = true
     set Minimum grain size                     = 2e-5
-    set Lower mantle grain size scaling         = 1.0
+    set Lower mantle grain size scaling         = 2.5
     set Dislocation viscosity iteration threshold = 1e-3
     set Dislocation viscosity iteration number    = 50
 

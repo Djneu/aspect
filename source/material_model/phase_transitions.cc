@@ -101,7 +101,7 @@ namespace aspect
           const double m = grain_growth_exponent[ol_index];
           const double grain_size_growth_rate = grain_growth_rate_constant[ol_index] / (m * pow(grain_size,m-1))
                                    * exp(- (grain_growth_activation_energy[ol_index] + pressure * grain_growth_activation_volume[ol_index])
-                                       / (gas_constant * temperature));
+                                       / (constants::gas_constant * temperature));
           const double grain_size_growth = grain_size_growth_rate * grain_growth_timestep;
 
           // grain size reduction in dislocation creep regime
@@ -228,12 +228,12 @@ namespace aspect
       // TODO: we use the prefactors from Behn et al., 2009 as default values, but their laws use the strain rate
       // and we use the second invariant --> check if the prefactors should be changed
       double energy_term = exp((diffusion_activation_energy[ol_index] + diffusion_activation_volume[ol_index] * adiabatic_pressure)
-                         / (1.0 * gas_constant * temperature));
+                         / (1.0 * constants::gas_constant * temperature));
       if (this->get_adiabatic_conditions().is_initialized())
         {
           const double adiabatic_energy_term
             = exp((diffusion_activation_energy[ol_index] + diffusion_activation_volume[ol_index] * adiabatic_pressure)
-              / (1.0 * gas_constant * this->get_adiabatic_conditions().temperature(position)));
+              / (1.0 * constants::gas_constant * this->get_adiabatic_conditions().temperature(position)));
 
           const double temperature_dependence = energy_term / adiabatic_energy_term;
           if (temperature_dependence > max_temperature_dependence_of_eta)
@@ -339,12 +339,12 @@ namespace aspect
       const unsigned int ol_index = get_phase_index(position, temperature, adiabatic_pressure);
 
       double energy_term = exp((dislocation_activation_energy[ol_index] + dislocation_activation_volume[ol_index] * adiabatic_pressure)
-                         / (dislocation_creep_exponent[ol_index] * gas_constant * temperature));
+                         / (dislocation_creep_exponent[ol_index] * constants::gas_constant * temperature));
       if (this->get_adiabatic_conditions().is_initialized())
         {
           const double adiabatic_energy_term
             = exp((dislocation_activation_energy[ol_index] + dislocation_activation_volume[ol_index] * adiabatic_pressure)
-              / (dislocation_creep_exponent[ol_index] * gas_constant * this->get_adiabatic_conditions().temperature(position)));
+              / (dislocation_creep_exponent[ol_index] * constants::gas_constant * this->get_adiabatic_conditions().temperature(position)));
 
           const double temperature_dependence = energy_term / adiabatic_energy_term;
           if (temperature_dependence > max_temperature_dependence_of_eta)
