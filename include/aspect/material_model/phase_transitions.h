@@ -116,6 +116,82 @@ namespace aspect
         std::vector<double> temperature_jumps;  
         std::vector<double> phase_prefactors;
 
+        /**
+         * Function that takes an object in the same format
+         * as in.composition as argument and converts the
+         * vector that corresponds to the grain size to its
+         * logarithms and back and limits the grain size to
+         * a global minimum.
+         * @in normal_to_log: if true, convert from the grain
+         * size to its logarithm, otherwise from log to grain
+         * size
+         */
+        virtual
+        void
+        convert_log_grain_size (const bool normal_to_log,
+                                std::vector<double> &compositional_fields) const;
+
+        /**
+         * Rate of grain size growth (Ostwald ripening) or reduction
+         * (due to phase transformations) in dependence on temperature
+         * pressure, strain rate, mineral phase and creep regime.
+         * We use the grain size evolution laws described in Solomatov
+         * and Reese, 2008. Grain size variations in the Earth’s mantle
+         * and the evolution of primordial chemical heterogeneities,
+         * J. Geophys. Res., 113, B07408.
+         */
+        virtual
+        double
+        grain_size_growth_rate (const double                  temperature,
+                                const double                  pressure,
+                                const std::vector<double>    &compositional_fields,
+                                const SymmetricTensor<2,dim> &strain_rate,
+                                const Tensor<1,dim>          &velocity,
+                                const Point<dim>             &position,
+                                const unsigned int            phase_index,
+                                const int                     crossed_transition) const;
+
+        virtual double viscosity (const double                  temperature,
+                                  const double                  pressure,
+                                  const std::vector<double>    &compositional_fields,
+                                  const SymmetricTensor<2,dim> &strain_rate,
+                                  const Point<dim>             &position) const;
+
+
+        virtual double diffusion_viscosity (const double      temperature,
+                                            const double      pressure,
+                                            const std::vector<double>    &compositional_fields,
+                                            const SymmetricTensor<2,dim> &,
+                                            const Point<dim> &position) const;
+
+        /**
+         * This function calculates the dislocation viscosity. For this purpose
+         * we need the dislocation component of the strain rate, which we can
+         * only compute by knowing the dislocation viscosity. Therefore, we
+         * iteratively solve for the dislocation viscosity and update the
+         * dislocation strain rate in each iteration using the new value
+         * obtained for the dislocation viscosity. The iteration is started
+         * with a dislocation viscosity calculated for the whole strain rate
+         * unless a guess for the viscosity is provided, which can reduce the
+         * number of iterations significantly.
+         */
+        virtual double dislocation_viscosity (const double      temperature,
+                                              const double      pressure,
+                                              const std::vector<double>    &compositional_fields,
+                                              const SymmetricTensor<2,dim> &strain_rate,
+                                              const Point<dim> &position,
+                                              const double viscosity_guess = 0) const;
+
+        /**
+         * This function calculates the dislocation viscosity for a given
+         * dislocation strain rate.
+         */
+        double dislocation_viscosity_fixed_strain_rate (const double      temperature,
+                                                        const double      pressure,
+                                                        const std::vector<double> &,
+                                                        const SymmetricTensor<2,dim> &dislocation_strain_rate,
+                                                        const Point<dim> &position) const;
+
         virtual
         double
         calculate_viscosity ( const double &pressure,
