@@ -205,16 +205,6 @@ namespace aspect
       const SymmetricTensor<2,dim> shear_strain_rate = strain_rate - 1./dim * trace(strain_rate) * unit_symmetric_tensor<dim>();
       const double second_strain_rate_invariant = std::sqrt(std::abs(second_invariant(shear_strain_rate)));
 
-      // TODO: make this more general, for more phases we have to average grain size somehow
-      // TODO: default when field is not given & warning
-      // limit the grain size to a global minimum
-      const std::string field_name = "olivine_grain_size";
-      const double grain_size = this->introspection().compositional_name_exists(field_name)
-                                ?
-                                composition[this->introspection().compositional_index_for_name(field_name)]
-                                :
-                                0.0;
-
       // Currently this will never be called without adiabatic_conditions initialized, but just in case
       const double adiabatic_pressure = this->get_adiabatic_conditions().is_initialized()
                                         ?
@@ -224,6 +214,17 @@ namespace aspect
 
       // find out in which phase we are
       const unsigned int ol_index = get_phase_index(position, temperature, adiabatic_pressure);
+
+      // TODO: make this more general, for more phases we have to average grain size somehow
+      // TODO: default when field is not given & warning
+      // limit the grain size to a global minimum
+      const std::string field_name = "olivine_grain_size";
+      const double grain_size = this->introspection().compositional_name_exists(field_name)
+                                ?
+                                composition[this->introspection().compositional_index_for_name(field_name)]
+                                :
+                                constant_grain_size[ol_index];
+
 
       // TODO: we use the prefactors from Behn et al., 2009 as default values, but their laws use the strain rate
       // and we use the second invariant --> check if the prefactors should be changed
