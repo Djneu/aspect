@@ -645,11 +645,17 @@ namespace aspect
     	// convert the grain size from log to normal
     	std::vector<double> composition (in.composition[i]);
     	if(advect_log_gransize)
-          convert_log_grain_size(false,composition);
+          {
+            convert_log_grain_size(false,composition);
+          }
     	else
-    	  for (unsigned int c=0;c<composition.size();++c)
-    	    composition[c] = std::max(min_grain_size,composition[c]);
-
+          {
+            const std::string field_name = "olivine_grain_size";
+            int olivine_grain_size_index = 0;
+            if(this->introspection().compositional_name_exists(field_name))
+              olivine_grain_size_index = this->introspection().compositional_index_for_name(field_name);
+              composition[olivine_grain_size_index] = std::max(min_grain_size,composition[olivine_grain_size_index]);
+          }
 
         // set up an integer that tells us which phase transition has been crossed inside of the cell
         int crossed_transition(-1);
@@ -867,11 +873,8 @@ namespace aspect
       const double dT_lherz_liquidus_dp = B2 + 2 * B3 * pressure;
       const double dT_liquidus_dp       = C2 + 2 * C3 * pressure;
 
-      const double peridotite_fraction = (this->n_compositional_fields()>0
-                                          ?
-                                          1.0 - compositional_fields[0]
-                                          :
-                                          1.0);
+      // We only consider peridotite melting (no pyroxenite)
+      const double peridotite_fraction = 1.0;
 
       if (temperature > T_solidus && temperature < T_liquidus && pressure < 1.3e10)
         {
