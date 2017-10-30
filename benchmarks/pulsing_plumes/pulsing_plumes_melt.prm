@@ -1,16 +1,12 @@
-# A simple setup for convection in a quarter of a 2d shell. See the
-# manual for more information.
-
-
 set Dimension                              = 2
 set Use years in output instead of seconds = true
-set End time                               = 0
+set End time                               = 30e6
 set Output directory                       = output_pulsing_plumes_melt
 set Nonlinear solver scheme                = iterated IMPES
 set Linear solver tolerance                = 1e-7
 set Nonlinear solver tolerance             = 1e-3
-
-
+set Max nonlinear iterations               = 1
+set Surface pressure                       = 1.62e9
 
 subsection Formulation
     set Formulation = anelastic liquid approximation
@@ -123,8 +119,8 @@ subsection Model settings
   set Zero velocity boundary indicators       = outer, east, west
   set Tangential velocity boundary indicators = inner
   set Prescribed velocity boundary indicators = 
-  set Fixed temperature boundary indicators   = inner, outer,
-  set Prescribed traction boundary indicators = #east:initial lithostatic pressure, west: initial lithostatic pressure
+  set Fixed temperature boundary indicators   = inner, outer
+  set Prescribed traction boundary indicators =
 end
 
 subsection Boundary traction model
@@ -150,16 +146,12 @@ end
   end
 end
 
-
-
 subsection Heating model
-  #set List of model names = adiabatic heating, shear heating, latent heat
   set List of model names = adiabatic heating, shear heating, latent heat
   subsection Adiabatic heating
     set Use simplified adiabatic heating = true
   end
 end
-
 
 subsection Boundary temperature model
   set List of model names = spherical constant
@@ -169,10 +161,11 @@ subsection Boundary temperature model
   end
 end
 
-
 set Adiabatic surface temperature = 1600
 subsection Initial temperature model
-  set List of model names = adiabatic
+
+  set List of model names = adiabatic, function
+
   subsection Adiabatic
     set Age bottom boundary layer = 3e8
     set Age top boundary layer    =  1e8
@@ -183,14 +176,15 @@ subsection Initial temperature model
       set Function expression = 0.; 0.;
     end
   end
+
+  subsection Function
+    set Coordinate system   = spherical
+    set Variable names      = r, phi
+    set Function constants  = h=6336000, pi=3.14159265359
+    set Function expression = if(r>(h-70.e3) && r<(h-20.e3) && phi>(90*pi/180.) && phi<(95*pi/180.),0., 0)
+  end
+
 end
- # subsection Function
- #   set Coordinate system   = spherical
- #   set Variable names      = r, phi
- #   set Function constants  = h=6336000, pi=3.14159265359
- #   set Function expression = 0.
-    #set Function expression = if(r>(h-70.e3) && r<(h-20.e3) && phi>(90*pi/180.) && phi<(95*pi/180.),150., 0)
-  #end
 
 subsection Adiabatic conditions model
   set Model name = initial profile
@@ -213,17 +207,14 @@ end
 
 
 subsection Postprocess
-  set List of postprocessors = visualization, velocity statistics, temperature statistics, heat flux statistics, depth average,
+  set List of postprocessors = basic statistics, composition statistics, temperature statistics, visualization, velocity statistics, heat flux statistics
 
 
   subsection Visualization
     set Output format                 = vtu
-    set Time between graphical output = 1e6
+    set Time between graphical output = 0
     set Number of grouped files       = 0
-    set List of output variables = material properties, adiabat, nonadiabatic temperature, thermal conductivity,
+    set List of output variables = material properties, adiabat, nonadiabatic temperature, thermal conductivity, melt fraction
   end
 
-  subsection Depth average
-    set Time between graphical output = 1e6
-  end
 end
