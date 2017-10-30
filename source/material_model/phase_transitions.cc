@@ -1100,7 +1100,7 @@ namespace aspect
                                Patterns::List (Patterns::Double(0)),
                                "Geometric constant $c$ used in the paleowattmeter grain size reduction law. "
                                "Units: none.");
-            prm.declare_entry ("Grain size", "0.003",Patterns::List (Patterns::Double(0)),
+            prm.declare_entry ("Constant grain size", "0.003",Patterns::List (Patterns::Double(0)),
                                "Stabilizes strain dependent viscosity. Units: m");
             prm.declare_entry ("Minimum grain size", "1e-5",
                                Patterns::Double (0),
