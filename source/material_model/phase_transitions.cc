@@ -213,7 +213,7 @@ namespace aspect
                                         pressure;
 
       // find out in which phase we are
-      const unsigned int ol_index = get_phase_index(position, temperature, adiabatic_pressure);
+      const unsigned int ol_index = get_phase_index(position, temperature, pressure);
 
       // TODO: make this more general, for more phases we have to average grain size somehow
       // TODO: default when field is not given & warning
@@ -228,12 +228,12 @@ namespace aspect
 
       // TODO: we use the prefactors from Behn et al., 2009 as default values, but their laws use the strain rate
       // and we use the second invariant --> check if the prefactors should be changed
-      double energy_term = exp((diffusion_activation_energy[ol_index] + diffusion_activation_volume[ol_index] * adiabatic_pressure)
+      double energy_term = exp((diffusion_activation_energy[ol_index] + diffusion_activation_volume[ol_index] * pressure)
                          / (1.0 * constants::gas_constant * temperature));
       if (this->get_adiabatic_conditions().is_initialized())
         {
           const double adiabatic_energy_term
-            = exp((diffusion_activation_energy[ol_index] + diffusion_activation_volume[ol_index] * adiabatic_pressure)
+            = exp((diffusion_activation_energy[ol_index] + diffusion_activation_volume[ol_index] * pressure)
               / (1.0 * constants::gas_constant * this->get_adiabatic_conditions().temperature(position)));
 
           const double temperature_dependence = energy_term / adiabatic_energy_term;
@@ -337,7 +337,7 @@ namespace aspect
                                         pressure;
 
       // find out in which phase we are
-      const unsigned int ol_index = get_phase_index(position, temperature, adiabatic_pressure);
+      const unsigned int ol_index = get_phase_index(position, temperature, pressure);
 
       double energy_term = exp((dislocation_activation_energy[ol_index] + dislocation_activation_volume[ol_index] * adiabatic_pressure)
                          / (dislocation_creep_exponent[ol_index] * constants::gas_constant * temperature));
@@ -631,7 +631,6 @@ namespace aspect
         const Point<dim> position = in.position[i];
         unsigned int number_of_phase_transitions = transition_depths.size();
         unsigned int ol_index = get_phase_index(position, temperature, pressure);
-        double depth = this->get_geometry_model().depth(position);
 
         // Reset entropy derivatives
         out.entropy_derivative_pressure[i] = 0;
@@ -705,11 +704,11 @@ namespace aspect
         //}
 
         if (in.strain_rate.size() > 0)
-          out.viscosities[i] = std::min(std::max(min_eta,viscosity(in.temperature[i],
-                                                                     in.pressure[i],
-                                                                     composition,
-                                                                     in.strain_rate[i],
-                                                                     in.position[i])),max_eta);
+          out.viscosities[i] = viscosity(in.temperature[i],
+                                         in.pressure[i],
+                                         composition,
+                                         in.strain_rate[i],
+                                         in.position[i]);
 
 
         //constant properties
