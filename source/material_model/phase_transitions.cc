@@ -213,7 +213,7 @@ namespace aspect
                                         pressure;
 
       // find out in which phase we are
-      const unsigned int ol_index = get_phase_index(position, temperature, pressure);
+      const unsigned int ol_index = get_phase_index(position, temperature, adiabatic_pressure);
 
       // TODO: make this more general, for more phases we have to average grain size somehow
       // TODO: default when field is not given & warning
@@ -228,12 +228,12 @@ namespace aspect
 
       // TODO: we use the prefactors from Behn et al., 2009 as default values, but their laws use the strain rate
       // and we use the second invariant --> check if the prefactors should be changed
-      double energy_term = exp((diffusion_activation_energy[ol_index] + diffusion_activation_volume[ol_index] * pressure)
+      double energy_term = exp((diffusion_activation_energy[ol_index] + diffusion_activation_volume[ol_index] * adiabatic_pressure)
                          / (1.0 * constants::gas_constant * temperature));
       if (this->get_adiabatic_conditions().is_initialized())
         {
           const double adiabatic_energy_term
-            = exp((diffusion_activation_energy[ol_index] + diffusion_activation_volume[ol_index] * pressure)
+            = exp((diffusion_activation_energy[ol_index] + diffusion_activation_volume[ol_index] * adiabatic_pressure)
               / (1.0 * constants::gas_constant * this->get_adiabatic_conditions().temperature(position)));
 
           const double temperature_dependence = energy_term / adiabatic_energy_term;
@@ -337,7 +337,7 @@ namespace aspect
                                         pressure;
 
       // find out in which phase we are
-      const unsigned int ol_index = get_phase_index(position, temperature, pressure);
+      const unsigned int ol_index = get_phase_index(position, temperature, adiabatic_pressure);
 
       double energy_term = exp((dislocation_activation_energy[ol_index] + dislocation_activation_volume[ol_index] * adiabatic_pressure)
                          / (dislocation_creep_exponent[ol_index] * constants::gas_constant * temperature));
@@ -630,7 +630,14 @@ namespace aspect
         const double pressure = in.pressure[i];
         const Point<dim> position = in.position[i];
         unsigned int number_of_phase_transitions = transition_depths.size();
-        unsigned int ol_index = get_phase_index(position, temperature, pressure);
+
+        //use adiabatic pressure for phase index
+        const double adiabatic_pressure = this->get_adiabatic_conditions().is_initialized()
+                                        ?
+                                        this->get_adiabatic_conditions().pressure(position)
+                                        :
+                                        pressure;
+        unsigned int ol_index = get_phase_index(position, temperature, adiabatic_pressure);
 
         // Reset entropy derivatives
         out.entropy_derivative_pressure[i] = 0;
@@ -644,7 +651,7 @@ namespace aspect
 
     	// convert the grain size from log to normal
     	std::vector<double> composition (in.composition[i]);
-    	if(advect_log_gransize)
+    	/*if(advect_log_gransize)
           {
             convert_log_grain_size(false,composition);
           }
@@ -655,7 +662,7 @@ namespace aspect
             if(this->introspection().compositional_name_exists(field_name))
               olivine_grain_size_index = this->introspection().compositional_index_for_name(field_name);
               composition[olivine_grain_size_index] = std::max(min_grain_size,composition[olivine_grain_size_index]);
-          }
+          }*/
 
         // set up an integer that tells us which phase transition has been crossed inside of the cell
         int crossed_transition(-1);
@@ -693,27 +700,25 @@ namespace aspect
                 crossed_transition = k;
 
         //calculating viscosity
-        //double viscosity=0;
-        //if(in.strain_rate.size())
-        //{           
-        //              viscosity = std::min(std::max(min_eta,calculate_viscosity(pressure,
-        //                                                               temperature,
-        //                                                               position,
-        //                                                               in.strain_rate[i],
-        //                                                               ol_index)),max_eta);
-        //}
+        /*if(in.strain_rate.size()>0)
+        {           
+                      viscosities = calculate_viscosity(pressure,
+                                                                       temperature,
+                                                                       position,
+                                                                       in.strain_rate[i],
+                                                                       ol_index);
+        }*/
 
         if (in.strain_rate.size() > 0)
-          out.viscosities[i] = viscosity(in.temperature[i],
-                                         in.pressure[i],
-                                         composition,
-                                         in.strain_rate[i],
-                                         in.position[i]);
+        {
+          out.viscosities[i] = std::min(max_eta, std::max(min_eta, viscosity(in.temperature[i],
+                                  in.pressure[i],
+                                  composition,
+                                  in.strain_rate[i],
+                                  in.position[i])));
+        }
 
 
-        //constant properties
-        out.compressibilities[i] = reference_compressibility;
-        out.specific_heat[i] = reference_specific_heat;
 
         
         //Calculations for thermal conductivity and expansion coefficient
@@ -723,6 +728,7 @@ namespace aspect
         if(k_value == 0.0)
         {
           conductivity = (c0[ol_index]+(c1[ol_index]*pressure*1e-9))*pow((300/temperature),c2[ol_index]);
+          //conductivity = c0[ol_index];
         }
         else
         {
@@ -740,10 +746,9 @@ namespace aspect
         {
           alpha = thermal_alpha;
         }
-        out.thermal_expansion_coefficients[i] = alpha;
-        out.thermal_conductivities[i] = conductivity;  
+
    
-        double density_phase_dependence = 0.0;
+        /*double density_phase_dependence = 0.0;
         double viscosity_phase_dependence = 1.0;
         for(unsigned int i=0; i<number_of_phase_transitions; ++i)
         {
@@ -754,7 +759,7 @@ namespace aspect
 
           density_phase_dependence += phaseFunction * density_jumps[i];
           viscosity_phase_dependence *= 1. + phaseFunction * (phase_prefactors[i+1]-1.);
-        }  
+        }*/  
 
         //density equation with pressure and temperature dependence, likely will change when adiabatic conditions are introduced.
          double density_phase_deviation = 0;
@@ -764,7 +769,7 @@ namespace aspect
                 // calculate derivative of the phase function
                 const double phase_derivative = Tphase_function_derivative(position,
                                                                        temperature,
-                                                                       pressure,
+                                                                       adiabatic_pressure,
                                                                        ph); 
 
                density_phase_deviation += phase_derivative*density_jumps[ph];
@@ -777,10 +782,14 @@ namespace aspect
               density_profile = this->get_adiabatic_conditions().density(position);
         
           out.densities[i] = density_profile * (1 - alpha * temperature_deviation + reference_compressibility * pressure_dev)
-                                  + density_phase_deviation * temperature_deviation ;
+                                  + density_phase_deviation * temperature_deviation;
 
-         //out.viscosities[i] = std::min(std::max(min_eta, viscosity * viscosity_phase_dependence), max_eta);
-        //   out.viscosities[i] = viscosity;
+          out.thermal_expansion_coefficients[i] = alpha;
+          out.thermal_conductivities[i] = conductivity;
+  
+          //constant properties
+          out.compressibilities[i] = reference_compressibility;
+          out.specific_heat[i] = reference_specific_heat;
 
 
         // Calculate entropy derivative for phase_changes
@@ -797,7 +806,7 @@ namespace aspect
                 // calculate derivative of the phase function
                 const double PhaseFunctionDerivative = Pphase_function_derivative(position,
                                                                                  temperature,
-                                                                                 pressure,
+                                                                                 adiabatic_pressure,
                                                                                  phase);
 
                 // calculate the change of entropy across the phase transition
@@ -838,7 +847,11 @@ namespace aspect
               }
               else if (this->introspection().name_for_compositional_index(c) == "peridotite_melt_fraction")
                 {
-                  out.reaction_terms[i][c] = peridotite_melt_fraction(in.temperature[i], in.pressure[i], composition, in.position[i]) - in.composition[i][c]; 
+                  double peridotite_melt =  peridotite_melt_fraction(in.temperature[i], in.pressure[i], composition, in.position[i]) - in.composition[i][c];
+                  if (peridotite_melt >= 0)
+                    out.reaction_terms[i][c] = peridotite_melt; 
+                  else if(peridotite_melt < 0)
+                    out.reaction_terms[i][c] = 0.0;
                 }
               else
                 out.reaction_terms[i][c] = 0.0;

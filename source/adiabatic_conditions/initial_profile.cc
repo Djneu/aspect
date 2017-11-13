@@ -100,7 +100,7 @@ namespace aspect
             {
 
               // Using surface (reference) value of thermal expansivity
-              const double alpha = 2e-5; //out.thermal_expansion_coefficients[0];
+              const double alpha = 2.189e-5; //out.thermal_expansion_coefficients[0];
 
               // Handle the case that cp is zero (happens in simple Stokes test problems like sol_cx). By setting
               // 1/cp = 0.0 we will have a constant temperature profile with depth.
@@ -141,6 +141,7 @@ namespace aspect
               temperatures[i] = (this->include_adiabatic_heating())
                                 ?
                                 this->get_adiabatic_surface_temperature() * std::exp( di * z) +  phase_function_t
+                                //1600 * std::pow( ((2*0.679*z)+1) , 0.5) +  phase_function_t 
                                 :
                                 this->get_adiabatic_surface_temperature();
             }

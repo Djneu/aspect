@@ -157,11 +157,6 @@ namespace aspect
       // Now integrate pressure downward using trapezoidal integration
       // p'(z) = rho(p,c,T) * |g| * delta_z
       double sum = delta_z * 0.5 * density0 * gravity0;
-      //double visc[1000];
-     // double dep[1000];
-     // double press[1000];
-     // double temp[1000];
-      //double dens[1000];
 
       for (unsigned int i=1; i<n_points; ++i)
         {
@@ -179,7 +174,6 @@ namespace aspect
           if (dynamic_cast<const GeometryModel::Box<dim>*> (&this->get_geometry_model()) == 0)
             {
               // decrease radius with depth increment
-                 	      //dep[i]=spherical_representative_point[0];
               spherical_representative_point[0] -= delta_z;
               in.position[0] = Utilities::Coordinates::spherical_to_cartesian_coordinates<dim>(spherical_representative_point);
             }
@@ -193,10 +187,8 @@ namespace aspect
 
           // Retrieve the initial temperature at this point.
           in.temperature[0] = this->get_initial_temperature_manager().initial_temperature(in.position[0]);
-            // temp[i]=in.temperature[0];
           // and use the previous pressure
           in.pressure[0] = pressure[i-1];
-                      //press[i]= in.pressure[0];
 
           // Retrieve the compositions at this point.
           for (unsigned int c=0; c<n_compositional_fields; ++c)
@@ -208,7 +200,6 @@ namespace aspect
           // Evaluate the material model to get the density at the current point.
           this->get_material_model().evaluate(in, out);
           const double density = out.densities[0];
-            //dens[i]=density;
 
           // Get the magnitude of gravity.
           const double gravity = this->get_gravity_model().gravity_vector(in.position[0]).norm();
@@ -217,13 +208,6 @@ namespace aspect
           pressure[i] = sum + delta_z * 0.5 * density * gravity;
           sum += delta_z * density * gravity;
         }
-
-    	/*std::ofstream myfile;
-	myfile.open("boundary1.txt");
-	for(int x=1; x<1000; ++x){
-		myfile<<dep[x]<<"  "<<dens[x]<<"  "<<temp[x]<<"  "<<press[x]<<"  "<<std::endl;
-	}
-	myfile.close();*/
 
       Assert (*std::min_element (pressure.begin(), pressure.end()) >=
               -std::numeric_limits<double>::epsilon() * pressure.size(),
@@ -242,7 +226,7 @@ namespace aspect
       // components are left set to zero. We get the lithostatic pressure
       // from a linear interpolation of the calculated profile.
       Tensor<1,dim> traction;
-        traction = -interpolate_pressure(p) * normal;
+      traction = -interpolate_pressure(p) * normal;
 
       return traction;
     }
@@ -364,3 +348,4 @@ namespace aspect
                                             "Gravity is expected to point along the depth direction. ")
   }
 }
+
