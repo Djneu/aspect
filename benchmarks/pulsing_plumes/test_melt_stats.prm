@@ -1,7 +1,7 @@
 set Dimension                              = 2
 set Use years in output instead of seconds = true
-set End time                               = 1e9
-set Output directory                       = meltstats
+set End time                               = 0
+set Output directory                       = -2e6
 set Nonlinear solver scheme                = iterated IMPES
 set Linear solver tolerance                = 1e-7
 set Nonlinear solver tolerance             = 1e-3
@@ -16,7 +16,7 @@ end
 
 
 subsection Compositional fields
-  set Names of fields           = peridotite_melt_fraction, #olivine_grain_size, 
+  set Names of fields           = peridotite_melt_fraction,
   set Number of fields          = 1
 end
 
@@ -28,8 +28,8 @@ subsection Initial composition model
     set Variable names      = r, phi
     set Function constants  = pi=3.1415926,depth=6336000,inner=3481000
     # Setting olivine grain size and melt fraction
-    set Function expression = 0; #\
-                              #if(r>depth-400000,6.9078-(0.80472+0.80472*tanh((r-depth+200000)/30000)),9.9035-(0.693+0.693*tanh((r-depth+600000)/30000))); 
+    set Function expression = 0;
+
   end
 
 end
@@ -47,8 +47,8 @@ subsection Material model
     set Reference specific heat       = 1250
 
     #viscosity parameters
-    set Diffusion prefactor             = 7.00E-016, 3.75E-022, 3.5E-027                   #1.25E-015, 6.12E-022, 2.94E-022, 5.4E-028   1.00E-016, 8E-022, 3.6E-027 
-    set Diffusion activation energy     = 355000, 231000, 286000                                 #375000, 231000, 270000, 299000 
+    set Diffusion prefactor             = 7.00E-016, 3E-022, 3.5E-027                   #1.25E-015, 6.12E-022, 2.94E-022, 5.4E-028   7.00E-016, 8E-022, 3.6E-027 
+    set Diffusion activation energy     = 355000, 231000, 282391                                 #375000, 231000, 270000, 299000     355000
     set Diffusion activation volume     = 6e-6, 3.5e-6, 2e-6                                         #6e-6, 6e-6, 6e-6, 1.5e-6 
 
     set Dislocation prefactor           = 7.37E-015, 7.37e-15, 1.e-40                         #8.33E-017, 2.05e-12, 2.05e-19, 1.e-40   #7.37E-015, 7.37e-15, 1.e-40
@@ -74,28 +74,13 @@ subsection Material model
     set Phase transition depths                        = 3.75e5, 6.25e5,
     set Phase transition temperatures                  = 1803, 1902
     set Phase transition Clapeyron slopes              = 4e6, -2e6,
-    set Phase transition widths                        = 30000, 30000 
+    set Phase transition widths                        = 15000, 15000 
     set Viscosity prefactors                           = 1, 1, 1 
 
     set Maximum temperature dependence of viscosity         = 1e6
-    set Average specific grain boundary energy         = 1.0,1.0,1.0
     set Dislocation creep exponent                     = 1.0, 1.0, 1.0
     set Diffusion creep grain size exponent            = 3, 3, 3
     
-    set Geometric constant = 3, 3, 3
-    set Grain growth activation energy = 400000, 662000, 321000
-    set Grain growth activation volume = 0.0, 0.0, 0.0
-    set Grain growth exponent          = 3,3, 10.6
-    set Grain growth rate constant     = 1.92e-10, 3.02e-4, 3.98e-058
-    set Recrystallized grain size      = 0.0, 2e-5
-    set Use paleowattmeter             = true
-    
-    set Work fraction for boundary area change = 0.1, 0.1, 0.1
-    set Advect logarithm of grain size          = false
-    set Minimum grain size                     = 2e-5
-    set Lower mantle grain size scaling         = 2.5
-    set Dislocation viscosity iteration threshold = 1e-3
-    set Dislocation viscosity iteration number    = 50
 
     set Mass fraction cpx        = 0.10
     set Relative density of melt = 0.878787879  # melt density of 2900 kg/m^3
@@ -125,29 +110,6 @@ subsection Model settings
   set Prescribed traction boundary indicators = 
 end
 
-subsection Boundary traction model
-  subsection Initial lithostatic pressure
-    set Number of integration points = 1000
-    set Representative point = 6336000, 90
-  end
-end
-
-subsection Boundary velocity model
-  subsection Function
-    set Coordinate system   = spherical
-    set Variable names      = r, phi
-    set Function constants  = v=0.1, d=670000, h=6336000
-    set Function expression = if(r>(h-d), v*(1-(h-r)/(d)), 0); 0                         
-end
-
-  subsection Ascii data model
-    set Data file name       = velocity_70to110_%s.0.txt
-    
-    set Data directory = /home/derek/thesis/Builds/2dshell/ascii/
-    set Scale factor = 1
-  end
-end
-
 subsection Heating model
   set List of model names = adiabatic heating, shear heating, latent heat
   subsection Adiabatic heating
@@ -158,7 +120,7 @@ end
 subsection Boundary temperature model
   set List of model names = spherical constant
   subsection Spherical constant
-    set Inner temperature = 3486
+    set Inner temperature = 3359
     set Outer temperature = 1600
   end
 end
@@ -166,26 +128,19 @@ end
 set Adiabatic surface temperature = 1600
 subsection Initial temperature model
 
-  set List of model names = adiabatic, function
+  set List of model names = adiabatic,
 
   subsection Adiabatic
     set Age bottom boundary layer = 3e8
-    set Age top boundary layer    =  1e8
-    set Amplitude                 = 1245
+    set Age top boundary layer    =  0
+    set Amplitude                 = 750
     set Position                  = center
     set Radius                    = 2e5
     subsection Function
-      set Function expression = 0.; # 0.;
+      set Function expression = 0.;
     end
   end
 
-  subsection Function
-    set Coordinate system   = cartesian
-    set Variable names      = x,y,t
-    set Function constants  = h=6336000, pi=3.14159265359
-    #set Function expression = if(r>(h-70.e3) && r<(h-20.e3) && phi>(90*pi/180.) && phi<(95*pi/180.),0., 0)
-    set Function expression = if(x>-3e4 && x<3e4 && y>(h-8e4) && y<(h-2e4), 0., 0)
-  end
 
 end
 
@@ -202,8 +157,8 @@ subsection Mesh refinement
   set Refinement fraction                = 0.8
   set Coarsening fraction                = 0.05
   set Initial adaptive refinement        = 1
-  set Initial global refinement          = 6
-  set Minimum refinement level           = 4
+  set Initial global refinement          = 7
+  set Minimum refinement level           = 6
   set Strategy                           = temperature, viscosity
   set Time steps between mesh refinement = 5
 end
