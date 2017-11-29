@@ -727,8 +727,8 @@ namespace aspect
         //thermal conductivity equation (Tosi, et. al., 2013) that varies with temperature, depth, and phase.
         if(k_value == 0.0)
         {
-          conductivity = (c0[ol_index]+(c1[ol_index]*pressure*1e-9))*pow((300/temperature),c2[ol_index]);
-          //conductivity = c0[ol_index];
+          //conductivity = (c0[ol_index]+(c1[ol_index]*pressure*1e-9))*pow((300/temperature),c2[ol_index]);
+          conductivity = c0[ol_index];
         }
         else
         {
@@ -838,6 +838,15 @@ namespace aspect
         if (in.strain_rate.size() > 0)
           for (unsigned int c=0;c<composition.size();++c)
             {
+
+            const double adiabatic_pressure = this->get_adiabatic_conditions().is_initialized()
+                                            ?
+                                            this->get_adiabatic_conditions().pressure(in.position[i])
+                                            :
+                                            in.pressure[i];
+
+              unsigned int index = get_phase_index(in.position[i], in.temperature[i], adiabatic_pressure);
+
               if (this->introspection().name_for_compositional_index(c) == "olivine_grain_size")
               {
                 out.reaction_terms[i][c] = grain_size_growth_rate(in.temperature[i], in.pressure[i], composition,
@@ -848,6 +857,10 @@ namespace aspect
               else if (this->introspection().name_for_compositional_index(c) == "peridotite_melt_fraction")
                 {
                   out.reaction_terms[i][c] = peridotite_melt_fraction(in.temperature[i], in.pressure[i], composition, in.position[i]) - in.composition[i][c];
+                }
+              else if (this->introspection().name_for_compositional_index(c) == "phase")
+                {
+                  out.reaction_terms[i][c] = phase_track[index];
                 }
               else
                 out.reaction_terms[i][c] = 0.0;
@@ -950,12 +963,27 @@ namespace aspect
                     std::vector<double> &melt_fractions) const
     {
       for (unsigned int q=0; q<in.temperature.size(); ++q)
-        melt_fractions[q] = melt_fraction(in.temperature[q],
+        melt_fractions[q] = get_phase_index(in.position[q], in.temperature[q], in.pressure[q]);
+
+/*melt_fraction(in.temperature[q],
                                           std::max(0.0, in.pressure[q]),
                                           in.composition[q],
-                                          in.position[q]);
+                                          in.position[q]);*/
       return;
     }
+
+    template <int dim>
+    void
+    PhaseTransitions<dim>::
+    phase_tracker (const MaterialModel::MaterialModelInputs<dim> &in,
+                    std::vector<double> &phase_tracker) const
+    {
+      for (unsigned int q=0; q<in.temperature.size(); ++q)
+        phase_tracker[q] = get_phase_index(in.position[q], in.temperature[q], in.pressure[q]);
+      return;
+    }
+
+
 
     template <int dim>
     double
@@ -1225,6 +1253,9 @@ namespace aspect
             prm.declare_entry ("c2", "0.31",
                                Patterns::List (Patterns::Double(0)),
                                "coefficient for depth dependent thermal conductivity" "Units: None");
+            prm.declare_entry ("Phase tracker", "0",
+                               Patterns::List (Patterns::Double(0)),
+                               "Used to track phase with compositional fields.");
 
             //phase variables
             prm.declare_entry ("Phase transition temperatures", "",
@@ -1473,6 +1504,8 @@ namespace aspect
                                          (Utilities::split_string_list(prm.get ("c1")));
           c2                         = Utilities::string_to_double
                                          (Utilities::split_string_list(prm.get ("c2")));
+          phase_track                = Utilities::string_to_double
+                                         (Utilities::split_string_list(prm.get ("Phase tracker")));
 
               if (a0.size() != a1.size() ||
                   a1.size() != a2.size() ||

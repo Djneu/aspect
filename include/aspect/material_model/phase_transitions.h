@@ -61,6 +61,9 @@ namespace aspect
         virtual void melt_fractions (const MaterialModel::MaterialModelInputs<dim> &in,
                                      std::vector<double> &melt_fractions) const;
 
+        virtual void phase_tracker (const MaterialModel::MaterialModelInputs<dim> &in,
+                                     std::vector<double> &phase_tracker) const;
+
       private:
         double reference_rho;
         double reference_T;
@@ -116,6 +119,7 @@ namespace aspect
                        const double pressure,
                        const std::vector<double> &compositional_fields,
                        const Point<dim> &position) const;
+
 
         virtual
         double
@@ -176,6 +180,7 @@ namespace aspect
         std::vector<double> c0; 
         std::vector<double> c1; 
         std::vector<double> c2;
+        std::vector<double> phase_track;
 
         //phase boundary variables
         std::vector<double> transition_depths;

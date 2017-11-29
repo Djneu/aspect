@@ -1,7 +1,7 @@
 set Dimension                              = 2
 set Use years in output instead of seconds = true
-set End time                               = 0
-set Output directory                       = -2e6
+set End time                               = 5e6
+set Output directory                       = tstvisc
 set Nonlinear solver scheme                = iterated IMPES
 set Linear solver tolerance                = 1e-7
 set Nonlinear solver tolerance             = 1e-3
@@ -47,8 +47,8 @@ subsection Material model
     set Reference specific heat       = 1250
 
     #viscosity parameters
-    set Diffusion prefactor             = 7.00E-016, 3E-022, 3.5E-027                   #1.25E-015, 6.12E-022, 2.94E-022, 5.4E-028   7.00E-016, 8E-022, 3.6E-027 
-    set Diffusion activation energy     = 355000, 231000, 282391                                 #375000, 231000, 270000, 299000     355000
+    set Diffusion prefactor             = 7E-016, 3E-022, 3.5E-027                   #1.25E-015, 6.12E-022, 2.94E-022, 5.4E-028   7.00E-016, 8E-022, 3.6E-027 
+    set Diffusion activation energy     = 355000, 218500, 269500                                #375000, 231000, 270000, 299000     355000
     set Diffusion activation volume     = 6e-6, 3.5e-6, 2e-6                                         #6e-6, 6e-6, 6e-6, 1.5e-6 
 
     set Dislocation prefactor           = 7.37E-015, 7.37e-15, 1.e-40                         #8.33E-017, 2.05e-12, 2.05e-19, 1.e-40   #7.37E-015, 7.37e-15, 1.e-40
@@ -60,20 +60,20 @@ subsection Material model
     set Constant grain size           = 0.002235, 0.000818, 0.000026                       #0.002235, 0.000818, 0.000288, 0.000026
 
     #coefficients for thermal expansivity and conductivity
-    set a0                            = 3.15e-5, 2.84e-5, 2.68e-5,                #3.15e-5, 2.84e-5, 2.68e-5, 2.68e-5, 
-    set a1                            = 1.02e-8, 6.49e-9, 2.77e-9,                #1.02e-8, 6.49e-9, 4.82e-9, 2.77e-9,
-    set a2                            = -0.76, -0.88, -1.21,                           #-0.76, -0.88, -0.93, -1.21, 
-    set a3                            = 3.63e-2, 2.61e-2, 8.63e-3,                 #3.63e-2, 2.61e-2, 2.15e-2, 8.63e-3,
+    set a0                            = 3.15e-5, 3.15e-5, 2.68e-5,                #3.15e-5, 2.84e-5, 2.68e-5, 2.68e-5, 
+    set a1                            = 1.02e-8, 1.02e-8, 2.77e-9,                #1.02e-8, 6.49e-9, 4.82e-9, 2.77e-9,
+    set a2                            = -0.76, -0.76, -1.21,                           #-0.76, -0.88, -0.93, -1.21, 
+    set a3                            = 3.63e-2, 3.631e-2, 8.63e-3,                 #3.63e-2, 2.61e-2, 2.15e-2, 8.63e-3,
 
-    set c0                            = 2.47, 3.81, 3.48,                             #2.47, 3.81, 3.52, 3.48, 
-    set c1                            = 0.33, 0.34, 0.12                             #0.33, 0.34, 0.36, 0.12, 
-    set c2                            = 0.48, 0.56, 0.31                            #0.48, 0.56, 0.61, 0.31,
+    set c0                            = 2.47, 2.47, 3.48,                             #2.47, 3.81, 3.52, 3.48, 
+    set c1                            = 0.33, 0.33, 0.12                             #0.33, 0.34, 0.36, 0.12, 
+    set c2                            = 0.48, 0.48, 0.31                            #0.48, 0.56, 0.61, 0.31,
 
     #phase variables
-    set Phase transition density jumps                 = 165, 330,
+    set Phase transition density jumps                 = 0, 330,
     set Phase transition depths                        = 3.75e5, 6.25e5,
-    set Phase transition temperatures                  = 1803, 1902
-    set Phase transition Clapeyron slopes              = 4e6, -2e6,
+    set Phase transition temperatures                  = 1800, 1900                  #1728, 1780
+    set Phase transition Clapeyron slopes              = 0, -2.5e6,
     set Phase transition widths                        = 15000, 15000 
     set Viscosity prefactors                           = 1, 1, 1 
 
@@ -156,8 +156,8 @@ end
 subsection Mesh refinement
   set Refinement fraction                = 0.8
   set Coarsening fraction                = 0.05
-  set Initial adaptive refinement        = 1
-  set Initial global refinement          = 7
+  set Initial adaptive refinement        = 0
+  set Initial global refinement          = 6
   set Minimum refinement level           = 6
   set Strategy                           = temperature, viscosity
   set Time steps between mesh refinement = 5
