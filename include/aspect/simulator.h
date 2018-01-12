@@ -99,13 +99,13 @@ namespace aspect
         template <int dim>      struct StokesSystem;
         template <int dim>      struct AdvectionSystem;
       }
-
-      namespace Assemblers
-      {
-        template <int dim>      class AssemblerBase;
-      }
-      template <int dim>      struct AssemblerLists;
     }
+  }
+
+  namespace Assemblers
+  {
+    template <int dim>      class Interface;
+    template <int dim>      class Manager;
   }
 
   /**
@@ -431,6 +431,91 @@ namespace aspect
       void solve_timestep ();
 
       /**
+       * This function implements one scheme for the various
+       * steps necessary to assemble and solve the nonlinear problem.
+       *
+       * 'IMPES' is the classical IMplicit
+       * Pressure Explicit Saturation scheme in which ones solves
+       * the temperatures and Stokes equations exactly
+       * once per time step, one after the other.
+       *
+       * This function is implemented in
+       * <code>source/simulator/solver_schemes.cc</code>.
+       */
+      void solve_IMPES ();
+
+      /**
+       * This function implements one scheme for the various
+       * steps necessary to assemble and solve the nonlinear problem.
+       *
+       * The 'Stokes only' scheme only solves the Stokes system and ignores
+       * compositions and the temperature equation (careful, the material
+       * model must not depend on the temperature; mostly useful for
+       * Stokes benchmarks).
+       *
+       * This function is implemented in
+       * <code>source/simulator/solver_schemes.cc</code>.
+       */
+      void solve_stokes_only ();
+
+      /**
+       * This function implements one scheme for the various
+       * steps necessary to assemble and solve the nonlinear problem.
+       *
+       * The `iterated IMPES' scheme iterates the decoupled IMPES approach
+       * by alternating the solution of the temperature and Stokes systems.
+       * This is essentially a type of Picard iterations for the whole
+       * system of equations.
+       *
+       * This function is implemented in
+       * <code>source/simulator/solver_schemes.cc</code>.
+       */
+      void solve_iterated_IMPES ();
+
+      /**
+       * This function implements one scheme for the various
+       * steps necessary to assemble and solve the nonlinear problem.
+       *
+       * The `iterated Stokes' scheme solves the temperature and composition
+       * equations once at the beginning of each time step
+       * and then iterates out the solution of the Stokes equation using
+       * Picard iterations.
+       *
+       * This function is implemented in
+       * <code>source/simulator/solver_schemes.cc</code>.
+       */
+      void solve_iterated_stokes ();
+
+      /**
+       * This function implements one scheme for the various
+       * steps necessary to assemble and solve the nonlinear problem.
+       *
+       * 'Newton Stokes' iterates over solving the temperature, composition,
+       * and Stokes equations just like 'iterated IMPES', but for the
+       * Stokes system it is able to switch from a defect correction form of
+       * Picard iterations to Newton iterations after a certain tolerance or
+       * number of iterations is reached. This can greatly improve the
+       * convergence rate for particularly nonlinear viscosities.
+       *
+       * This function is implemented in
+       * <code>source/simulator/solver_schemes.cc</code>.
+       */
+      void solve_newton_stokes ();
+
+      /**
+       * This function implements one scheme for the various
+       * steps necessary to assemble and solve the nonlinear problem.
+       *
+       * The 'Advection only' scheme only solves the temperature and other
+       * advection systems and instead of solving for the Stokes system,
+       * a prescribed velocity and pressure is used."
+       *
+       * This function is implemented in
+       * <code>source/simulator/solver_schemes.cc</code>.
+       */
+      void solve_advection_only ();
+
+      /**
        * Initiate the assembly of the Stokes preconditioner matrix via
        * assemble_stokes_preconditoner(), then set up the data structures to
        * actually build a preconditioner from this matrix.
@@ -448,7 +533,7 @@ namespace aspect
        * <code>source/simulator/assembly.cc</code>.
        */
       void build_advection_preconditioner (const AdvectionField &advection_field,
-                                           std_cxx11::shared_ptr<aspect::LinearAlgebra::PreconditionILU> &preconditioner);
+                                           aspect::LinearAlgebra::PreconditionILU &preconditioner);
 
       /**
        * Initiate the assembly of the Stokes matrix and right hand side.
@@ -457,6 +542,45 @@ namespace aspect
        * <code>source/simulator/assembly.cc</code>.
        */
       void assemble_stokes_system ();
+
+      /**
+       * Assemble and solve the temperature equation.
+       * This function returns the residual after solving
+       * and can optionally compute and store an initial
+       * residual before solving the equation.
+       *
+       * This function is implemented in
+       * <code>source/simulator/solver_schemes.cc</code>.
+       */
+      double assemble_and_solve_temperature (const bool compute_initial_residual = false,
+                                             double *initial_residual = NULL);
+
+      /**
+       * Solve the composition equations with whatever method is selected
+       * (fields or particles). This function returns the residuals for
+       * all fields after solving
+       * and can optionally compute and store the initial
+       * residuals before solving the equation. For lack of a definition
+       * the residuals of all compositional fields that are advected
+       * using particles are considered zero.
+       *
+       * This function is implemented in
+       * <code>source/simulator/solver_schemes.cc</code>.
+       */
+      std::vector<double> assemble_and_solve_composition (const bool compute_initial_residual = false,
+                                                          std::vector<double> *initial_residual = NULL);
+
+      /**
+       * Assemble and solve the Stokes equation.
+       * This function returns the residual after solving
+       * and can optionally compute and store an initial
+       * residual before solving the equation.
+       *
+       * This function is implemented in
+       * <code>source/simulator/solver_schemes.cc</code>.
+       */
+      double assemble_and_solve_stokes (const bool compute_initial_residual = false,
+                                        double *initial_residual = NULL);
 
       /**
        * Initiate the assembly of one advection matrix and right hand side and
@@ -593,8 +717,11 @@ namespace aspect
 
       /**
        * Set up the size and structure of the matrix used to store the
-       * elements of the matrix that is used to build the preconditioner for
-       * the system.
+       * elements of the matrix that is used to build the
+       * preconditioner for the system. This matrix is only used for
+       * the Stokes system, so while it has the size of the whole
+       * system, it only has entries in the velocity and pressure
+       * blocks.
        *
        * This function is implemented in
        * <code>source/simulator/core.cc</code>.
@@ -616,51 +743,13 @@ namespace aspect
        * matrices, and right hand side vectors.
        *
        * One would probably want this variable to just be a member of type
-       * internal::Assembly::AssemblerLists<dim>, but this requires that
+       * Assemblers::Manager<dim>, but this requires that
        * this type is declared in the current scope, and that would require
-       * including <assembly.h> which we don't want because it's big.
+       * including <simulator/assemblers/interface.h> which we don't want because it's big.
        * Consequently, we just store a pointer to such an object, and create
        * the object pointed to at the top of set_assemblers().
        */
-      std_cxx11::unique_ptr<internal::Assembly::AssemblerLists<dim> > assemblers;
-
-      /**
-       * A collection of objects that implement member functions that may
-       * appear in the assembler signal lists. What the objects do is not
-       * actually important, but individual assembler objects may encapsulate
-       * data that is used by concrete assemblers.
-       *
-       * The objects pointed to by this vector are created in
-       * set_assemblers(), and are later destroyed by the destructor
-       * of the current class.
-       */
-      std::vector<std_cxx11::shared_ptr<internal::Assembly::Assemblers::AssemblerBase<dim> > > assembler_objects;
-
-      /**
-       * Material models, through functions derived from
-       * MaterialModel::Interface::evaluate(), put their computed material
-       * parameters into a structure of type MaterialModel::MaterialModelOutputs.
-       * By default, material models will compute those parameters that
-       * correspond to the member variables of that structure. However,
-       * there are situations where parts of the simulator need additional
-       * pieces of information; a typical example would be the use of a
-       * Newton scheme that also requires the computation of <i>derivatives</i>
-       * of material parameters with respect to pressure, temperature, and
-       * possibly other variables.
-       *
-       * The computation of such additional information is controlled by
-       * the presence of a collection of pointers in
-       * MaterialModel::MaterialModelOutputs that point to additional
-       * objects. Whether or not one needs these additional objects depends
-       * on what linear system is being assembled, or what postprocessing
-       * wants to compute. For the purpose of assembly, the current
-       * function creates the additional objects (such as the one that stores
-       * derivatives) and adds pointers to them to the collection, based on
-       * what assemblers are selected. It does so by calling the
-       * internal::Assemblers::AssemblerBase::create_additional_material_model_outputs()
-       * functions from each object in Simulator::assembler_objects.
-       */
-      void create_additional_material_model_outputs(MaterialModel::MaterialModelOutputs<dim> &) const;
+      std_cxx11::unique_ptr<Assemblers::Manager<dim> > assemblers;
 
       /**
        * Determine, based on the run-time parameters of the current simulation,
@@ -671,6 +760,18 @@ namespace aspect
        * <code>source/simulator/assembly.cc</code>.
        */
       void set_assemblers ();
+
+      /**
+       * Determine, based on the run-time parameters of the current simulation,
+       * which functions need to be called in order to assemble linear systems,
+       * matrices, and right hand side vectors. This function handles the
+       * default operation mode of ASPECT, i.e. without considering two-phase
+       * flow, or Newton solvers.
+       *
+       * This function is implemented in
+       * <code>source/simulator/assembly.cc</code>.
+       */
+      void set_default_assemblers ();
 
       /**
        * Initiate the assembly of the preconditioner for the Stokes system.
@@ -1226,7 +1327,7 @@ namespace aspect
        * Computes the initial Newton residual.
        */
       double
-      compute_initial_newton_residual (LinearAlgebra::BlockVector &linearized_stokes_initial_guess);
+      compute_initial_newton_residual (const LinearAlgebra::BlockVector &linearized_stokes_initial_guess);
 
       /**
        * This function computes the Eisenstat Walker linear tolerance used for the Newton Stokes solver.
@@ -1353,12 +1454,12 @@ namespace aspect
       const std_cxx11::unique_ptr<MaterialModel::Interface<dim> >             material_model;
       const std_cxx11::unique_ptr<GravityModel::Interface<dim> >              gravity_model;
       BoundaryTemperature::Manager<dim>                                       boundary_temperature_manager;
-      const std_cxx11::unique_ptr<BoundaryComposition::Interface<dim> >       boundary_composition;
+      BoundaryComposition::Manager<dim>                                       boundary_composition_manager;
       const std_cxx11::unique_ptr<PrescribedStokesSolution::Interface<dim> >  prescribed_stokes_solution;
       InitialComposition::Manager<dim>                                        initial_composition_manager;
       InitialTemperature::Manager<dim>                                        initial_temperature_manager;
       const std_cxx11::unique_ptr<AdiabaticConditions::Interface<dim> >       adiabatic_conditions;
-      std::map<types::boundary_id,std_cxx11::shared_ptr<BoundaryVelocity::Interface<dim> > > boundary_velocity;
+      BoundaryVelocity::Manager<dim>                                          boundary_velocity_manager;
       std::map<types::boundary_id,std_cxx11::shared_ptr<BoundaryTraction::Interface<dim> > > boundary_traction;
 
       /**
@@ -1467,7 +1568,29 @@ namespace aspect
        * @name Variables that describe the linear systems and solution vectors
        * @{
        */
+
+      /**
+       * An object that contains the entries of the system matrix. It
+       * has a size equal to the total number of degrees of freedom,
+       * but since we typically do not solve for all variables at
+       * once, the content of the matrix at any given time is only
+       * appropriate for the part of the system we are currently
+       * solving.
+       */
       LinearAlgebra::BlockSparseMatrix                          system_matrix;
+
+      /**
+       * An object that contains the entries of preconditioner
+       * matrices for the system matrix. It has a size equal to the
+       * total number of degrees of freedom, but is only used for the
+       * Stokes system (that's the only part of the system where we
+       * use a matrix for preconditioning that is different from the
+       * matrix we solve). Consequently, the blocks in rows and
+       * columns corresponding to temperature or compositional fields
+       * are left empty when building the sparsity pattern of this
+       * matrix in the Simulator::setup_system_preconditioner()
+       * function.
+       */
       LinearAlgebra::BlockSparseMatrix                          system_preconditioner_matrix;
 
       LinearAlgebra::BlockVector                                solution;
@@ -1484,9 +1607,6 @@ namespace aspect
 
       std_cxx11::shared_ptr<LinearAlgebra::PreconditionAMG>     Amg_preconditioner;
       std_cxx11::shared_ptr<LinearAlgebra::PreconditionILU>     Mp_preconditioner;
-      std_cxx11::shared_ptr<LinearAlgebra::PreconditionILU>     T_preconditioner;
-//TODO: use n_compositional_field separate preconditioners
-      std_cxx11::shared_ptr<LinearAlgebra::PreconditionILU>     C_preconditioner;
 
       bool                                                      rebuild_sparsity_and_matrices;
       bool                                                      rebuild_stokes_matrix;

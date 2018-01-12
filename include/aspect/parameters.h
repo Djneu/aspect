@@ -104,7 +104,8 @@ namespace aspect
       enum Kind
       {
         fem_field,
-        particles
+        particles,
+        static_field
       };
     };
 
@@ -167,6 +168,7 @@ namespace aspect
         enum Kind
         {
           isothermal_compression,
+          hydrostatic_compression,
           reference_density_profile,
           implicit_reference_density_profile,
           incompressible,
@@ -182,6 +184,8 @@ namespace aspect
         {
           if (input == "isothermal compression")
             return Formulation::MassConservation::isothermal_compression;
+          else if (input == "hydrostatic compression")
+            return Formulation::MassConservation::hydrostatic_compression;
           else if (input == "reference density profile")
             return Formulation::MassConservation::reference_density_profile;
           else if (input == "implicit reference density profile")
@@ -384,16 +388,6 @@ namespace aspect
 
     std::set<types::boundary_id> fixed_temperature_boundary_indicators;
     std::set<types::boundary_id> fixed_composition_boundary_indicators;
-    std::set<types::boundary_id> zero_velocity_boundary_indicators;
-    std::set<types::boundary_id> tangential_velocity_boundary_indicators;
-
-    /**
-     * Map from boundary id to a pair "components", "velocity boundary type",
-     * where components is of the format "[x][y][z]" and the velocity type is
-     * mapped to one of the plugins of velocity boundary conditions (e.g.
-     * "function")
-     */
-    std::map<types::boundary_id, std::pair<std::string,std::string> > prescribed_velocity_boundary_indicators;
 
     /**
      * Map from boundary id to a pair "components", "traction boundary type",

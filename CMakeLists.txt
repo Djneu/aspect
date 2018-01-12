@@ -25,7 +25,7 @@ MESSAGE(STATUS "====================================================")
 SET(TARGET "aspect")
 
 FILE(GLOB_RECURSE TARGET_SRC  "source/*.cc" "include/*.h")
-INCLUDE_DIRECTORIES(include)
+INCLUDE_DIRECTORIES(include ${CMAKE_BINARY_DIR}/include)
 
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8.8)
 
@@ -99,8 +99,13 @@ FOREACH(_source_file ${TARGET_SRC})
 ENDFOREACH()
 
 
+
 # load in version info and export it
 FILE(STRINGS "${CMAKE_SOURCE_DIR}/VERSION" ASPECT_PACKAGE_VERSION LIMIT_COUNT 1)
+
+INCLUDE(${CMAKE_SOURCE_DIR}/cmake/macro_aspect_query_git_information.cmake)
+ASPECT_QUERY_GIT_INFORMATION("ASPECT")
+CONFIGURE_FILE(${CMAKE_SOURCE_DIR}/include/aspect/revision.h.in ${CMAKE_BINARY_DIR}/include/aspect/revision.h @ONLY)
 
 INCLUDE(CMakePackageConfigHelpers)
 WRITE_BASIC_PACKAGE_VERSION_FILE(
@@ -133,7 +138,8 @@ CONFIGURE_FILE(
 # Next, set up the testsuite
 
 SET(ASPECT_RUN_ALL_TESTS OFF CACHE BOOL "Set up complete test suite to run.")
-
+SET(ASPECT_COMPARE_TEST_RESULTS ON CACHE BOOL "Compare test results with high accuracy.")
+ 
 CONFIGURE_FILE(
   ${CMAKE_SOURCE_DIR}/tests/cmake/CTestCustom.ctest.in
   ${CMAKE_BINARY_DIR}/CTestCustom.ctest
@@ -164,6 +170,7 @@ IF(EXISTS ${CMAKE_SOURCE_DIR}/tests/CMakeLists.txt)
   EXECUTE_PROCESS(
     COMMAND ${CMAKE_COMMAND} -G ${ASPECT_TEST_GENERATOR}
 	-D ASPECT_RUN_ALL_TESTS=${ASPECT_RUN_ALL_TESTS}
+	-D ASPECT_COMPARE_TEST_RESULTS=${ASPECT_COMPARE_TEST_RESULTS}
 	-D ASPECT_DIR=${CMAKE_BINARY_DIR}
 	-D CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
 	-D ASPECT_BINARY=${aspect_binary}
@@ -375,12 +382,16 @@ INSTALL(TARGETS aspect
 SET_PROPERTY(TARGET aspect PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # headers:
-INSTALL(DIRECTORY include/ DESTINATION include
-  COMPONENT includes)
+INSTALL(DIRECTORY include/ 
+  DESTINATION include
+  COMPONENT includes
+  FILES_MATCHING PATTERN "*.h")
 
 # cmake stuff:
 INSTALL(FILES ${CMAKE_BINARY_DIR}/forinstall/AspectConfig.cmake ${CMAKE_BINARY_DIR}/AspectConfigVersion.cmake
 	DESTINATION "lib/cmake/Aspect/")
+
+INSTALL(FILES ${CMAKE_BINARY_DIR}/include/aspect/revision.h DESTINATION "include/aspect/")
 
 MESSAGE(STATUS "Writing config into detailed.log...")
 INCLUDE(cmake/write_config)

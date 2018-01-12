@@ -38,8 +38,14 @@ namespace aspect
       GridGenerator::hyper_ball (coarse_grid,
                                  Point<dim>(),
                                  R);
+
+#if DEAL_II_VERSION_GTE(9,0,0)
+      coarse_grid.set_manifold(0,spherical_manifold);
+      coarse_grid.set_all_manifold_ids_on_boundary(0);
+#else
       static const HyperBallBoundary<dim> boundary_ball(Point<dim>(), R);
       coarse_grid.set_boundary (0, boundary_ball);
+#endif
     }
 
 
@@ -87,6 +93,12 @@ namespace aspect
       return std::min (std::max (R-position.norm(), 0.), maximal_depth());
     }
 
+    template <int dim>
+    double
+    Sphere<dim>::height_above_reference_surface(const Point<dim> &position) const
+    {
+      return position.norm()-radius();
+    }
 
 
     template <int dim>

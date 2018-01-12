@@ -1883,6 +1883,17 @@ is defined in the material model. This is the explicit compressible mass equatio
 the velocity $\textbf{u}$ on the right-hand side is an extrapolated velocity from the last timesteps.
 
 \item
+``hydrostatic compression'':
+\[
+ \nabla \cdot \textbf{u}
+= - \left( \frac{1}{\rho} \frac{\partial \rho}{\partial p} \rho \textbf{g} + \frac{1}{\rho} \frac{\partial \rho}{\partial T} \nabla T \right) \cdot \textbf{u}
+= - \left( \kappa \rho \textbf{g} - \alpha \nabla T \right) \cdot \textbf{u}
+\]
+where $\frac{1}{\rho} \frac{\partial \rho}{\partial p} = \kappa$ is the compressibility,
+$- \frac{1}{\rho}\frac{\partial \rho}{\partial T} = \alpha$ is the thermal expansion coefficient, 
+and both are defined in the material model. 
+
+\item
 ``reference density profile'':
 \[
  \nabla \cdot \textbf{u} = -\frac{1}{\bar{\rho}} \frac{\partial \bar{\rho}}{\partial z} \frac{\textbf{g}}{\|\textbf{g}\|} \cdot \textbf{u},
@@ -2825,6 +2836,16 @@ is given in Section~\ref{sec:parameters}.
 Running \aspect{} with an input file will produce output that will look
 something like this (numbers will all be different, of course):
 \begin{lstlisting}[frame=single,language=ksh]
+-----------------------------------------------------------------------------
+-- This is ASPECT, the Advanced Solver for Problems in Earth's ConvecTion.
+--     . version 2.0.0-pre (include_dealii_version, c20eba0)
+--     . using deal.II 9.0.0-pre (master, 952baa0)
+--     . using Trilinos 12.10.1
+--     . using p4est 2.0.0
+--     . running in DEBUG mode
+--     . running with 1 MPI process
+-----------------------------------------------------------------------------
+
 Number of active cells: 1,536 (on 5 levels)
 Number of degrees of freedom: 20,756 (12,738+1,649+6,369)
 
@@ -2875,9 +2896,21 @@ Number of degrees of freedom: 33,859 (20,786+2,680+10,393)
 ...
 \end{lstlisting}
 
-This output was produced by a parameter file that, among other settings,
-contained the following values (we will discuss many such input files in
-Section~\ref{sec:cookbooks}:
+The output starts with a header that lists the used \aspect{}, \dealii{},
+\trilinos{} and \pfrst{} versions as well as the mode you compiled \aspect{} in
+(see \ref{sec:debug-mode}), and the number of parallel processes
+used\footnote{If you used the \texttt{git} version control system to download
+\aspect{} and/or \dealii{}, as in this example, you will also get the current
+branch, and unique revision identifier for the current version. This is very
+important if you modify either software between releases, or you use a
+development version that is not an official release. Note that this revision
+can not track changes you made to the software that are not part of a git
+commit.}.  With this information we strive to make
+\aspect{} models as reproducible as possible.
+
+The following output depends on the model, and in this case was produced by
+a parameter file that, among other settings, contained the following values
+(we will discuss many such input files in Section~\ref{sec:cookbooks}:
 \lstinputlisting[language=prmfile]{cookbooks/overview/simple.prm.out}
 
 In other words, these run-time parameters specify that we should start with a
@@ -7571,7 +7604,8 @@ the surface; $\gamma$ is a coefficient of yield stress increase with depth; and 
 By limiting the strength of the lithosphere at low temperature, this rheology allows one to
 more realistically model processes like lithospheric delamination and foundering in the
 presence of weak crustal layers. A similar model setup to the one described in \cite{MD04}
-can be reproduced with the following parameters.
+can be reproduced with the files in the directory \url{cookbooks/morency_doin_2004}. 
+In particular, the following sections of the input file are important to reproduce the setup:
 
 \note{\cite{MD04} defines the second invariant of the strain rate in a nonstandard way.
     The formulation in the paper is given as $\epsilon_{II} = \sqrt{\frac{1}{2}
@@ -7585,7 +7619,7 @@ can be reproduced with the following parameters.
     get very close. See Figure~\ref{fig:md-1} for an approximate reproduction of the
     original figure.}
 
-\lstinputlisting[language=prmfile]{cookbooks/morency_doin/morency_doin.prm.out}
+\lstinputlisting[language=prmfile]{cookbooks/morency_doin/morency_doin.part.prm.out}
 
 \begin{figure}[h!]
   \includegraphics[width=\textwidth]{cookbooks/morency_doin/morency_doin_2004_fig1.pdf}

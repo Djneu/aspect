@@ -424,17 +424,16 @@ namespace aspect
                 ExcMessage ("The " + field_name + " equation can not be solved, because the matrix is zero, "
                             "but the right-hand side is nonzero."));
 
+    LinearAlgebra::PreconditionILU preconditioner;
+    build_advection_preconditioner(advection_field, preconditioner);
+
     if (advection_field.is_temperature())
       {
-        build_advection_preconditioner(advection_field,
-                                       T_preconditioner);
         computing_timer.enter_section ("   Solve temperature system");
         pcout << "   Solving temperature system... " << std::flush;
       }
     else
       {
-        build_advection_preconditioner(advection_field,
-                                       C_preconditioner);
         computing_timer.enter_section ("   Solve composition system");
         pcout << "   Solving "
               << introspection.name_for_compositional_index(advection_field.compositional_variable)
@@ -470,11 +469,7 @@ namespace aspect
         solver.solve (system_matrix.block(block_idx,block_idx),
                       distributed_solution.block(block_idx),
                       system_rhs.block(block_idx),
-                      (advection_field.is_temperature()
-                       ?
-                       *T_preconditioner
-                       :
-                       *C_preconditioner));
+                      preconditioner);
       }
     // if the solver fails, report the error from processor 0 with some additional
     // information about its location, and throw a quiet exception on all other
@@ -661,22 +656,25 @@ namespace aspect
         // linearized_stokes_variables has a different
         // layout than current_linearization_point, which also contains all the
         // other solution variables.
-        if (parameters.nonlinear_solver != NonlinearSolver::Newton_Stokes)
+        if (!assemble_newton_stokes_system)
           {
             linearized_stokes_initial_guess.block (block_vel) = current_linearization_point.block (block_vel);
-
             linearized_stokes_initial_guess.block (block_p) = current_linearization_point.block (block_p);
+
             denormalize_pressure (this->last_pressure_normalization_adjustment,
                                   linearized_stokes_initial_guess,
                                   current_linearization_point);
           }
         else
           {
-            /**
-             * The Newton solver solves for updates to variables, for which we have no good initial guesses.
-             * Therefore, initialize the solution vector for the solver to zero.
-             * TODO: I think that for the first iteration we could actually use a non-zero inital guess.
-             */
+            // The Newton solver solves for updates to variables, for which our best guess is zero when
+            // the it isn't the first nonlinear iteration. When it is the first nonlinear iteration, we
+            // have to assemble the full (non-defect correction) Picard, to get the boundary conditions
+            // right in combination with being able to use the initial guess optimally. So we may never
+            // end up here when it is the first nonlinear iteration.
+            Assert(nonlinear_iteration != 0,
+                   ExcMessage ("The Newton solver may not be active in the first nonlinear iteration"));
+
             linearized_stokes_initial_guess.block (block_vel) = 0;
             linearized_stokes_initial_guess.block (block_p) = 0;
           }
@@ -882,7 +880,7 @@ namespace aspect
 
     // do some cleanup now that we have the solution
     remove_nullspace(solution, distributed_stokes_solution);
-    if (parameters.nonlinear_solver != NonlinearSolver::Newton_Stokes)
+    if (!assemble_newton_stokes_system)
       this->last_pressure_normalization_adjustment = normalize_pressure(solution);
 
     // convert melt pressures:

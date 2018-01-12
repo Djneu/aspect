@@ -69,6 +69,7 @@ namespace aspect
 
   namespace BoundaryComposition
   {
+    template <int dim> class Manager;
     template <int dim> class Interface;
   }
 
@@ -79,6 +80,7 @@ namespace aspect
 
   namespace BoundaryVelocity
   {
+    template <int dim> class Manager;
     template <int dim> class Interface;
   }
 
@@ -99,6 +101,7 @@ namespace aspect
   }
 
   template <int dim> class MeltHandler;
+  template <int dim> class FreeSurfaceHandler;
 
   template <int dim> class NewtonHandler;
 
@@ -480,13 +483,6 @@ namespace aspect
                                            MaterialModel::MaterialModelInputs<dim> &material_model_inputs) const;
 
       /**
-       * This function simply calls Simulator<dim>::create_additional_material_model_outputs()
-       * with the given arguments.
-       */
-      void
-      create_additional_material_model_outputs (MaterialModel::MaterialModelOutputs<dim> &) const;
-
-      /**
        * Return a pointer to the gravity model description.
        */
       const GravityModel::Interface<dim> &
@@ -532,7 +528,7 @@ namespace aspect
       get_boundary_temperature () const DEAL_II_DEPRECATED;
 
       /**
-       * Return an reference to the manager of the initial temperature models.
+       * Return an reference to the manager of the boundary temperature models.
        * This can then i.e. be used to get the names of the initial temperature
        * models used in a computation, or to compute the initial temperature
        * for a given position.
@@ -545,17 +541,27 @@ namespace aspect
        * set. This is useful because a simulation does not actually have to
        * declare any boundary composition model, for example if all
        * boundaries are reflecting. In such cases, there is no
-       * boundary composition model that can provide, for example,
-       * a minimal and maximal temperature on the boundary.
+       * boundary composition model.
        */
       bool has_boundary_composition () const;
 
       /**
        * Return a reference to the object that describes the composition
        * boundary values.
+       *
+       * @deprecated: Use get_boundary_composition_manager() instead.
        */
       const BoundaryComposition::Interface<dim> &
-      get_boundary_composition () const;
+      get_boundary_composition () const DEAL_II_DEPRECATED;
+
+      /**
+       * Return an reference to the manager of the boundary composition models.
+       * This can then i.e. be used to get the names of the boundary composition
+       * models used in a computation, or to compute the boundary composition
+       * for a given position.
+       */
+      const BoundaryComposition::Manager<dim> &
+      get_boundary_composition_manager () const;
 
       /**
        * Return a reference to the object that describes traction
@@ -620,9 +626,20 @@ namespace aspect
 
       /**
        * Return the map of prescribed_boundary_velocity
+       *
+       * @deprecated: Use get_boundary_velocity_manager() instead.
        */
       const std::map<types::boundary_id,std_cxx11::shared_ptr<BoundaryVelocity::Interface<dim> > >
-      get_prescribed_boundary_velocity () const;
+      get_prescribed_boundary_velocity () const DEAL_II_DEPRECATED;
+
+      /**
+       * Return an reference to the manager of the boundary velocity models.
+       * This can then i.e. be used to get the names of the boundary velocity
+       * models used in a computation, or to compute the boundary velocity
+       * for a given position.
+       */
+      const BoundaryVelocity::Manager<dim> &
+      get_boundary_velocity_manager () const;
 
       /**
        * Return a pointer to the manager of the heating model.
@@ -644,6 +661,13 @@ namespace aspect
        */
       const NewtonHandler<dim> &
       get_newton_handler () const;
+
+      /**
+       * Return a reference to the free surface handler. This function will
+       * throw an exception if no free surface is activated.
+       */
+      const FreeSurfaceHandler<dim> &
+      get_free_surface_handler () const;
 
       /**
        * Return a reference to the lateral averaging object owned
@@ -672,6 +696,15 @@ namespace aspect
        */
       double
       get_pressure_scaling () const;
+
+      /**
+       * Return whether we need to apply a compatibility modification
+       * to the pressure right hand side. See documentation of
+       * Simulator<dim>::do_pressure_rhs_compatibility_modification for more
+       * information.
+       */
+      bool
+      pressure_rhs_needs_compatibility_modification() const;
 
       /**
        * A convenience function that copies the values of the compositional

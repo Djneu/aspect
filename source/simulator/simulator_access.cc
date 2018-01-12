@@ -370,13 +370,6 @@ namespace aspect
   }
 
 
-  template <int dim>
-  void
-  SimulatorAccess<dim>::create_additional_material_model_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
-  {
-    simulator->create_additional_material_model_outputs(out);
-  }
-
 
   template <int dim>
   const std::map<types::boundary_id,std_cxx11::shared_ptr<BoundaryTraction::Interface<dim> > > &
@@ -420,18 +413,29 @@ namespace aspect
   bool
   SimulatorAccess<dim>::has_boundary_composition () const
   {
-    return (simulator->boundary_composition.get() != 0);
+    return (get_boundary_composition_manager().get_active_boundary_composition_conditions().size() > 0);
   }
+
 
 
   template <int dim>
   const BoundaryComposition::Interface<dim> &
   SimulatorAccess<dim>::get_boundary_composition () const
   {
-    AssertThrow (simulator->boundary_composition.get() != 0,
-                 ExcMessage("You can not call this function if no such model is actually available."));
-    return *simulator->boundary_composition.get();
+    Assert (get_boundary_composition_manager().get_active_boundary_composition_conditions().size() == 1,
+            ExcMessage("You can only call this function if exactly one boundary composition plugin is active."));
+    return *(get_boundary_composition_manager().get_active_boundary_composition_conditions().front());
   }
+
+
+
+  template <int dim>
+  const BoundaryComposition::Manager<dim> &
+  SimulatorAccess<dim>::get_boundary_composition_manager () const
+  {
+    return simulator->boundary_composition_manager;
+  }
+
 
 
   template <int dim>
@@ -462,7 +466,29 @@ namespace aspect
   const std::map<types::boundary_id,std_cxx11::shared_ptr<BoundaryVelocity::Interface<dim> > >
   SimulatorAccess<dim>::get_prescribed_boundary_velocity () const
   {
-    return simulator->boundary_velocity;
+    const std::map<types::boundary_id,std::vector<std_cxx11::shared_ptr<BoundaryVelocity::Interface<dim> > > > &
+    boundary_map = simulator->boundary_velocity_manager.get_active_boundary_velocity_conditions();
+
+    std::map<types::boundary_id,std_cxx11::shared_ptr<BoundaryVelocity::Interface<dim> > >
+    legacy_map;
+
+    for (typename std::map<types::boundary_id,std::vector<std_cxx11::shared_ptr<BoundaryVelocity::Interface<dim> > > >::const_iterator
+         boundary = boundary_map.begin(); boundary != boundary_map.end(); ++boundary)
+      {
+        Assert (boundary->second.size() <= 1,
+                ExcMessage("You can only use this function if there is at most one boundary velocity plugin per boundary."));
+        legacy_map[boundary->first] = boundary->second.front();
+      }
+
+    return legacy_map;
+  }
+
+
+  template <int dim>
+  const BoundaryVelocity::Manager<dim> &
+  SimulatorAccess<dim>::get_boundary_velocity_manager () const
+  {
+    return simulator->boundary_velocity_manager;
   }
 
 
@@ -567,6 +593,16 @@ namespace aspect
   }
 
   template <int dim>
+  const FreeSurfaceHandler<dim> &
+  SimulatorAccess<dim>::get_free_surface_handler () const
+  {
+    Assert (simulator->free_surface.get() != 0,
+            ExcMessage("You can not call this function if the free surface is not enabled."));
+
+    return *(simulator->free_surface);
+  }
+
+  template <int dim>
   void
   SimulatorAccess<dim>::get_composition_values_at_q_point (const std::vector<std::vector<double> > &composition_values,
                                                            const unsigned int                      q,
@@ -610,6 +646,13 @@ namespace aspect
   SimulatorAccess<dim>::get_pressure_scaling () const
   {
     return (simulator->pressure_scaling);
+  }
+
+  template <int dim>
+  bool
+  SimulatorAccess<dim>::pressure_rhs_needs_compatibility_modification () const
+  {
+    return simulator->do_pressure_rhs_compatibility_modification;
   }
 }
 
