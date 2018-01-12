@@ -225,6 +225,8 @@ namespace aspect
                                 :
                                 constant_grain_size[ol_index];
 
+      //std::cout<<temperature<<"  "<<ol_index<<"  "<<diffusion_activation_energy[ol_index]<<"  "<<diffusion_activation_volume[ol_index]<<"  "<<adiabatic_pressure<<std::endl;
+
 
       // TODO: we use the prefactors from Behn et al., 2009 as default values, but their laws use the strain rate
       // and we use the second invariant --> check if the prefactors should be changed
@@ -963,12 +965,10 @@ namespace aspect
                     std::vector<double> &melt_fractions) const
     {
       for (unsigned int q=0; q<in.temperature.size(); ++q)
-        melt_fractions[q] = get_phase_index(in.position[q], in.temperature[q], in.pressure[q]);
-
-/*melt_fraction(in.temperature[q],
-                                          std::max(0.0, in.pressure[q]),
-                                          in.composition[q],
-                                          in.position[q]);*/
+        melt_fraction(in.temperature[q],
+                      std::max(0.0, in.pressure[q]),
+                      in.composition[q],
+                      in.position[q]);
       return;
     }
 
