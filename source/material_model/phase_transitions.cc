@@ -363,89 +363,6 @@ namespace aspect
              * energy_term;
     }
 
-
-    //temperature and pressure dependent viscosity, set up similar to damage_rheology material model
-    template <int dim>
-    double
-    PhaseTransitions<dim>::
-    calculate_viscosity ( const double &pressure,
-                          const double &temperature,
-                          const Point<dim> &position,
-                          const SymmetricTensor<2,dim> &strain_rate,
-                          const int phase) const
-    {
-      const SymmetricTensor<2,dim> shear_strain_rate = strain_rate - 1./dim * trace(strain_rate) * unit_symmetric_tensor<dim>();
-      const double second_strain_rate_invariant = std::sqrt(std::abs(second_invariant(shear_strain_rate)));
-
-      double current_viscosity = eta;
-      double vdis              = eta;
-
-      const double adiabatic_pressure = this->get_adiabatic_conditions().is_initialized()
-                                        ?
-                                        this->get_adiabatic_conditions().pressure(position)
-                                        :
-                                        pressure;
-
-      //energy term for viscosity calculated with diffusion
-      double diffusion_energy_term = exp((diffusion_activation_energy[phase] + diffusion_activation_volume[phase] * adiabatic_pressure)
-                         / (1 * constants::gas_constant * temperature));
-
-      if (this->get_adiabatic_conditions().is_initialized())
-        {
-          const double diffusion_adiabatic_energy_term
-            = exp((diffusion_activation_energy[phase] + diffusion_activation_volume[phase] * adiabatic_pressure)
-              / (1 * constants::gas_constant * this->get_adiabatic_conditions().temperature(position)));
-
-          const double diffusion_temperature_dependence = diffusion_energy_term / diffusion_adiabatic_energy_term;
-          if (diffusion_temperature_dependence > 1e6)
-            diffusion_energy_term = diffusion_adiabatic_energy_term * 1e6;
-          if (diffusion_temperature_dependence < 1.0 / 1e6)
-            diffusion_energy_term = diffusion_adiabatic_energy_term / 1e6;
-        }
-
-      const double diffusion_strain_rate_dependence = (1.0 - 1) / 1;
-      double vdiff = pow(diffusion_prefactor[phase],-1.0/1)
-             * std::pow(second_strain_rate_invariant, diffusion_strain_rate_dependence)
-             * pow(constant_grain_size[phase], 3/1)
-             * diffusion_energy_term;
-
-
-      //energy term for calculation of viscosity from dislocation creep
-      double dislocation_energy_term = exp((dislocation_activation_energy[phase] + dislocation_activation_volume[phase] * adiabatic_pressure)
-                         / (3.5 * constants::gas_constant * temperature));
-      if (this->get_adiabatic_conditions().is_initialized())
-        {
-          const double dislocation_adiabatic_energy_term
-            = exp((dislocation_activation_energy[phase] + dislocation_activation_volume[phase] * adiabatic_pressure)
-              / (3.5 * constants::gas_constant * this->get_adiabatic_conditions().temperature(position)));
-
-          const double dislocation_temperature_dependence = dislocation_energy_term / dislocation_adiabatic_energy_term;
-          if (dislocation_temperature_dependence > 1e6)
-            dislocation_energy_term = dislocation_adiabatic_energy_term * 1e6;
-          if (dislocation_temperature_dependence < 1.0 / 1e6)
-            dislocation_energy_term = dislocation_adiabatic_energy_term / 1e6;
-        }
-
-      const double dislocation_strain_rate_dependence = (1.0 - 3.5) / 3.5;
-
-
-      //if the strain rate inviariant is high enough calculate dislocation creep
-      if(std::abs(second_strain_rate_invariant) > 1e-30)
-      {
-             vdis = pow(dislocation_prefactor[phase],-1.0/3.5)
-             * std::pow(second_strain_rate_invariant,dislocation_strain_rate_dependence)
-             * dislocation_energy_term;
-      }
-
-      //if dislocation creep was calculated use a harmonic average of the two, otherwise use diffusion creep.
-      if(std::abs(second_strain_rate_invariant) > 1e-30)
-        current_viscosity = vdis * vdiff / (vdis + vdiff);
-      else
-        current_viscosity = vdiff;
-
-     return current_viscosity;
-    }
-
     template <int dim>
     double
     PhaseTransitions<dim>::
@@ -639,6 +556,7 @@ namespace aspect
                                         this->get_adiabatic_conditions().pressure(position)
                                         :
                                         pressure;
+
         unsigned int ol_index = get_phase_index(position, temperature, adiabatic_pressure);
 
         // Reset entropy derivatives
@@ -701,15 +619,6 @@ namespace aspect
                   * ((in.position[i] - in.position[j]) * this->get_gravity_model().gravity_vector(in.position[i])) > 0))
                 crossed_transition = k;
 
-        //calculating viscosity
-        /*if(in.strain_rate.size()>0)
-        {           
-                      viscosities = calculate_viscosity(pressure,
-                                                                       temperature,
-                                                                       position,
-                                                                       in.strain_rate[i],
-                                                                       ol_index);
-        }*/
 
         if (in.strain_rate.size() > 0)
         {
@@ -729,8 +638,7 @@ namespace aspect
         //thermal conductivity equation (Tosi, et. al., 2013) that varies with temperature, depth, and phase.
         if(k_value == 0.0)
         {
-          //conductivity = (c0[ol_index]+(c1[ol_index]*pressure*1e-9))*pow((300/temperature),c2[ol_index]);
-          conductivity = c0[ol_index];
+          conductivity = (c0[ol_index]+(c1[ol_index]*pressure*1e-9))*pow((300/temperature),c2[ol_index]);
         }
         else
         {

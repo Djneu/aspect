@@ -270,14 +270,6 @@ namespace aspect
 
         virtual
         double
-        calculate_viscosity ( const double &pressure,
-                              const double &temperature,
-                              const Point<dim> &position,
-                              const SymmetricTensor<2,dim> &strain_rate,
-                              const int phase) const;
-
-        virtual
-        double
         phase_function (const Point<dim> &position,
                         const double temperature,
                         const double pressure,
