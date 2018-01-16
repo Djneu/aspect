@@ -309,7 +309,7 @@ namespace aspect
       const double diff_viscosity = diffusion_viscosity(temperature, pressure, composition, strain_rate, position);
 
       double effective_viscosity;
-      if(std::abs(second_strain_rate_invariant) > 1e-30)
+      if(std::abs(second_strain_rate_invariant) > 1e-30 && use_dislocation == true)
         {
           const double disl_viscosity = dislocation_viscosity(temperature, pressure, composition, strain_rate, position);
           effective_viscosity = disl_viscosity * diff_viscosity / (disl_viscosity + diff_viscosity);
@@ -1200,6 +1200,9 @@ namespace aspect
                              Patterns::List (Patterns::Double(0)),
                              "Power-law exponent $n_{dis}$ for dislocation creep. "
                              "Units: none.");
+            prm.declare_entry ("Use dislocation creep", "false",
+                               Patterns::Bool (),
+                               "Whether to calculate viscosity with dislocation creep or not ");
 
             //Diffusion viscosity parameters
             prm.declare_entry ("Diffusion prefactor", "1.25e-015",
@@ -1481,6 +1484,7 @@ namespace aspect
                                                  (Utilities::split_string_list(prm.get ("Dislocation activation volume")));
           dislocation_creep_exponent            = Utilities::string_to_double
                                                   (Utilities::split_string_list(prm.get ("Dislocation creep exponent")));
+          use_dislocation                   = prm.get_bool ("Use dislocation creep");
 
           if(diffusion_prefactor.size() != diffusion_activation_energy.size() ||
              diffusion_prefactor.size() != diffusion_activation_volume.size() || 
