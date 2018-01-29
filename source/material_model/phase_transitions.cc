@@ -213,7 +213,7 @@ namespace aspect
                                         pressure;
 
       // find out in which phase we are
-      const unsigned int ol_index = get_phase_index(position, temperature, adiabatic_pressure);
+      const unsigned int ol_index = get_phase_index(position, temperature, pressure);
 
       // TODO: make this more general, for more phases we have to average grain size somehow
       // TODO: default when field is not given & warning
@@ -230,12 +230,13 @@ namespace aspect
 
       // TODO: we use the prefactors from Behn et al., 2009 as default values, but their laws use the strain rate
       // and we use the second invariant --> check if the prefactors should be changed
-      double energy_term = exp((diffusion_activation_energy[ol_index] + diffusion_activation_volume[ol_index] * adiabatic_pressure)
+      double energy_term = exp((diffusion_activation_energy[ol_index] + diffusion_activation_volume[ol_index] * pressure)
                          / (1.0 * constants::gas_constant * temperature));
+
       if (this->get_adiabatic_conditions().is_initialized())
         {
           const double adiabatic_energy_term
-            = exp((diffusion_activation_energy[ol_index] + diffusion_activation_volume[ol_index] * adiabatic_pressure)
+            = exp((diffusion_activation_energy[ol_index] + diffusion_activation_volume[ol_index] * pressure)
               / (1.0 * constants::gas_constant * this->get_adiabatic_conditions().temperature(position)));
 
           const double temperature_dependence = energy_term / adiabatic_energy_term;
@@ -316,6 +317,7 @@ namespace aspect
         }
       else
         effective_viscosity = diff_viscosity;
+
       return effective_viscosity;
     }
 
@@ -339,14 +341,14 @@ namespace aspect
                                         pressure;
 
       // find out in which phase we are
-      const unsigned int ol_index = get_phase_index(position, temperature, adiabatic_pressure);
+      const unsigned int ol_index = get_phase_index(position, temperature, pressure);
 
-      double energy_term = exp((dislocation_activation_energy[ol_index] + dislocation_activation_volume[ol_index] * adiabatic_pressure)
+      double energy_term = exp((dislocation_activation_energy[ol_index] + dislocation_activation_volume[ol_index] * pressure)
                          / (dislocation_creep_exponent[ol_index] * constants::gas_constant * temperature));
       if (this->get_adiabatic_conditions().is_initialized())
         {
           const double adiabatic_energy_term
-            = exp((dislocation_activation_energy[ol_index] + dislocation_activation_volume[ol_index] * adiabatic_pressure)
+            = exp((dislocation_activation_energy[ol_index] + dislocation_activation_volume[ol_index] * pressure)
               / (dislocation_creep_exponent[ol_index] * constants::gas_constant * this->get_adiabatic_conditions().temperature(position)));
 
           const double temperature_dependence = energy_term / adiabatic_energy_term;
@@ -530,6 +532,7 @@ namespace aspect
 
        //return which phase the material is in
        return phase_index;
+
     }
 
 
@@ -557,7 +560,7 @@ namespace aspect
                                         :
                                         pressure;
 
-        unsigned int ol_index = get_phase_index(position, temperature, adiabatic_pressure);
+        unsigned int ol_index = get_phase_index(position, temperature, pressure);
 
         // Reset entropy derivatives
         out.entropy_derivative_pressure[i] = 0;
@@ -658,7 +661,7 @@ namespace aspect
         }
 
    
-        /*double density_phase_dependence = 0.0;
+        double density_phase_dependence = 0.0;
         double viscosity_phase_dependence = 1.0;
         for(unsigned int i=0; i<number_of_phase_transitions; ++i)
         {
@@ -668,12 +671,15 @@ namespace aspect
                                                        i);
 
           density_phase_dependence += phaseFunction * density_jumps[i];
+          
           viscosity_phase_dependence *= 1. + phaseFunction * (phase_prefactors[i+1]-1.);
-        }*/  
+        }
 
         //density equation with pressure and temperature dependence, likely will change when adiabatic conditions are introduced.
          double density_phase_deviation = 0;
-         if (this->get_adiabatic_conditions().is_initialized() && this->include_latent_heat())
+
+
+       /*  if (this->get_adiabatic_conditions().is_initialized() && this->include_latent_heat())
            for (unsigned int ph=0; ph<number_of_phase_transitions; ++ph)
              {
                 // calculate derivative of the phase function
@@ -682,8 +688,10 @@ namespace aspect
                                                                        adiabatic_pressure,
                                                                        ph); 
 
+
                density_phase_deviation += phase_derivative*density_jumps[ph];
-             }
+
+             }*/
 
           const double temperature_deviation = temperature - this->get_adiabatic_conditions().temperature(position);
           const double pressure_dev = pressure - this->get_adiabatic_conditions().pressure(position);
@@ -691,8 +699,8 @@ namespace aspect
           if(this->get_adiabatic_conditions().is_initialized())
               density_profile = this->get_adiabatic_conditions().density(position);
         
-          out.densities[i] = density_profile * (1 - alpha * temperature_deviation + reference_compressibility * pressure_dev)
-                                  + density_phase_deviation * temperature_deviation;
+          out.densities[i] = (density_profile) * (1 - alpha * temperature_deviation + reference_compressibility * pressure_dev) + density_phase_dependence;
+                                  //tdensity_phase_deviation * temperature_deviation
 
           out.thermal_expansion_coefficients[i] = alpha;
           out.thermal_conductivities[i] = conductivity;
@@ -716,7 +724,7 @@ namespace aspect
                 // calculate derivative of the phase function
                 const double PhaseFunctionDerivative = Pphase_function_derivative(position,
                                                                                  temperature,
-                                                                                 adiabatic_pressure,
+                                                                                 pressure,
                                                                                  phase);
 
                 // calculate the change of entropy across the phase transition
@@ -755,7 +763,7 @@ namespace aspect
                                             :
                                             in.pressure[i];
 
-              unsigned int index = get_phase_index(in.position[i], in.temperature[i], adiabatic_pressure);
+              unsigned int index = get_phase_index(in.position[i], in.temperature[i], pressure);
 
               if (this->introspection().name_for_compositional_index(c) == "olivine_grain_size")
               {
@@ -889,6 +897,47 @@ namespace aspect
       for (unsigned int q=0; q<in.temperature.size(); ++q)
         phase_tracker[q] = get_phase_index(in.position[q], in.temperature[q], in.pressure[q]);
       return;
+    }
+
+    /*template <int dim>
+    void
+    PhaseTransitions<dim>::
+    dislocation_creep (const MaterialModel::MaterialModelInputs<dim> &in,
+                    std::vector<double> &dislocation_creep) const
+    {
+
+
+      for (unsigned int q=0; q<in.temperature.size(); ++q)
+      {
+         const SymmetricTensor<2,dim> shear_strain_rate = in.strain_rate[q] - 1./dim * trace(in.strain_rate[q]) * unit_symmetric_tensor<dim>();
+         const double second_strain_rate_invariant = std::sqrt(std::abs(second_invariant(shear_strain_rate)));
+
+        if(std::abs(second_strain_rate_invariant) > 1e-30 && use_dislocation == true)
+        {
+          dislocation_creep[q] = dislocation_viscosity(in.temperature[q], in.pressure[q], in.composition[q], in.strain_rate[q], in.position[q]);
+        }
+        else
+          dislocation_creep[q] = 0;
+      }
+      return;
+    }*/
+
+    template <int dim>
+    double
+    PhaseTransitions<dim>::
+    viscosity_ratio (const double temperature,
+                     const double pressure,
+                     const std::vector<double> &composition_,
+                     const SymmetricTensor<2,dim> &strain_rate,
+                     const Point<dim> &position) const
+    {
+     double ratio = 0;
+     //if(use_dislocation == true)
+      //{
+       ratio = diffusion_viscosity(temperature,pressure,composition_,strain_rate,position);
+    //  }
+      
+      return ratio;
     }
 
 

@@ -844,6 +844,15 @@ namespace aspect
          */
         virtual void update ();
 
+         /* Return the viscosity ratio between disclocation creep and diffusion
+         * creep in the case of composite rheology
+         */
+        virtual double viscosity_ratio (const double      temperature,
+                                        const double      pressure,
+                                        const std::vector<double>    &compositional_fields,
+                                        const SymmetricTensor<2,dim> &strainrate,
+                                        const Point<dim> &position) const;
+
         /**
          * @name Qualitative properties one can ask a material model
          * @{

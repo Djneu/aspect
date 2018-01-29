@@ -36,7 +36,7 @@ namespace aspect
     InitialProfile<dim>::InitialProfile()
       :
       initialized(false),
-      n_points(1000),
+      n_points(3000),
       temperatures(n_points, numbers::signaling_nan<double>()),
       pressures(n_points, numbers::signaling_nan<double>()),
       densities(n_points, numbers::signaling_nan<double>())
@@ -77,6 +77,7 @@ namespace aspect
 
       // Initialize variable for density
       double density = reference_rho;
+      double density1 = reference_rho;
 
       // now integrate downward using the explicit Euler method for simplicity
       //
@@ -117,31 +118,38 @@ namespace aspect
               const double di = ( alpha * gravity * this->get_geometry_model().maximal_depth() ) / reference_specific_heat; 
 
               // Calculate current pressure (using previous density)
-              pressures[i] = pressures[i-1] + density * gravity * delta_z;
+              pressures[i] = pressures[i-1] + density1 * gravity * delta_z;
 
               double phase_function_rho = 0.;
               double phase_function_t = 0.;
               double entropy_change = 0.;
               double temperature_jump = 0.;
+              double depth_deviation = 0;
+
+      
               for (unsigned int j=0; j<transition_depths.size(); ++j)
                 {
-                  phase_function_rho += 0.5 * ( 1. + tanh( ( (z*max_depth) - transition_depths[j]) / transition_widths[j] ) )*density_jumps[j];
+
+                  depth_deviation = (z*max_depth) - transition_depths[j];
+
+                  phase_function_rho += 0.5 * ( 1. + tanh( depth_deviation / transition_widths[j] ) )*density_jumps[j];
 
                   entropy_change = transition_slopes[j] * density_jumps[j] / std::pow(reference_rho, 2);
                   temperature_jump = this->get_adiabatic_surface_temperature() * std::exp( di * transition_depths[j] / max_depth )
                                        * entropy_change * one_over_cp;
-                  phase_function_t += 0.5 * ( 1. + tanh( ( (z*max_depth) - transition_depths[j]) / transition_widths[j] ) )*temperature_jump;      
+                  phase_function_t += 0.5 * ( 1. + tanh( depth_deviation / transition_widths[j] ) )*temperature_jump;      
                 }
 
 
               // Recalculate density. Divide by "1" is Gruenheissen parameter
              // density = reference_rho * std::pow( ( ( (delta * di * z ) / 1. ) + 1. ), 1 / delta ) +  phase_function_rho;
-              density = reference_rho * std::exp( di * z / grun ) + phase_function_rho;
+              density1 = reference_rho * std::exp( di * z / grun ) + phase_function_rho;
+              density = reference_rho * std::exp( di * z / grun );
 
               temperatures[i] = (this->include_adiabatic_heating())
                                 ?
                                 this->get_adiabatic_surface_temperature() * std::exp( di * z) +  phase_function_t
-                                //1600 * std::pow( ((2*0.679*z)+1) , 0.5) +  phase_function_t 
+                                //this->get_adiabatic_surface_temperature() * std::pow( ((2*0.679*z)+1) , 0.5) +  phase_function_t 
                                 :
                                 this->get_adiabatic_surface_temperature();
             }

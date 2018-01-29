@@ -64,6 +64,17 @@ namespace aspect
         virtual void phase_tracker (const MaterialModel::MaterialModelInputs<dim> &in,
                                      std::vector<double> &phase_tracker) const;
 
+        /*virtual void dislocation_creep (const MaterialModel::MaterialModelInputs<dim> &in,
+                                         std::vector<double> &phase_tracker) const;*/
+
+        double
+        viscosity_ratio (const double temperature,
+                         const double pressure,
+                         const std::vector<double> &composition,
+                         const SymmetricTensor<2,dim> &strain_rate,
+                         const Point<dim> &position) const;
+
+
       private:
         double reference_rho;
         double reference_T;
