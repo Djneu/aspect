@@ -1160,7 +1160,7 @@ namespace aspect
             prm.declare_entry ("Use dislocation creep", "false",
                                Patterns::Bool (),
                                "Whether to calculate viscosity with dislocation creep or not ");
-            prm.declare_entry ("Use temperature jumps", "false",
+            prm.declare_entry ("Use temperature jumps", "true",
                                Patterns::Bool (),
                                "Whether to calculate viscosity with dislocation creep or not ");
 
