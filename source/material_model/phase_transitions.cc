@@ -1160,6 +1160,10 @@ namespace aspect
             prm.declare_entry ("Use dislocation creep", "false",
                                Patterns::Bool (),
                                "Whether to calculate viscosity with dislocation creep or not ");
+            prm.declare_entry ("Use temperature jumps", "false",
+                               Patterns::Bool (),
+                               "Whether to calculate viscosity with dislocation creep or not ");
+
 
             //Diffusion viscosity parameters
             prm.declare_entry ("Diffusion prefactor", "1.25e-015",
@@ -1392,6 +1396,7 @@ namespace aspect
           k_value                    = prm.get_double ("Thermal conductivity");
           reference_specific_heat    = prm.get_double ("Reference specific heat");
           thermal_alpha              = prm.get_double ("Thermal expansion coefficient");
+          use_T_jumps                   = prm.get_bool ("Use temperature jumps");
 
           // grain evolution parameters
           grain_growth_activation_energy        = Utilities::string_to_double

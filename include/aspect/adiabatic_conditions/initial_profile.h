@@ -119,6 +119,7 @@ namespace aspect
         std::vector<double> density_jumps;
         std::vector<double> temperature_jumps;
         std::vector<double> phase_prefactors;
+        bool use_T_jumps;
 
 
         /**

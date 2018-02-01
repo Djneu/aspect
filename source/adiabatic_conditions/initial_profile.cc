@@ -146,9 +146,19 @@ namespace aspect
               density1 = reference_rho * std::exp( di * z / grun ) + phase_function_rho;
               density = reference_rho * std::exp( di * z / grun );
 
+              if(use_T_jumps)  
+              {
               temperatures[i] = (this->include_adiabatic_heating())
                                 ?
-                                this->get_adiabatic_surface_temperature() * std::exp( di * z) +  phase_function_t
+                                  this->get_adiabatic_surface_temperature() * std::exp( di * z) +  phase_function_t
+                                //this->get_adiabatic_surface_temperature() * std::pow( ((2*0.679*z)+1) , 0.5) +  phase_function_t 
+                                :
+                                this->get_adiabatic_surface_temperature();
+              }
+              else
+              temperatures[i] = (this->include_adiabatic_heating())
+                                ?
+                                this->get_adiabatic_surface_temperature() * std::exp( di * z)
                                 //this->get_adiabatic_surface_temperature() * std::pow( ((2*0.679*z)+1) , 0.5) +  phase_function_t 
                                 :
                                 this->get_adiabatic_surface_temperature();
@@ -391,6 +401,7 @@ namespace aspect
           reference_compressibility  = prm.get_double ("Compressibility");
           reference_specific_heat    = prm.get_double ("Reference specific heat");
           thermal_alpha              = prm.get_double ("Thermal expansion coefficient");
+          use_T_jumps                   = prm.get_bool ("Use temperature jumps");
           transition_depths          = Utilities::string_to_double
                                          (Utilities::split_string_list(prm.get ("Phase transition depths")));
           transition_widths          = Utilities::string_to_double

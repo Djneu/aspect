@@ -181,6 +181,7 @@ namespace aspect
         std::vector<double> dislocation_activation_volume;
         std::vector<double> dislocation_prefactor;
         bool use_dislocation;
+        bool use_T_jumps;
  
        //thermal expansivity and conductivity variables
         double k_value;
