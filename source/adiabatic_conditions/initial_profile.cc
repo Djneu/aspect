@@ -131,14 +131,14 @@ namespace aspect
               for (unsigned int j=0; j<transition_depths.size(); ++j)
                 {
 
-                  double depth= (z*max_depth) - transition_depths[j];
+                  double depth= (hh*max_depth) - transition_depths[j];
 
             double depth_deviation = (pressures[i-1] > 0
                                     ?
                                     depth - transition_slopes[j] * (depth / pressures[i-1]) * (temperatures[i-1] - transition_temperatures[j])
                                     :
                                     depth - transition_slopes[j] / (gravity * reference_rho)
-                                    * (temperatures[i-1] - transition_temperatures[j]));*/
+                                    * (temperatures[i-1] - transition_temperatures[j]));
 
                   phase_function_rho += 0.5 * ( 1. + tanh( depth_deviation / transition_widths[j] ) )*density_jumps[j];
 
