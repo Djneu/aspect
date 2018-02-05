@@ -131,9 +131,9 @@ namespace aspect
               for (unsigned int j=0; j<transition_depths.size(); ++j)
                 {
 
-                  double depth_deviation= (z*max_depth) - transition_depths[j];
+                  double depth= (z*max_depth) - transition_depths[j];
 
-          /*double depth_deviation = (pressures[i-1] > 0
+            double depth_deviation = (pressures[i-1] > 0
                                     ?
                                     depth - transition_slopes[j] * (depth / pressures[i-1]) * (temperatures[i-1] - transition_temperatures[j])
                                     :
