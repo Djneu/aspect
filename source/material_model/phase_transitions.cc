@@ -341,14 +341,14 @@ namespace aspect
                                         pressure;
 
       // find out in which phase we are
-      const unsigned int ol_index = get_phase_index(position, temperature, pressure);
+      const unsigned int ol_index = get_phase_index(position, temperature, adiabatic_pressure);
 
-      double energy_term = exp((dislocation_activation_energy[ol_index] + dislocation_activation_volume[ol_index] * pressure)
+      double energy_term = exp((dislocation_activation_energy[ol_index] + dislocation_activation_volume[ol_index] * adiabatic_pressure)
                          / (dislocation_creep_exponent[ol_index] * constants::gas_constant * temperature));
       if (this->get_adiabatic_conditions().is_initialized())
         {
           const double adiabatic_energy_term
-            = exp((dislocation_activation_energy[ol_index] + dislocation_activation_volume[ol_index] * pressure)
+            = exp((dislocation_activation_energy[ol_index] + dislocation_activation_volume[ol_index] * adiabatic_pressure)
               / (dislocation_creep_exponent[ol_index] * constants::gas_constant * this->get_adiabatic_conditions().temperature(position)));
 
           const double temperature_dependence = energy_term / adiabatic_energy_term;
@@ -521,12 +521,12 @@ namespace aspect
 
       //Calculates for other phase transitions
       for(unsigned int j=1;j<transition_depths.size();++j)
-        if(phase_function(position, temperature, pressure, j-1) > 0.5 )
+        if(phase_function(position, temperature, pressure, j-1) >= 0.5 )
           phase_index = j;
 
       //check to see if material has passed final phase transition
       if(transition_depths.size()>0)
-        if(phase_function(position, temperature, pressure, transition_depths.size()-1) > 0.5)
+        if(phase_function(position, temperature, pressure, transition_depths.size()-1) >= 0.5)
           phase_index = transition_depths.size();
 
 
@@ -560,7 +560,7 @@ namespace aspect
                                         :
                                         pressure;
 
-        unsigned int ol_index = get_phase_index(position, temperature, pressure);
+        unsigned int ol_index = get_phase_index(position, temperature, adiabatic_pressure);
 
         // Reset entropy derivatives
         out.entropy_derivative_pressure[i] = 0;
@@ -626,7 +626,7 @@ namespace aspect
         if (in.strain_rate.size() > 0)
         {
           out.viscosities[i] = std::min(max_eta, std::max(min_eta, viscosity(in.temperature[i],
-                                  in.pressure[i],
+                                  adiabatic_pressure,
                                   composition,
                                   in.strain_rate[i],
                                   in.position[i])));
@@ -641,7 +641,7 @@ namespace aspect
         //thermal conductivity equation (Tosi, et. al., 2013) that varies with temperature, depth, and phase.
         if(k_value == 0.0)
         {
-          conductivity = (c0[ol_index]+(c1[ol_index]*pressure*1e-9))*pow((300/temperature),c2[ol_index]);
+          conductivity = (c0[ol_index]+(c1[ol_index]*adiabatic_pressure*1e-9))*pow((300/temperature),c2[ol_index]);
         }
         else
         {
@@ -652,7 +652,7 @@ namespace aspect
         //thermal expansivity equation (Tosi, et. al., 2013) that varies with temperature, depth, and phase.
        if(thermal_alpha == 0.0)
        {
-        alpha = (a0[ol_index]+(a1[ol_index]*temperature)+a2[ol_index]*pow(temperature,-2))*exp(-a3[ol_index]*pressure*1e-9);
+        alpha = (a0[ol_index]+(a1[ol_index]*temperature)+a2[ol_index]*pow(temperature,-2))*exp(-a3[ol_index]*adiabatic_pressure*1e-9);
 
        }
        else
@@ -667,7 +667,7 @@ namespace aspect
         {
           const double phaseFunction = phase_function (position,
                                                        temperature,
-                                                       pressure,
+                                                       adiabatic_pressure,
                                                        i);
 
           density_phase_dependence += phaseFunction * density_jumps[i];
@@ -724,7 +724,7 @@ namespace aspect
                 // calculate derivative of the phase function
                 const double PhaseFunctionDerivative = Pphase_function_derivative(position,
                                                                                  temperature,
-                                                                                 pressure,
+                                                                                 adiabatic_pressure,
                                                                                  phase);
 
                 // calculate the change of entropy across the phase transition
@@ -763,7 +763,7 @@ namespace aspect
                                             :
                                             in.pressure[i];
 
-              unsigned int index = get_phase_index(in.position[i], in.temperature[i], pressure);
+              unsigned int index = get_phase_index(in.position[i], in.temperature[i], adiabatic_pressure);
 
               if (this->introspection().name_for_compositional_index(c) == "olivine_grain_size")
               {
@@ -894,8 +894,18 @@ namespace aspect
     phase_tracker (const MaterialModel::MaterialModelInputs<dim> &in,
                     std::vector<double> &phase_tracker) const
     {
+
+
       for (unsigned int q=0; q<in.temperature.size(); ++q)
-        phase_tracker[q] = get_phase_index(in.position[q], in.temperature[q], in.pressure[q]);
+        {        
+          const double adiabatic_pressure = this->get_adiabatic_conditions().is_initialized()
+                                        ?
+                                        this->get_adiabatic_conditions().pressure(in.position[q])
+                                        :
+                                        in.pressure[q];
+
+        phase_tracker[q] = get_phase_index(in.position[q], in.temperature[q], adiabatic_pressure);
+        }
       return;
     }
 
