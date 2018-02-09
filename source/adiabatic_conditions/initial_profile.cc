@@ -144,12 +144,12 @@ namespace aspect
                   phase_function_rho += 0.5 * ( 1. + tanh( depth_deviation / transition_widths[j] ) )*density_jumps[j];
 
 
-                  T1 = this->get_adiabatic_surface_temperature() * std::exp( di * transition_depths[j] / max_depth );
+                  //T1 = this->get_adiabatic_surface_temperature() * std::exp( di * transition_depths[j] / max_depth );
                   entropy_change = transition_slopes[j] * density_jumps[j] / std::pow(reference_rho, 2);
-                  temperature_jump = T1*((1/(1-(1+density_jumps[j]/(2*reference_rho))*entropy_change*one_over_cp))-1);
+                  //temperature_jump = T1*((1/(1-(1+density_jumps[j]/(2*reference_rho))*entropy_change*one_over_cp))-1);
 
-                 //temperature_jump = this->get_adiabatic_surface_temperature() * std::exp( di * transition_depths[j] / max_depth )
-                                       //* entropy_change * one_over_cp;
+                 temperature_jump = this->get_adiabatic_surface_temperature() * std::exp( di * transition_depths[j] / max_depth )
+                                       * entropy_change * one_over_cp;
                   phase_function_t += 0.5 * ( 1. + tanh( depth_deviation / transition_widths[j] ) )*temperature_jump;      
                 }
 
