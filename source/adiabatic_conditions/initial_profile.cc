@@ -36,7 +36,7 @@ namespace aspect
     InitialProfile<dim>::InitialProfile()
       :
       initialized(false),
-      n_points(3000),
+      n_points(1000),
       temperatures(n_points, numbers::signaling_nan<double>()),
       pressures(n_points, numbers::signaling_nan<double>()),
       densities(n_points, numbers::signaling_nan<double>())
@@ -89,7 +89,6 @@ namespace aspect
           // Define current depth
           //const double z = double(i)/double(n_points-1)*this->get_geometry_model().maximal_depth(); 
           const double z = double(i)/double(n_points-1); 
-          const double hh = double(i)/double(n_points-1); 
           const double max_depth = this->get_geometry_model().maximal_depth();
 
           if (i==0)
@@ -132,23 +131,17 @@ namespace aspect
               for (unsigned int j=0; j<transition_depths.size(); ++j)
                 {
 
-                  double depth = (hh*max_depth) - transition_depths[j];
 
-                  double depth_deviation = (pressures[i-1] > 0
-                                         ?
-                                         depth - transition_slopes[j] * (depth / pressures[i-1]) * (temperatures[i-1] - transition_temperatures[j])
-                                         :
-                                         depth - transition_slopes[j] / (gravity * reference_rho)
-                                         * (temperatures[i-1] - transition_temperatures[j]));
+                  double depth_deviation = (z*max_depth) - transition_depths[j];
+
 
                   phase_function_rho += 0.5 * ( 1. + tanh( depth_deviation / transition_widths[j] ) )*density_jumps[j];
 
 
-                  //T1 = this->get_adiabatic_surface_temperature() * std::exp( di * transition_depths[j] / max_depth );
                   entropy_change = transition_slopes[j] * density_jumps[j] / std::pow(reference_rho, 2);
-                  //temperature_jump = T1*((1/(1-(1+density_jumps[j]/(2*reference_rho))*entropy_change*one_over_cp))-1);
 
-                 temperature_jump = this->get_adiabatic_surface_temperature() * std::exp( di * transition_depths[j] / max_depth )
+
+                  temperature_jump = this->get_adiabatic_surface_temperature() * std::exp( di * transition_depths[j] / max_depth )
                                        * entropy_change * one_over_cp;
                   phase_function_t += 0.5 * ( 1. + tanh( depth_deviation / transition_widths[j] ) )*temperature_jump;      
                 }
@@ -159,12 +152,12 @@ namespace aspect
               density1 = reference_rho * std::exp( di * z / grun ) + phase_function_rho;
               density = reference_rho * std::exp( di * z / grun );
 
+              //calculate the temperature profile with or without temperature jumps associated with phase transitions.
               if(use_T_jumps)  
               {
               temperatures[i] = (this->include_adiabatic_heating())
                                 ?
-                                  this->get_adiabatic_surface_temperature() * std::exp( di * z) +  phase_function_t
-                                //this->get_adiabatic_surface_temperature() * std::pow( ((2*0.679*z)+1) , 0.5) +  phase_function_t 
+                                this->get_adiabatic_surface_temperature() * std::exp( di * z) +  phase_function_t
                                 :
                                 this->get_adiabatic_surface_temperature();
               }
@@ -172,7 +165,6 @@ namespace aspect
               temperatures[i] = (this->include_adiabatic_heating())
                                 ?
                                 this->get_adiabatic_surface_temperature() * std::exp( di * z)
-                                //this->get_adiabatic_surface_temperature() * std::pow( ((2*0.679*z)+1) , 0.5) +  phase_function_t 
                                 :
                                 this->get_adiabatic_surface_temperature();
             }
