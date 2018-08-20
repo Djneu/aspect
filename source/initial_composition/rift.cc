@@ -170,7 +170,7 @@ namespace aspect
                 {
                   // Get the surface coordinates by dropping the last coordinate
                   const Point<2> surface_position = Point<2>(natural_coords[0],natural_coords[1]);
-                  temp_distance = std::abs(Utilities::distance_to_line<dim>(point_list[i_segments], surface_position));
+                  temp_distance = std::abs(Utilities::distance_to_line(point_list[i_segments], surface_position));
                 }
             }
           // chunk (spherical) geometries
@@ -186,7 +186,7 @@ namespace aspect
                   natural_coords[d+1] = spherical_point[d+1];
                 }
 
-              temp_distance = (dim == 2) ? std::abs(surface_position[0]-point_list[i_segments][0][0]) : Utilities::distance_to_line<dim>(point_list[i_segments], surface_position);
+              temp_distance = (dim == 2) ? std::abs(surface_position[0]-point_list[i_segments][0][0]) : Utilities::distance_to_line(point_list[i_segments], surface_position);
             }
 
           // Get the minimum distance
@@ -274,9 +274,9 @@ namespace aspect
     Rift<dim>::parse_parameters (ParameterHandler &prm)
     {
       // Check that there is a compositional field called strain and retrieve its index
-      AssertThrow(this->introspection().compositional_name_exists("strain"),
+      AssertThrow(this->introspection().compositional_name_exists("plastic_strain"),
                   ExcMessage("This plugin requires a compositional field named strain. "));
-      strain_composition_number = this->introspection().compositional_index_for_name("strain");
+      strain_composition_number = this->introspection().compositional_index_for_name("plastic_strain");
 
       prm.enter_subsection("Initial composition model");
       {
@@ -310,7 +310,7 @@ namespace aspect
             // in 2d of only 1 (ridge axis orthogonal to x and y).
             // Also, a 3d point has 2 coordinates (x and y),
             // a 2d point only 1 (x).
-            point_list[i_segment].resize(dim-1);
+            //point_list[i_segment].resize(dim-1);
 
             if (dim == 3)
               {
