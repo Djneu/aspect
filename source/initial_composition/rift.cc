@@ -274,9 +274,15 @@ namespace aspect
     Rift<dim>::parse_parameters (ParameterHandler &prm)
     {
       // Check that there is a compositional field called strain and retrieve its index
-      AssertThrow(this->introspection().compositional_name_exists("plastic_strain"),
-                  ExcMessage("This plugin requires a compositional field named strain. "));
-      strain_composition_number = this->introspection().compositional_index_for_name("plastic_strain");
+      
+      if(this->introspection().compositional_name_exists("plastic_strain"))
+                  strain_composition_number = this->introspection().compositional_index_for_name("plastic_strain");
+      else if(this->introspection().compositional_name_exists("viscous_strain"))
+                  strain_composition_number = this->introspection().compositional_index_for_name("viscous_strain");
+      else if(this->introspection().compositional_name_exists("total_strain"))
+                  strain_composition_number = this->introspection().compositional_index_for_name("total_strain");
+      else
+          AssertThrow(false, ExcMessage("This plugin requires a compositional strain field (plastic_strain, viscous_strain, or total_strain). "));
 
       prm.enter_subsection("Initial composition model");
       {
