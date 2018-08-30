@@ -73,6 +73,29 @@ namespace aspect
       // We will never get here, so just return something
       return cohesions;
     }
+    
+    template <int dim>
+    bool
+    ViscoPlastic<dim>::
+    get_plastic_yielding (const double &pressure,
+                          const double &temperature,
+                          const std::vector<double> &composition,
+                          const SymmetricTensor<2,dim> &strain_rate) const
+    {
+        bool plastic_yielding = false;
+        
+        
+        const std::vector<double> volume_fractions = compute_volume_fractions(composition, composition_mask);
+        
+        const std::pair<std::vector<double>, std::vector<double> > calculate_viscosities =
+            calculate_isostrain_viscosities(volume_fractions, pressure, temperature, composition, strain_rate, viscous_flow_law, yield_mechanism);
+        
+        const std::vector<double> composition_yielding = calculate_viscosities.second;
+        
+        plastic_yielding = average_value(volume_fractions, composition_yielding, maximum_composition);
+        
+        return plastic_yielding;
+    }
 
 
     template <int dim>
@@ -401,6 +424,7 @@ namespace aspect
           double thermal_expansivity = 0.0;
           for (unsigned int j=0; j < volume_fractions.size(); ++j)
             thermal_expansivity += volume_fractions[j] * thermal_expansivities[j];
+          
 
           // heat capacities
           double heat_capacity = 0.0;
@@ -417,6 +441,7 @@ namespace aspect
           bool plastic_yielding = false;
           if (in.strain_rate.size())
             {
+              
               // Currently, the viscosities for each of the compositional fields are calculated assuming
               // isostrain amongst all compositions, allowing calculation of the viscosity ratio.
               // TODO: This is only consistent with viscosity averaging if the arithmetic averaging
@@ -436,6 +461,7 @@ namespace aspect
               // This avoids for example division by zero for harmonic averaging (as compositional_yielding
               // holds values that are either 0 or 1), but might not be consistent with the viscosity
               // averaging chosen.
+              
               plastic_yielding   = average_value(volume_fractions, composition_yielding, maximum_composition);
 
               // compute derivatives if necessary

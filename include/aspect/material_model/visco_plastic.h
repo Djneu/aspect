@@ -153,6 +153,19 @@ namespace aspect
         create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const;
 
         double get_min_strain_rate() const;
+        
+        /**
+         * Called by particles property viscoplastic_strain_invariant to determine
+         * whether plastic yielding has occured at particle position. Will have to 
+         * call volume fractions, calculate_isostrain_viscosities, and get the 
+         * average value of plastic_yielding.
+         * */
+        bool
+        get_plastic_yielding ( const double &pressure,
+                               const double &temperature,
+                               const std::vector<double> &composition,
+                               const SymmetricTensor<2,dim> &strain_rate) const;
+
 
       private:
 
@@ -318,6 +331,7 @@ namespace aspect
         * Limit maximum yield stress from drucker-prager.
         */
         double max_yield_strength;
+        ComponentMask composition_mask;
 
     };
 
