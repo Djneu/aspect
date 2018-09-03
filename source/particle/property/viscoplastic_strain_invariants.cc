@@ -28,17 +28,21 @@ namespace aspect
   {
     namespace Property
     {
+        
+      template <int dim>
+      ViscoPlasticStrainInvariant<dim>::ViscoPlasticStrainInvariant ()
+      {}
+    
       template <int dim>
       void
-      ViscoPlasticStrainInvariant<dim>::initialize_one_particle_property(const Point<dim> &,
-                                                                       std::vector<double> &data) const
+      ViscoPlasticStrainInvariant<dim>::initialize ()
       {
         AssertThrow(dynamic_cast<const MaterialModel::ViscoPlastic<dim> *>(&this->get_material_model()) != NULL,
-                  ExcMessage("This initial condition only makes sense in combination with the visco_plastic material model."));
-        
-        unsigned int n_components = 0;
-        
-        //Find out which fields are activated, and make sure to output a particle field for each.
+              ExcMessage("This initial condition only makes sense in combination with the visco_plastic material model."));
+      
+        n_components = 0;
+      
+        //Find out which fields are activated.
         if(this->introspection().compositional_name_exists("plastic_strain"))
             n_components += 1;
         
@@ -49,11 +53,17 @@ namespace aspect
 
         if (n_components == 0)
             AssertThrow(false, ExcMessage("This particle property requires a compositional strain field (plastic_strain, viscous_strain, or total_strain)."));
+      }
         
         
+      template <int dim>
+      void
+      ViscoPlasticStrainInvariant<dim>::initialize_one_particle_property(const Point<dim> &,
+                                                                       std::vector<double> &data) const
+      {
+        //Make a data field for each activated field  
         for(unsigned int i = 0; i < n_components; i++)
             data.push_back(0.0);
-        
       }
 
       template <int dim>
@@ -64,17 +74,6 @@ namespace aspect
                                                                    const std::vector<Tensor<1,dim> > &gradients,
                                                                    const ArrayView<double> &data) const
       {
-        
-        unsigned int n_components = 0;
-        if(this->introspection().compositional_name_exists("plastic_strain"))
-            n_components += 1;
-        
-        if(this->introspection().compositional_name_exists("viscous_strain"))
-            n_components += 1;
-        else if(this->introspection().compositional_name_exists("total_strain") && !this->introspection().compositional_name_exists("plastic_strain"))
-            n_components = 1;
-        
-        
         // Current timestep
         const double dt = this->get_timestep();
 
@@ -93,11 +92,11 @@ namespace aspect
           {
             composition[i] = solution[this->introspection().component_indices.compositional_fields[i]];
           }
-          
+        
+        //Find out plastic yielding by calling function in material model.
         const MaterialModel::ViscoPlastic<dim> *viscoplastic
             = dynamic_cast<const MaterialModel::ViscoPlastic<dim> *>(&this->get_material_model());
             
-        // Find out plastic yielding by calling function in material model.
         bool plastic_yielding = false;
         plastic_yielding = viscoplastic->get_plastic_yielding(solution[this->introspection().component_indices.pressure], 
                                                      solution[this->introspection().component_indices.temperature],

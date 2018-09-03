@@ -44,6 +44,14 @@ namespace aspect
       {
         public:
           /**
+          * Constructor.
+          */ 
+          ViscoPlasticStrainInvariant ();
+          
+          virtual void initialize ();
+
+          
+          /**
            * Initialization function. This function is called once at the
            * creation of every particle for every property to initialize its
            * value.
