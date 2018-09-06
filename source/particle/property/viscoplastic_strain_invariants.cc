@@ -20,6 +20,7 @@
 
 #include <aspect/particle/property/viscoplastic_strain_invariants.h>
 #include <aspect/material_model/visco_plastic.h>
+#include <aspect/initial_composition/interface.h>
 
 
 namespace aspect
@@ -58,12 +59,21 @@ namespace aspect
         
       template <int dim>
       void
-      ViscoPlasticStrainInvariant<dim>::initialize_one_particle_property(const Point<dim> &,
+      ViscoPlasticStrainInvariant<dim>::initialize_one_particle_property(const Point<dim> &position,
                                                                        std::vector<double> &data) const
       {
-        //Make a data field for each activated field  
-        for(unsigned int i = 0; i < n_components; i++)
-            data.push_back(0.0);
+        //Give each strain field its initial composition incase using rift plugin.
+        //FUTURE WORK: right now if you use two compositional fields and rift plugin, this should
+        //only apply the noise to the first compositional field regardless of what you intend.
+        //for(unsigned int i = 0; i < n_components; i++)
+        if(this->introspection().compositional_name_exists("plastic_strain"))
+          data.push_back(this->get_initial_composition_manager().initial_composition(position,this->introspection().compositional_index_for_name("plastic_strain")));
+        
+        if(this->introspection().compositional_name_exists("viscous_strain"))
+          data.push_back(this->get_initial_composition_manager().initial_composition(position,this->introspection().compositional_index_for_name("viscous_strain")));
+        else if(this->introspection().compositional_name_exists("total_strain") && !this->introspection().compositional_name_exists("plastic_strain"))
+          data.push_back(this->get_initial_composition_manager().initial_composition(position,this->introspection().compositional_index_for_name("total_strain")));
+        
       }
 
       template <int dim>
@@ -155,9 +165,9 @@ namespace aspect
          //Check which fields are used in model and make an output for each.  
         if(this->introspection().compositional_name_exists("plastic_strain"))
             property_information.emplace_back("plastic_strain",1);
+        
         if(this->introspection().compositional_name_exists("viscous_strain"))
             property_information.emplace_back("viscous_strain",1);
-        
         else if(this->introspection().compositional_name_exists("total_strain") && !this->introspection().compositional_name_exists("plastic_strain"))
             property_information.emplace_back("total_strain",1);
         

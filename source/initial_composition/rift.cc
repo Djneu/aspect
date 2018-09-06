@@ -50,7 +50,7 @@ namespace aspect
 
       Table<dim,double> white_noise;
       white_noise.TableBase<dim,double>::reinit(size_idx);
-      std_cxx1x::array<std::pair<double,double>,dim> grid_extents;
+      std::array<std::pair<double,double>,dim> grid_extents;
 
       if (cartesian_domain)
         {
@@ -177,7 +177,7 @@ namespace aspect
           else
             {
               // spherical coordinates in radius [m], lon [rad], colat [rad] format
-              const std_cxx11::array<double,dim> spherical_point = Utilities::Coordinates::cartesian_to_spherical_coordinates(position);
+              const std::array<double,dim> spherical_point = Utilities::Coordinates::cartesian_to_spherical_coordinates(position);
               natural_coords[0] = spherical_point[0];
               Point<2> surface_position;
               for (unsigned int d=0; d<dim-1; ++d)

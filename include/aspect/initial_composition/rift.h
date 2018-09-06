@@ -126,7 +126,7 @@ namespace aspect
          * A table with random noise for the
          * second invariant of the strain.
          */
-        std_cxx1x::array<unsigned int,dim> grid_intervals;
+        std::array<unsigned int,dim> grid_intervals;
         Functions::InterpolatedUniformGridData<dim> *interpolate_noise;
     };
   }

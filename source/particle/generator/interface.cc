@@ -87,6 +87,10 @@ namespace aspect
         // Uniform distribution on the interval [0,1]. This
         // will be used to generate random particle locations.
         boost::uniform_01<double> uniform_distribution_01;
+        
+        //Get updated mapping for runs with free surface
+        std::array< Point<dim>, GeometryInfo<dim>::vertices_per_cell> new_vertices; 
+        new_vertices = this->get_mapping().get_vertices(cell);
 
         Point<dim> max_bounds, min_bounds;
         // Get the bounds of the cell defined by the vertices
@@ -98,11 +102,11 @@ namespace aspect
 
         for (unsigned int v = 0; v < GeometryInfo<dim>::vertices_per_cell; ++v)
           {
-            const Point<dim> vertex_position = cell->vertex(v);
+            //const Point<dim> vertex_position = cell->vertex(v);
             for (unsigned int d=0; d<dim; ++d)
               {
-                min_bounds[d] = std::min(vertex_position[d], min_bounds[d]);
-                max_bounds[d] = std::max(vertex_position[d], max_bounds[d]);
+                min_bounds[d] = std::min(new_vertices[v][d], min_bounds[d]);
+                max_bounds[d] = std::max(new_vertices[v][d], max_bounds[d]);
               }
           }
 
@@ -130,10 +134,11 @@ namespace aspect
               }
             catch (typename Mapping<dim>::ExcTransformationFailed &)
               {
-                // The point is not in this cell. Do nothing, just try again.
+            // The point is not in this cell. Do nothing, just try again.
               }
             iteration++;
           }
+            
         AssertThrow (iteration < maximum_iterations,
                      ExcMessage ("Couldn't generate particle (unusual cell shape?). "
                                  "The ratio between the bounding box volume in which the particle is "
