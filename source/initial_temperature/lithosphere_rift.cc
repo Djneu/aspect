@@ -25,7 +25,6 @@
 #include <aspect/geometry_model/box.h>
 #include <aspect/boundary_temperature/interface.h>
 #include <aspect/material_model/visco_plastic.h>
-#include "/home/djneuh/software/plugins/strain_softening/visco_plastic_strain/visco_plastic_strain.h"
 #include <aspect/heating_model/interface.h>
 
 #include <cmath>
