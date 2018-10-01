@@ -39,8 +39,9 @@ namespace aspect
         PhaseAdditionalOutputs(const unsigned int n_points);
 
         virtual std::vector<double> get_nth_output(const unsigned int idx) const;
-        std::vector<double> dislocation;
+        std::vector<double> phase;
         std::vector<double> diffusion;
+        std::vector<double> dislocation;
         std::vector<double> viscosity_ratio;
      };
 
@@ -73,9 +74,6 @@ namespace aspect
 
         virtual void melt_fractions (const MaterialModel::MaterialModelInputs<dim> &in,
                                      std::vector<double> &melt_fractions) const;
-
-        virtual void phase_tracker (const MaterialModel::MaterialModelInputs<dim> &in,
-                                     std::vector<double> &phase_tracker) const;
 
         virtual
         void

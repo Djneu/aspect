@@ -37,6 +37,7 @@ namespace aspect
      std::vector<std::string> make_phase_additional_outputs_names()
      {
        std::vector<std::string> names;
+       names.emplace_back("phase");
        names.emplace_back("diffusion");
        names.emplace_back("dislocation");
        names.emplace_back("viscosity_ratio");
@@ -48,6 +49,7 @@ namespace aspect
    PhaseAdditionalOutputs<dim>::PhaseAdditionalOutputs (const unsigned int n_points)
      :
      NamedAdditionalMaterialOutputs<dim>(make_phase_additional_outputs_names()),
+     phase(n_points, numbers::signaling_nan<double>()),
      diffusion(n_points, numbers::signaling_nan<double>()),
      dislocation(n_points, numbers::signaling_nan<double>()),
      viscosity_ratio(n_points, numbers::signaling_nan<double>())
@@ -57,23 +59,26 @@ namespace aspect
    std::vector<double>
    PhaseAdditionalOutputs<dim>::get_nth_output(const unsigned int idx) const
    {
-     AssertIndexRange (idx, 3);
+     AssertIndexRange (idx, 4);
      switch (idx)
        {
          case 0:
-           return diffusion;
+    	   return phase;
 
          case 1:
-           return dislocation;
+           return diffusion;
 
          case 2:
+           return dislocation;
+
+         case 3:
            return viscosity_ratio;
 
          default:
            AssertThrow(false, ExcInternalError());
        }
      // We will never get here, so just return something
-     return diffusion;
+     return phase;
    }
 
 
@@ -109,7 +114,7 @@ namespace aspect
                             const double                  pressure,
                             const std::vector<double>    &compositional_fields,
                             const SymmetricTensor<2,dim> &strain_rate,
-                            const Tensor<1,dim>          &velocity,
+                            const Tensor<1,dim>          &,
                             const Point<dim>             &position,
                             const unsigned int            field_index,
                             const int                     crossed_transition) const
@@ -676,9 +681,6 @@ namespace aspect
           viscosity_phase_dependence *= 1. + phaseFunction * (phase_prefactors[i+1]-1.);
         }
 
-        //density equation with pressure and temperature dependence, likely will change when adiabatic conditions are introduced.
-         double density_phase_deviation = 0;
-
           const double temperature_deviation = temperature - this->get_adiabatic_conditions().temperature(position);
           const double pressure_dev = pressure - this->get_adiabatic_conditions().pressure(position);
           double density_profile = reference_rho;
@@ -743,14 +745,6 @@ namespace aspect
           for (unsigned int c=0;c<composition.size();++c)
             {
 
-            const double adiabatic_pressure = this->get_adiabatic_conditions().is_initialized()
-                                            ?
-                                            this->get_adiabatic_conditions().pressure(in.position[i])
-                                            :
-                                            in.pressure[i];
-
-              unsigned int index = get_phase_index(in.position[i], in.temperature[i], adiabatic_pressure);
-
               if (this->introspection().name_for_compositional_index(c) == "grain_size")
               {
                 out.reaction_terms[i][c] = grain_size_growth_rate(in.temperature[i], in.pressure[i], composition,
@@ -772,6 +766,7 @@ namespace aspect
 
           if (PhaseAdditionalOutputs<dim> *phase_out = out.template get_additional_output<PhaseAdditionalOutputs<dim> >())
             {
+              phase_out->phase[i] = ol_index;
               phase_out->diffusion[i] = diffusion_viscosity(in.temperature[i],adiabatic_pressure,composition,in.strain_rate[i],in.position[i]);
               phase_out->dislocation[i] = dislocation_viscosity(in.temperature[i], adiabatic_pressure, composition, in.strain_rate[i], in.position[i]);
               phase_out->viscosity_ratio[i] = phase_out->diffusion[i]/phase_out->dislocation[i];
@@ -871,7 +866,7 @@ namespace aspect
     void
     PhaseTransitions<dim>::
     melt_fractions (const MaterialModel::MaterialModelInputs<dim> &in,
-                    std::vector<double> &melt_fractions) const
+                    std::vector<double> &) const
     {
       for (unsigned int q=0; q<in.temperature.size(); ++q)
         melt_fraction(in.temperature[q],
@@ -880,28 +875,6 @@ namespace aspect
                       in.position[q]);
       return;
     }
-
-    template <int dim>
-    void
-    PhaseTransitions<dim>::
-    phase_tracker (const MaterialModel::MaterialModelInputs<dim> &in,
-                    std::vector<double> &phase_tracker) const
-    {
-
-
-      for (unsigned int q=0; q<in.temperature.size(); ++q)
-        {        
-          const double adiabatic_pressure = this->get_adiabatic_conditions().is_initialized()
-                                        ?
-                                        this->get_adiabatic_conditions().pressure(in.position[q])
-                                        :
-                                        in.pressure[q];
-
-        phase_tracker[q] = get_phase_index(in.position[q], in.temperature[q], adiabatic_pressure);
-        }
-      return;
-    }
-
 
     template <int dim>
     double
