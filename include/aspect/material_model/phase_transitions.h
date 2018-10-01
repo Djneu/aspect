@@ -31,6 +31,19 @@ namespace aspect
   {
     using namespace dealii;
 
+
+    template <int dim>
+    class PhaseAdditionalOutputs : public NamedAdditionalMaterialOutputs<dim>
+    {
+      public:
+        PhaseAdditionalOutputs(const unsigned int n_points);
+
+        virtual std::vector<double> get_nth_output(const unsigned int idx) const;
+        std::vector<double> dislocation;
+        std::vector<double> diffusion;
+        std::vector<double> viscosity_ratio;
+     };
+
     /*Beginning of material model to test viscosity and density changes.
     */
     template <int dim>
@@ -64,15 +77,9 @@ namespace aspect
         virtual void phase_tracker (const MaterialModel::MaterialModelInputs<dim> &in,
                                      std::vector<double> &phase_tracker) const;
 
-        /*virtual void dislocation_creep (const MaterialModel::MaterialModelInputs<dim> &in,
-                                         std::vector<double> &phase_tracker) const;*/
-
-        double
-        viscosity_ratio (const double temperature,
-                         const double pressure,
-                         const std::vector<double> &composition,
-                         const SymmetricTensor<2,dim> &strain_rate,
-                         const Point<dim> &position) const;
+        virtual
+        void
+        create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const;
 
 
       private:
@@ -204,6 +211,7 @@ namespace aspect
         std::vector<double> temperature_jumps;  
         std::vector<double> phase_prefactors;
 
+
         /**
          * Function that takes an object in the same format
          * as in.composition as argument and converts the
@@ -290,13 +298,6 @@ namespace aspect
         virtual
         double
         Pphase_function_derivative (const Point<dim> &position,
-                                   const double temperature,
-                                   const double pressure,
-                                   unsigned int phase) const;
-
-        virtual
-        double
-        Tphase_function_derivative (const Point<dim> &position,
                                    const double temperature,
                                    const double pressure,
                                    unsigned int phase) const;

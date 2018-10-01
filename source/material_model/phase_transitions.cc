@@ -22,11 +22,60 @@ along with ASPECT; see the file LICENSE.  If not see
 #include <aspect/material_model/phase_transitions.h>
 #include <aspect/adiabatic_conditions/interface.h>
 #include <aspect/gravity_model/interface.h>
+#include <deal.II/base/signaling_nan.h>
+#include <deal.II/fe/fe_values.h>
+#include <aspect/newton.h>
+#include <aspect/utilities.h>
 
 namespace aspect
 {
   namespace MaterialModel
   {
+
+  namespace
+   {
+     std::vector<std::string> make_phase_additional_outputs_names()
+     {
+       std::vector<std::string> names;
+       names.emplace_back("diffusion");
+       names.emplace_back("dislocation");
+       names.emplace_back("viscosity_ratio");
+       return names;
+     }
+   }
+
+   template <int dim>
+   PhaseAdditionalOutputs<dim>::PhaseAdditionalOutputs (const unsigned int n_points)
+     :
+     NamedAdditionalMaterialOutputs<dim>(make_phase_additional_outputs_names()),
+     diffusion(n_points, numbers::signaling_nan<double>()),
+     dislocation(n_points, numbers::signaling_nan<double>()),
+     viscosity_ratio(n_points, numbers::signaling_nan<double>())
+   {}
+
+   template <int dim>
+   std::vector<double>
+   PhaseAdditionalOutputs<dim>::get_nth_output(const unsigned int idx) const
+   {
+     AssertIndexRange (idx, 3);
+     switch (idx)
+       {
+         case 0:
+           return diffusion;
+
+         case 1:
+           return dislocation;
+
+         case 2:
+           return viscosity_ratio;
+
+         default:
+           AssertThrow(false, ExcInternalError());
+       }
+     // We will never get here, so just return something
+     return diffusion;
+   }
+
 
 
     template <int dim>
@@ -36,7 +85,7 @@ namespace aspect
                             std::vector<double> &composition) const
     {
       // get grain size and limit it to a global minimum
-      const std::string field_name = "olivine_grain_size";
+      const std::string field_name = "grain_size";
       if(!this->introspection().compositional_name_exists(field_name))
     	return;
 
@@ -169,7 +218,7 @@ namespace aspect
       // TODO: recrystallize first, and then do grain size growth/reduction for grains that crossed the transition
       // in dependence of the distance they have moved
       double phase_grain_size_reduction = 0.0;
-      if (this->introspection().name_for_compositional_index(field_index) == "olivine_grain_size"
+      if (this->introspection().name_for_compositional_index(field_index) == "grain_size"
           &&
           this->get_timestep_number() > 0)
         {
@@ -205,28 +254,18 @@ namespace aspect
       const SymmetricTensor<2,dim> shear_strain_rate = strain_rate - 1./dim * trace(strain_rate) * unit_symmetric_tensor<dim>();
       const double second_strain_rate_invariant = std::sqrt(std::abs(second_invariant(shear_strain_rate)));
 
-      // Currently this will never be called without adiabatic_conditions initialized, but just in case
-      const double adiabatic_pressure = this->get_adiabatic_conditions().is_initialized()
-                                        ?
-                                        this->get_adiabatic_conditions().pressure(position)
-                                        :
-                                        pressure;
-
       // find out in which phase we are
       const unsigned int ol_index = get_phase_index(position, temperature, pressure);
 
       // TODO: make this more general, for more phases we have to average grain size somehow
       // TODO: default when field is not given & warning
       // limit the grain size to a global minimum
-      const std::string field_name = "olivine_grain_size";
+      const std::string field_name = "grain_size";
       const double grain_size = this->introspection().compositional_name_exists(field_name)
                                 ?
                                 composition[this->introspection().compositional_index_for_name(field_name)]
                                 :
                                 constant_grain_size[ol_index];
-
-      //std::cout<<temperature<<"  "<<ol_index<<"  "<<diffusion_activation_energy[ol_index]<<"  "<<diffusion_activation_volume[ol_index]<<"  "<<adiabatic_pressure<<std::endl;
-
 
       // TODO: we use the prefactors from Behn et al., 2009 as default values, but their laws use the strain rate
       // and we use the second invariant --> check if the prefactors should be changed
@@ -470,45 +509,6 @@ namespace aspect
                                        * std::tanh(pressure_deviation / pressure_width));
     }
 
-    template <int dim>
-    double
-    PhaseTransitions<dim>::
-    Tphase_function_derivative (const Point<dim> &,
-                               const double temperature,
-                               const double pressure,
-                               unsigned int phase) const
-    {
-      double transition_pressure;
-      double pressure_width;
-      double width_temp;
-
-      // we already should have the adiabatic conditions here
-      AssertThrow (this->get_adiabatic_conditions().is_initialized(),
-                   ExcMessage("need adiabatic conditions to incorporate phase transitions"));
-
-      // first, get the pressure at which the phase transition occurs normally
-
-      //converting depth and width given to pressures
-      const Point<dim,double> transition_point = this->get_geometry_model().representative_point(transition_depths[phase]);
-      const Point<dim,double> transition_plus_width = this->get_geometry_model().representative_point(transition_depths[phase] + 0.5 * transition_widths[phase]);
-      const Point<dim,double> transition_minus_width = this->get_geometry_model().representative_point(transition_depths[phase] - 0.5 * transition_widths[phase]);
-      transition_pressure = this->get_adiabatic_conditions().pressure(transition_point);
-      pressure_width = (this->get_adiabatic_conditions().pressure(transition_plus_width)
-                        - this->get_adiabatic_conditions().pressure(transition_minus_width));
-      width_temp = transition_widths[phase];
-
-      // then calculate the deviation from the transition point (both in temperature
-      // and in pressure)
-      double pressure_deviation = pressure - transition_pressure
-                                  - transition_slopes[phase] * (temperature - transition_temperatures[phase]);
-   
-      // last, calculate the analytical derivative of the phase function
-      if (width_temp==0)
-        return 0;
-      else
-        return (( -0.5 * transition_slopes[phase] ) / pressure_width) * (1.0 - std::pow(std::tanh(pressure_deviation / pressure_width) , 2 ));
-    }
-
 
     template <int dim>
     unsigned int
@@ -552,6 +552,7 @@ namespace aspect
         const double pressure = in.pressure[i];
         const Point<dim> position = in.position[i];
         unsigned int number_of_phase_transitions = transition_depths.size();
+        const SymmetricTensor<2,dim> strain_rate = in.strain_rate[i];
 
         //use adiabatic pressure for phase index
         const double adiabatic_pressure = this->get_adiabatic_conditions().is_initialized()
@@ -574,18 +575,18 @@ namespace aspect
 
     	// convert the grain size from log to normal
     	std::vector<double> composition (in.composition[i]);
-    	/*if(advect_log_gransize)
+    	if(advect_log_gransize)
           {
             convert_log_grain_size(false,composition);
           }
     	else
           {
-            const std::string field_name = "olivine_grain_size";
-            int olivine_grain_size_index = 0;
+            const std::string field_name = "grain_size";
+            int grain_size_index = 0;
             if(this->introspection().compositional_name_exists(field_name))
-              olivine_grain_size_index = this->introspection().compositional_index_for_name(field_name);
-              composition[olivine_grain_size_index] = std::max(min_grain_size,composition[olivine_grain_size_index]);
-          }*/
+              grain_size_index = this->introspection().compositional_index_for_name(field_name);
+              composition[grain_size_index] = std::max(min_grain_size,composition[grain_size_index]);
+          }
 
         // set up an integer that tells us which phase transition has been crossed inside of the cell
         int crossed_transition(-1);
@@ -625,11 +626,11 @@ namespace aspect
 
         if (in.strain_rate.size() > 0)
         {
-          out.viscosities[i] = std::min(max_eta, std::max(min_eta, viscosity(in.temperature[i],
+          out.viscosities[i] = std::min(max_eta, std::max(min_eta, viscosity(temperature,
                                   adiabatic_pressure,
                                   composition,
-                                  in.strain_rate[i],
-                                  in.position[i])));
+                                  strain_rate,
+                                  position)));
         }
 
 
@@ -677,21 +678,6 @@ namespace aspect
 
         //density equation with pressure and temperature dependence, likely will change when adiabatic conditions are introduced.
          double density_phase_deviation = 0;
-
-
-       /*  if (this->get_adiabatic_conditions().is_initialized() && this->include_latent_heat())
-           for (unsigned int ph=0; ph<number_of_phase_transitions; ++ph)
-             {
-                // calculate derivative of the phase function
-                const double phase_derivative = Tphase_function_derivative(position,
-                                                                       temperature,
-                                                                       adiabatic_pressure,
-                                                                       ph); 
-
-
-               density_phase_deviation += phase_derivative*density_jumps[ph];
-
-             }*/
 
           const double temperature_deviation = temperature - this->get_adiabatic_conditions().temperature(position);
           const double pressure_dev = pressure - this->get_adiabatic_conditions().pressure(position);
@@ -743,11 +729,11 @@ namespace aspect
           out.entropy_derivative_temperature[i] = entropy_gradient_temperature;
 
           // Melting 
-          out.entropy_derivative_pressure[i] += entropy_derivative_melt (in.temperature[i], in.pressure[i], composition,
-                                                                   in.position[i], NonlinearDependence::pressure) ; // for pressure dependence
+          out.entropy_derivative_pressure[i] += entropy_derivative_melt (temperature, pressure, composition,
+                                                                   position, NonlinearDependence::pressure) ; // for pressure dependence
 
-          out.entropy_derivative_temperature[i] += entropy_derivative_melt (in.temperature[i], in.pressure[i], composition,
-                                                                      in.position[i], NonlinearDependence::temperature) ; // for temperature dependence
+          out.entropy_derivative_temperature[i] += entropy_derivative_melt (temperature, pressure, composition,
+                                                                      position, NonlinearDependence::temperature) ; // for temperature dependence
 
 
         }
@@ -765,7 +751,7 @@ namespace aspect
 
               unsigned int index = get_phase_index(in.position[i], in.temperature[i], adiabatic_pressure);
 
-              if (this->introspection().name_for_compositional_index(c) == "olivine_grain_size")
+              if (this->introspection().name_for_compositional_index(c) == "grain_size")
               {
                 out.reaction_terms[i][c] = grain_size_growth_rate(in.temperature[i], in.pressure[i], composition,
                     in.strain_rate[i], in.velocity[i], in.position[i], c, crossed_transition);
@@ -778,10 +764,17 @@ namespace aspect
                 }
               else if (this->introspection().name_for_compositional_index(c) == "phase")
                 {
-                  out.reaction_terms[i][c] = phase_track[index];
+                  out.reaction_terms[i][c] = 1;
                 }
               else
                 out.reaction_terms[i][c] = 0.0;
+            }
+
+          if (PhaseAdditionalOutputs<dim> *phase_out = out.template get_additional_output<PhaseAdditionalOutputs<dim> >())
+            {
+              phase_out->diffusion[i] = diffusion_viscosity(in.temperature[i],adiabatic_pressure,composition,in.strain_rate[i],in.position[i]);
+              phase_out->dislocation[i] = dislocation_viscosity(in.temperature[i], adiabatic_pressure, composition, in.strain_rate[i], in.position[i]);
+              phase_out->viscosity_ratio[i] = phase_out->diffusion[i]/phase_out->dislocation[i];
             }
 
 
@@ -908,48 +901,6 @@ namespace aspect
         }
       return;
     }
-
-    /*template <int dim>
-    void
-    PhaseTransitions<dim>::
-    dislocation_creep (const MaterialModel::MaterialModelInputs<dim> &in,
-                    std::vector<double> &dislocation_creep) const
-    {
-
-
-      for (unsigned int q=0; q<in.temperature.size(); ++q)
-      {
-         const SymmetricTensor<2,dim> shear_strain_rate = in.strain_rate[q] - 1./dim * trace(in.strain_rate[q]) * unit_symmetric_tensor<dim>();
-         const double second_strain_rate_invariant = std::sqrt(std::abs(second_invariant(shear_strain_rate)));
-
-        if(std::abs(second_strain_rate_invariant) > 1e-30 && use_dislocation == true)
-        {
-          dislocation_creep[q] = dislocation_viscosity(in.temperature[q], in.pressure[q], in.composition[q], in.strain_rate[q], in.position[q]);
-        }
-        else
-          dislocation_creep[q] = 0;
-      }
-      return;
-    }*/
-
-    template <int dim>
-    double
-    PhaseTransitions<dim>::
-    viscosity_ratio (const double temperature,
-                     const double pressure,
-                     const std::vector<double> &composition_,
-                     const SymmetricTensor<2,dim> &strain_rate,
-                     const Point<dim> &position) const
-    {
-     double ratio = 0;
-     //if(use_dislocation == true)
-      //{
-       ratio = diffusion_viscosity(temperature,pressure,composition_,strain_rate,position);
-    //  }
-      
-      return ratio;
-    }
-
 
 
     template <int dim>
@@ -1556,6 +1507,19 @@ namespace aspect
       this->model_dependence.specific_heat = NonlinearDependence::temperature | NonlinearDependence::pressure;
       this->model_dependence.thermal_conductivity = NonlinearDependence::temperature | NonlinearDependence::pressure;
     }
+
+    template <int dim>
+    void
+    PhaseTransitions<dim>::create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
+    {
+      if (out.template get_additional_output<PhaseAdditionalOutputs<dim> >() == NULL)
+        {
+          const unsigned int n_points = out.viscosities.size();
+          out.additional_outputs.push_back(
+            std::shared_ptr<MaterialModel::AdditionalMaterialOutputs<dim> >
+            (new MaterialModel::PhaseAdditionalOutputs<dim> (n_points)));
+        }
+     }
   }
 }
 
