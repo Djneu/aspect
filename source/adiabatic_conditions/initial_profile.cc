@@ -124,8 +124,6 @@ namespace aspect
               double phase_function_t = 0.;
               double entropy_change = 0.;
               double temperature_jump = 0.;
-              double T1 = 0.;
-              //double depth_deviation = 0;
 
       
               for (unsigned int j=0; j<transition_depths.size(); ++j)

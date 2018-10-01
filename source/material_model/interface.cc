@@ -165,20 +165,6 @@ namespace aspect
     }
 
     template <int dim>
-    double
-    Interface<dim>::
-    viscosity_ratio (const double temperature,
-                     const double pressure,
-                     const std::vector<double>    &compositional_fields,
-                     const SymmetricTensor<2,dim> &strain_rate,
-                     const Point<dim> &position) const
-    {
-      return 1.0;
-}
-
-
-
-    template <int dim>
     const NonlinearDependence::ModelDependence &
     Interface<dim>::
     get_model_dependence() const
