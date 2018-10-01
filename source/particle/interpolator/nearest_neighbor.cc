@@ -109,14 +109,24 @@ namespace aspect
                       }
                   }
 
-                point_properties[pos_idx] = properties_at_points(particle_handler,
-                                                                 std::vector<Point<dim> > (1,positions[pos_idx]),
-                                                                 selected_properties,
-                                                                 neighbors[nearest_neighbor_cell])[0];
+                if(nearest_neighbor_cell<0)
+                  {
+                    for (unsigned int i = 0; i < n_particle_properties; ++i)
+                      if (selected_properties[i])
+                        point_properties[pos_idx][i] = 0;
+                  }
+                else
+                  {
+                    point_properties[pos_idx] = properties_at_points(particle_handler,
+                                                                     std::vector<Point<dim> > (1,positions[pos_idx]),
+                                                                     selected_properties,
+                                                                     neighbors[nearest_neighbor_cell])[0];
+                  }
+
               }
 
-            AssertThrow(minimum_distance < std::numeric_limits<double>::max(),
-                        ExcMessage("Failed to find any neighbor particles."));
+            //AssertThrow(minimum_distance < std::numeric_limits<double>::max(),
+            //            ExcMessage("Failed to find any neighbor particles."));
           }
 
         return point_properties;
