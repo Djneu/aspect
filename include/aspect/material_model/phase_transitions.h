@@ -161,7 +161,7 @@ namespace aspect
         double min_grain_size;
         double pv_grain_size_scaling;
 
-        bool advect_log_gransize;
+        bool advect_log_grainsize;
 
         // for paleowattmeter
         bool use_paleowattmeter;
@@ -220,10 +220,8 @@ namespace aspect
          * size to its logarithm, otherwise from log to grain
          * size
          */
-        virtual
         void
-        convert_log_grain_size (const bool normal_to_log,
-                                std::vector<double> &compositional_fields) const;
+        convert_log_grain_size (std::vector<double> &compositional_fields) const;
 
         /**
          * Rate of grain size growth (Ostwald ripening) or reduction
