@@ -186,7 +186,6 @@ namespace aspect
 
             // If the change in grain size is very large or small decrease timestep and try
             // again, or increase timestep and move on.
-            std::cout<<grain_size<<"  "<<grain_size_change<<"  "<<grain_size_growth<<"  "<<grain_size_reduction<<std::endl;
             if ((grain_size_change / grain_size < 0.001 && grain_size_growth / grain_size < 0.1
                  && grain_size_reduction / grain_size < 0.1) || grain_size == 0.0)
               grain_growth_timestep *= 2;
@@ -200,7 +199,6 @@ namespace aspect
               }
 
             //stop
-            std::cout<<time<<" "<<timestep<<std::endl;
 
             grain_size += grain_size_change;
             current_composition[field_index] = grain_size;
