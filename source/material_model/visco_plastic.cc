@@ -551,7 +551,10 @@ namespace aspect
             {
               // not strictly correct if thermal expansivities are different, since we are interpreting
               // these compositions as volume fractions, but the error introduced should not be too bad.
-              const double temperature_factor = (1.0 - thermal_expansivities[j] * (in.temperature[i] - reference_T));
+              const double T_ref = this->get_adiabatic_conditions().is_initialized() ? 
+                                this->get_adiabatic_conditions().temperature(in.position[i]) : this->get_adiabatic_surface_temperature();   
+                
+              const double temperature_factor = (1.0 - thermal_expansivities[j] * (in.temperature[i] - T_ref));
 
               out.densities[i] += volume_fractions[j] * densities[j] * temperature_factor;
               out.thermal_expansion_coefficients[i] += volume_fractions[j] * thermal_expansivities[j];
