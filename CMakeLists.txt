@@ -468,6 +468,8 @@ ENDIF()
 ADD_EXECUTABLE(${TARGET} ${TARGET_SRC})
 DEAL_II_SETUP_TARGET(${TARGET})
 
+TARGET_LINK_LIBRARIES(aspect "/home/djneuh/models/software/fastscape/libfastscapelib_fortran.so")
+
 FIND_PACKAGE(PerpleX QUIET HINTS ./contrib/perplex/install/ ../ ../../ $ENV{PERPLEX_DIR})
 IF(${PerpleX_FOUND})
   MESSAGE(STATUS "PerpleX found at ${PerpleX_INCLUDE_DIR}")
