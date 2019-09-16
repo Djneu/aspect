@@ -162,7 +162,7 @@ namespace aspect
 
                   const double south_latitude = chunk_geometry_model->south_latitude(); // in radians
                   const double latitude_range = chunk_geometry_model->latitude_range(); // in radians
-                  const double latitude_midpoint = south_latitude + 0.5 * latitude_range;
+                  const double latitude_midpoint = 0; //south_latitude + 0.5 * latitude_range;   Changing this to zero to set plume at boundary edge.
                   mid_point(0) = inner_radius * std::cos(latitude_midpoint) * std::cos(longitude_midpoint);
                   mid_point(1) = inner_radius * std::cos(latitude_midpoint) * std::sin(longitude_midpoint);
                   mid_point(2) = inner_radius * std::sin(latitude_midpoint);
