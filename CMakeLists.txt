@@ -463,12 +463,29 @@ IF(NOT ASPECT_ADDITIONAL_CXX_FLAGS STREQUAL "")
   STRING(APPEND DEAL_II_CXX_FLAGS_RELEASE " ${ASPECT_ADDITIONAL_CXX_FLAGS}")
   MESSAGE(STATUS "  DEAL_II_CXX_FLAGS_DEBUG: ${DEAL_II_CXX_FLAGS_DEBUG}")
   MESSAGE(STATUS "  DEAL_II_CXX_FLAGS_RELEASE: ${DEAL_II_CXX_FLAGS_RELEASE}")
+
+# Check if a fastscape library is available, if so link it with aspect.
+# If the library is not found, then remove both fastscape files from list
+# so aspect can still compile.
+FIND_LIBRARY(FASTSCAPE NAMES fastscapelib_fortran PATHS $ENV{FASTSCAPE_DIR} ${FASTSCAPE_DIR} PATH_SUFFIXES lib NO_DEFAULT_PATH)
+IF(FASTSCAPE)
+  MESSAGE(STATUS "FastScape found at ${FASTSCAPE}")
+  TARGET_LINK_LIBRARIES(aspect "${FASTSCAPE}")
+ELSE()
+  FIND_FILE(FASTSCAPE_SOURCE fastscape.cc HINTS "${CMAKE_SOURCE_DIR}/source/mesh_deformation")
+  LIST(REMOVE_ITEM TARGET_SRC ${FASTSCAPE_SOURCE})
+  MESSAGE(STATUS "FastScape library not found")
 ENDIF()
 
 ADD_EXECUTABLE(${TARGET} ${TARGET_SRC})
 DEAL_II_SETUP_TARGET(${TARGET})
 
-TARGET_LINK_LIBRARIES(aspect "/home/djneuh/models/software/fastscape/libfastscapelib_fortran.so")
+# Library needs to be linked after executable is added, but if fastscape isn't found
+# then the .cc files need to be removed before.
+# TODO: find a way to do this where they don't have to be separated.
+IF(FASTSCAPE)
+  TARGET_LINK_LIBRARIES(${TARGET} ${FASTSCAPE})
+ENDIF()
 
 FIND_PACKAGE(PerpleX QUIET HINTS ./contrib/perplex/install/ ../ ../../ $ENV{PERPLEX_DIR})
 IF(${PerpleX_FOUND})
