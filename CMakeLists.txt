@@ -467,6 +467,7 @@ IF(NOT ASPECT_ADDITIONAL_CXX_FLAGS STREQUAL "")
 # Check if a fastscape library is available, if so link it with aspect.
 # If the library is not found, then remove fastscape .cc and .h from list
 # so aspect can still compile.
+# TODO: likely need to switch ENV and normal positions so it checks ENV second.
 FIND_LIBRARY(FASTSCAPE NAMES fastscapelib_fortran PATHS $ENV{FASTSCAPE_DIR} ${FASTSCAPE_DIR} PATH_SUFFIXES lib NO_DEFAULT_PATH)
 IF(FASTSCAPE)
   MESSAGE(STATUS "FastScape found at ${FASTSCAPE}")
