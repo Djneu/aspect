@@ -566,13 +566,13 @@ namespace aspect
 
     	// convert the grain size from log to normal
     	std::vector<double> composition (in.composition[i]);
-        if (advect_log_grainsize)
+       /* if (advect_log_grainsize)
           convert_log_grain_size(composition);
         else
           {
             const unsigned int grain_size_index = this->introspection().compositional_index_for_name("grain_size");
             composition[grain_size_index] = std::max(min_grain_size,composition[grain_size_index]);
-          }
+          }*/
 
         // set up an integer that tells us which phase transition has been crossed inside of the cell
         int crossed_transition(-1);
@@ -723,15 +723,15 @@ namespace aspect
                 if(advect_log_grainsize)
                   out.reaction_terms[i][c] = - out.reaction_terms[i][c] / composition[c];
               }*/
-              if (this->introspection().name_for_compositional_index(c) == "grain_size")
+            /*  if (this->introspection().name_for_compositional_index(c) == "grain_size")
               {
             	  //stop here
                   out.reaction_terms[i][c] = grain_size_growth_rate(in.temperature[i], in.pressure[i], composition,
                                                                in.strain_rate[i], in.velocity[i], in.position[i], c, crossed_transition);
                   if (advect_log_grainsize)
                     out.reaction_terms[i][c] = - out.reaction_terms[i][c] / composition[c];
-              }
-              else if (this->introspection().name_for_compositional_index(c) == "peridotite_melt_fraction")
+              }*/
+              if (this->introspection().name_for_compositional_index(c) == "peridotite_melt_fraction")
                 {
                   out.reaction_terms[i][c] = peridotite_melt_fraction(in.temperature[i], in.pressure[i], composition, in.position[i]) - in.composition[i][c];
                 }
