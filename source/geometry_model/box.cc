@@ -229,10 +229,10 @@ namespace aspect
     }
 
     template <int dim>
-    std::pair<int,int>
-    Box<dim>::get_repetitions() const
+    unsigned int
+    Box<dim>::get_repetitions(unsigned int dimension) const
     {
-      return std::make_pair (repetitions[0], repetitions[1]);
+      return repetitions[dimension];
     }
 
     template <int dim>
