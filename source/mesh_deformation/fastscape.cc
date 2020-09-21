@@ -55,11 +55,13 @@ namespace aspect
           const std::vector<std::string> names = mesh_deformation_boundary_indicators_map[*p];
           for (unsigned int i = 0; i < names.size(); ++i )
             {
-              AssertThrow((names[i] == "fastscape") && (*p == relevant_boundary),
+                if(names[i] == "fastscape")
+                AssertThrow((*p == relevant_boundary),
                           ExcMessage("Fastscape can only be called on the surface boundary."));
             }
         }
 
+      start_processes = 0;
       // Initialize parameters for restarting fastscape
       restart = this->get_parameters().resume_computation;
       restart_step = 0;
@@ -107,6 +109,12 @@ namespace aspect
       Utilities::create_directory (this->get_output_directory() + "VTK/",
                                    this->get_mpi_communicator(),
                                    false);
+      if (use_strat)
+      {
+      Utilities::create_directory (this->get_output_directory() + "VTK_strat/",
+                                   this->get_mpi_communicator(),
+                                   false);
+      }
     }
 
 
@@ -192,7 +200,7 @@ namespace aspect
                                  */
                                 const double index = indx+nx*ys;
 
-                                temporary_variables[0].push_back(vertex(dim-1));
+                                temporary_variables[0].push_back(vertex(dim-1) - grid_extent[dim-1].second);
                                 temporary_variables[1].push_back(index-1);
 
                                 for (unsigned int i=0; i<dim; ++i)
@@ -213,7 +221,7 @@ namespace aspect
 
                             const double index = (indy-1)*nx+indx;
 
-                            temporary_variables[0].push_back(vertex(dim-1));   //z component
+                            temporary_variables[0].push_back(vertex(dim-1) - grid_extent[dim-1].second);   //z component
                             temporary_variables[1].push_back(index-1);
 
                             for (unsigned int i=0; i<dim; ++i)
@@ -241,14 +249,22 @@ namespace aspect
               std::unique_ptr<double[]> vz (new double[array_size]());
               std::unique_ptr<double[]> kf (new double[array_size]());
               std::unique_ptr<double[]> kd (new double[array_size]());
+              std::unique_ptr<double[]> b (new double[array_size]());
               std::unique_ptr<double[]> slopep (new double[array_size]());
               std::vector<double> h_old(array_size);
+              bool restart_basement = false;
+              
+              if(restart)
+              {
+                  restart_basement = true;
+              }
 
               // Create variables for output directory and restart file
               std::string dirname = this->get_output_directory();
               const char *c=dirname.c_str();
               int length = dirname.length();
               const std::string restart_filename = dirname + "fastscape_h_restart.txt";
+              const std::string restart_filename_basement = dirname + "fastscape_b_restart.txt";
               const std::string restart_step_filename = dirname + "fastscape_steps_restart.txt";
 
               // Initialize kf and kd.
@@ -312,7 +328,7 @@ namespace aspect
                   if (restart)
                     {
                       this->get_pcout() << "      Loading FastScape restart file... " << std::endl;
-
+                      
                       // Load in h values.
                       std::ifstream in;
                       in.open(restart_filename.c_str());
@@ -330,6 +346,26 @@ namespace aspect
                         }
                       else if (!in)
                         AssertThrow(false,ExcMessage("Cannot open file to restart FastScape."));
+                      
+                      // Load in b values.
+                      std::ifstream in_b;
+                      in.open(restart_filename_basement.c_str());
+                      if (in)
+                        {
+                          int line = 0;
+
+                          while (line < array_size)
+                            {
+                              in_b >> h[line];
+                              line++;
+                            }
+
+                          in_b.close();
+                        }
+                      else if (!in_b)
+                        AssertThrow(false,ExcMessage("Cannot open file to restart FastScape."));
+                      
+                      
 
                       /*
                        * Now load the fastscape istep at time of restart.
@@ -367,14 +403,40 @@ namespace aspect
                   if (use_marine)
                     fastscape_set_marine_parameters_(&sl, &p1, &p2, &z1, &z2, &r, &l, &kds1, &kds2);
 
-                  //if (use_strat)
-                  //  folder_output_(&length, &restart_step, c);
+                  if (use_strat)
+                    folder_output_(&length, &restart_step, c);
+                  
+                  if(restart_basement)
+                      fastscape_set_basement_(b.get());
+                  
                 }
               else
                 {
                   // If it isn't the first timestep we just want to know current h values in fastscape.
                   fastscape_copy_h_(h.get());
                 }
+                
+              // Now that we've copied the heights, add in sediment rain.
+              double mtime = this->get_time() / year_in_seconds;
+              if(mtime <= recall_erosion)
+              for (int i=0; i<array_size; i++)
+                {  
+                      h[i] = h[i] + sediment_rain;
+                }
+                
+                
+              // If above specified time, reduce the diffusion.  
+              if(start_processes == 0 && mtime > recall_erosion)
+              {
+                  start_processes = 1;
+                  
+                for (int i=0; i<array_size; i++)
+                {
+                  kd[i] = reduced_diffusion;
+                }
+                  
+                  fastscape_set_erosional_parameters_(kf.get(), &kfsed, &m, &n, kd.get(), &kdsed, &g, &g, &p);
+              }
 
               /*
                * The ghost nodes are added as a single layer of nodes surrounding the entire model,
@@ -512,6 +574,7 @@ namespace aspect
                         }
                     }
 
+                  double mtime = this->get_time() / year_in_seconds;
                   // Now do the same for the top and bottom ghost nodes.
                   for (int j=0; j<nx; j++)
                     {
@@ -531,7 +594,14 @@ namespace aspect
 
                       vx[index_bot] = vx[index_bot+nx];
                       vx[index_top] =  vx[index_top-nx];
-
+                      
+                      double bflux = bottom_flux;
+                      
+                      if(mtime >= recall_erosion)
+                      {
+                          bflux = 0;
+                      }
+                      
                       if (current_timestep == 1 || top_flux == 0)
                         {
                           slope = top_flux/kdd;
@@ -549,19 +619,20 @@ namespace aspect
                           h[index_top] = h[index_top] + slope*2*dx;
                         }
 
-                      if (current_timestep == 1 || bottom_flux == 0)
+                      if (current_timestep == 1 || bflux == 0)
                         {
-                          slope = bottom_flux/kdd;
+                          slope = bflux/kdd;
                           h[index_bot] = h[index_bot+nx] + slope*2*dx;
+
                         }
                       else
                         {
                           if (j == 0)
-                            slope = bottom_flux/kdd - std::tan(slopep[index_bot+nx+1]*numbers::PI/180.);
+                            slope = bflux/kdd - std::tan(slopep[index_bot+nx+1]*numbers::PI/180.);
                           else if (j==(nx-1))
-                            slope = bottom_flux/kdd - std::tan(slopep[index_bot+nx-1]*numbers::PI/180.);
+                            slope = bflux/kdd - std::tan(slopep[index_bot+nx-1]*numbers::PI/180.);
                           else
-                            slope = bottom_flux/kdd - std::tan(slopep[index_bot+nx]*numbers::PI/180.);
+                            slope = bflux/kdd - std::tan(slopep[index_bot+nx]*numbers::PI/180.);
 
                           h[index_bot] = h[index_bot] + slope*2*dx;
                         }
@@ -615,7 +686,10 @@ namespace aspect
                       // + or - 5 meters of topography.
                       const double h_seed = (std::rand()%100)/10 - 5;
                       h[i] = h[i] + h_seed;
+                      
+                      fastscape_set_erosional_parameters_(kf.get(), &kfsed, &m, &n, kd.get(), &kdsed, &g, &g, &p);
                     }
+                    
                 }
 
               // Get current fastscape timestep.
@@ -630,11 +704,19 @@ namespace aspect
                 {
                   std::ofstream out_h (restart_filename.c_str());
                   std::ofstream out_step (restart_step_filename.c_str());
+                  std::ofstream out_b (restart_filename_basement.c_str());
+                  
+                  fastscape_copy_basement_(b.get());
+                  
 
                   out_step << (istep+restart_step) << std::endl;
 
                   for (int i=0; i<array_size; i++)
+                  {
                     out_h << h[i] << std::endl;
+                    out_b << b[i] << std::endl;
+                  }
+                  
                 }
 
               // Find a fastscape timestep that is below our maximum timestep.
@@ -645,6 +727,7 @@ namespace aspect
                   steps=steps*2;
                   f_dt = a_dt/steps;
                 }
+                
 
               // Set time step
               fastscape_set_dt_(&f_dt);
@@ -652,6 +735,8 @@ namespace aspect
               // Set velocity components and h.
               fastscape_set_u_(vz.get());
               fastscape_set_v_(vx.get(), vy.get());
+              
+              
               fastscape_set_h_(h.get());
 
               // The visualization number depends on the FastScape step, and since this goes back
@@ -669,23 +754,24 @@ namespace aspect
                  * TODO: The frequency in this needs to be the same as the total timesteps fastscape will
                  * run for, need to figure out how to work this in better.
                  */
+                
                 if (use_strat && current_timestep == 1)
-                  fastscape_strati_(&nstepp, &nreflectorp, &steps, &vexp);
-                else if (!use_strat)
+                  fastscape_strati_(&nstepp, &nreflectorp, &nfreqp, &vexp);
+                //else if (!use_strat)
+                
                   fastscape_named_vtk_(h.get(), &vexp, &visualization_step, c, &length);
 
                 do
                   {
                     // Execute step, this increases timestep counter
                     fastscape_execute_step_();
-
                     // Get value of time step counter
                     fastscape_get_step_(&istep);
-
                     // Outputs new h values
                     fastscape_copy_h_(h.get());
                   }
                 while (istep<steps);
+                
 
                 // Output out how long FastScape took to run.
                 auto t_end = std::chrono::high_resolution_clock::now();
@@ -701,7 +787,7 @@ namespace aspect
                   // We generally create the visualization file before running FastScape,
                   // because we won't run it again we want to output the final result.
                   visualization_step = visualization_step+1;
-                  if (!use_strat)
+                  //if (!use_strat)
                     fastscape_named_vtk_(h.get(), &vexp, &visualization_step, c, &length);
 
                   fastscape_destroy_();
@@ -884,12 +970,18 @@ namespace aspect
           prm.declare_entry("Number of horizons", "1",
                             Patterns::Integer(),
                             "Number of horizons to track and visualize in FastScape.");
+          prm.declare_entry("Horizon output frequency", "10",
+                            Patterns::Integer(),
+                            "Number of FastScape timesteps between horizon output.");
           prm.declare_entry("Y extent in 2d", "100000",
                             Patterns::Double(),
                             "Y extent when used with 2D");
           prm.declare_entry ("Use ghost nodes", "true",
                              Patterns::Bool (),
                              "Flag to use ghost nodes");
+          prm.declare_entry("Recall erosion time", "1e8",
+                            Patterns::Double(),
+                            "Time to recall the erosional parameters and reduce the diffusion.");
 
           prm.enter_subsection ("Boundary conditions");
           {
@@ -950,6 +1042,13 @@ namespace aspect
             prm.declare_entry("Sediment diffusivity", "-1",
                               Patterns::Double(),
                               "Diffusivity of sediment.");
+            
+            prm.declare_entry("Reduced bedrock diffusivity", "1",
+                              Patterns::Double(),
+                              "Reduced hillslope diffusion for andaman study.");
+            prm.declare_entry("Sediment rain", "0",
+                              Patterns::Double(),
+                              "Amount in meters of sediment to add to topography every timestep.");
           }
           prm.leave_subsection();
 
@@ -1012,9 +1111,11 @@ namespace aspect
           use_marine = prm.get_bool("Use marine component");
           use_strat = prm.get_bool("Use stratigraphy");
           nstepp = prm.get_integer("Total steps");
+          nfreqp = prm.get_integer("Horizon output frequency");
           nreflectorp = prm.get_integer("Number of horizons");
           y_extent_2d = prm.get_double("Y extent in 2d");
           use_ghost = prm.get_bool("Use ghost nodes");
+          recall_erosion = prm.get_double("Recall erosion time");
 
           prm.enter_subsection("Boundary conditions");
           {
@@ -1047,6 +1148,9 @@ namespace aspect
             g = prm.get_double("Bedrock deposition coefficient");
             gsed = prm.get_double("Sediment deposition coefficient");
             p = prm.get_double("Multi-direction slope exponent");
+            
+            reduced_diffusion = prm.get_double("Reduced bedrock diffusivity");
+            sediment_rain = prm.get_double("Sediment rain");
           }
           prm.leave_subsection();
 
