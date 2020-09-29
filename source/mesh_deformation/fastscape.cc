@@ -61,7 +61,6 @@ namespace aspect
             }
         }
 
-      start_processes = 0;
       // Initialize parameters for restarting fastscape
       restart = this->get_parameters().resume_computation;
       restart_step = 0;
@@ -253,6 +252,7 @@ namespace aspect
               std::unique_ptr<double[]> slopep (new double[array_size]());
               std::vector<double> h_old(array_size);
               bool restart_basement = false;
+              double mtime = this->get_time() / year_in_seconds;
               
               if(restart)
               {
@@ -416,27 +416,6 @@ namespace aspect
                   fastscape_copy_h_(h.get());
                 }
                 
-              // Now that we've copied the heights, add in sediment rain.
-              double mtime = this->get_time() / year_in_seconds;
-              if(mtime <= recall_erosion)
-              for (int i=0; i<array_size; i++)
-                {  
-                      h[i] = h[i] + sediment_rain;
-                }
-                
-                
-              // If above specified time, reduce the diffusion.  
-              if(start_processes == 0 && mtime > recall_erosion)
-              {
-                  start_processes = 1;
-                  
-                for (int i=0; i<array_size; i++)
-                {
-                  kd[i] = reduced_diffusion;
-                }
-                  
-                  fastscape_set_erosional_parameters_(kf.get(), &kfsed, &m, &n, kd.get(), &kdsed, &g, &g, &p);
-              }
 
               /*
                * The ghost nodes are added as a single layer of nodes surrounding the entire model,
@@ -574,7 +553,6 @@ namespace aspect
                         }
                     }
 
-                  double mtime = this->get_time() / year_in_seconds;
                   // Now do the same for the top and bottom ghost nodes.
                   for (int j=0; j<nx; j++)
                     {
@@ -596,8 +574,14 @@ namespace aspect
                       vx[index_top] =  vx[index_top-nx];
                       
                       double bflux = bottom_flux;
+                      double kdv = kdd;
                       
-                      if(mtime >= recall_erosion)
+                      // If we're below sea level, use sand diffusion coefficient.
+                      if(h[index_bot] < sl)
+                        kdv = kds1;
+
+                      
+                      if(mtime > stop_flux)
                       {
                           bflux = 0;
                       }
@@ -621,18 +605,19 @@ namespace aspect
 
                       if (current_timestep == 1 || bflux == 0)
                         {
-                          slope = bflux/kdd;
+                          slope = bflux/kdv;
                           h[index_bot] = h[index_bot+nx] + slope*2*dx;
 
                         }
                       else
                         {
                           if (j == 0)
-                            slope = bflux/kdd - std::tan(slopep[index_bot+nx+1]*numbers::PI/180.);
+                            slope = bflux/kdv - std::tan(slopep[index_bot+nx+1]*numbers::PI/180.);
                           else if (j==(nx-1))
-                            slope = bflux/kdd - std::tan(slopep[index_bot+nx-1]*numbers::PI/180.);
+                            slope = bflux/kdv - std::tan(slopep[index_bot+nx-1]*numbers::PI/180.);
                           else
-                            slope = bflux/kdd - std::tan(slopep[index_bot+nx]*numbers::PI/180.);
+                            slope = bflux/kdv - std::tan(slopep[index_bot+nx]*numbers::PI/180.);
+                        
 
                           h[index_bot] = h[index_bot] + slope*2*dx;
                         }
@@ -686,10 +671,15 @@ namespace aspect
                       // + or - 5 meters of topography.
                       const double h_seed = (std::rand()%100)/10 - 5;
                       h[i] = h[i] + h_seed;
-                      
-                      fastscape_set_erosional_parameters_(kf.get(), &kfsed, &m, &n, kd.get(), &kdsed, &g, &g, &p);
                     }
                     
+                }
+                
+              // Now that h_old is set, add in sediment rain.
+              if(mtime <= stop_flux)
+              for (int i=0; i<array_size; i++)
+                {  
+                      h[i] = h[i] + sediment_rain;
                 }
 
               // Get current fastscape timestep.
@@ -979,9 +969,6 @@ namespace aspect
           prm.declare_entry ("Use ghost nodes", "true",
                              Patterns::Bool (),
                              "Flag to use ghost nodes");
-          prm.declare_entry("Recall erosion time", "1e8",
-                            Patterns::Double(),
-                            "Time to recall the erosional parameters and reduce the diffusion.");
 
           prm.enter_subsection ("Boundary conditions");
           {
@@ -1009,6 +996,10 @@ namespace aspect
             prm.declare_entry("Bottom mass flux", "0",
                               Patterns::Double(),
                               "Flux per unit length through bottom boundary (m^2/yr)");
+            
+            prm.declare_entry("Stop bottom flux", "5e6",
+                            Patterns::Double(),
+                            "Time to reduce bottom input flux to zero.");
           }
           prm.leave_subsection();
 
@@ -1042,10 +1033,8 @@ namespace aspect
             prm.declare_entry("Sediment diffusivity", "-1",
                               Patterns::Double(),
                               "Diffusivity of sediment.");
+
             
-            prm.declare_entry("Reduced bedrock diffusivity", "1",
-                              Patterns::Double(),
-                              "Reduced hillslope diffusion for andaman study.");
             prm.declare_entry("Sediment rain", "0",
                               Patterns::Double(),
                               "Amount in meters of sediment to add to topography every timestep.");
@@ -1115,7 +1104,6 @@ namespace aspect
           nreflectorp = prm.get_integer("Number of horizons");
           y_extent_2d = prm.get_double("Y extent in 2d");
           use_ghost = prm.get_bool("Use ghost nodes");
-          recall_erosion = prm.get_double("Recall erosion time");
 
           prm.enter_subsection("Boundary conditions");
           {
@@ -1127,6 +1115,8 @@ namespace aspect
             right_flux = prm.get_double("Right mass flux");
             top_flux = prm.get_double("Top mass flux");
             bottom_flux = prm.get_double("Bottom mass flux");
+            
+            stop_flux = prm.get_double("Stop bottom flux");
 
             // Put the boundary condition values into a four digit value to send to FastScape.
             bc = bottom*1000+right*100+top*10+left;
@@ -1149,7 +1139,6 @@ namespace aspect
             gsed = prm.get_double("Sediment deposition coefficient");
             p = prm.get_double("Multi-direction slope exponent");
             
-            reduced_diffusion = prm.get_double("Reduced bedrock diffusivity");
             sediment_rain = prm.get_double("Sediment rain");
           }
           prm.leave_subsection();

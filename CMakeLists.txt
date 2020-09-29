@@ -463,6 +463,7 @@ IF(NOT ASPECT_ADDITIONAL_CXX_FLAGS STREQUAL "")
   STRING(APPEND DEAL_II_CXX_FLAGS_RELEASE " ${ASPECT_ADDITIONAL_CXX_FLAGS}")
   MESSAGE(STATUS "  DEAL_II_CXX_FLAGS_DEBUG: ${DEAL_II_CXX_FLAGS_DEBUG}")
   MESSAGE(STATUS "  DEAL_II_CXX_FLAGS_RELEASE: ${DEAL_II_CXX_FLAGS_RELEASE}")
+ENDIF()
 
 # Check if a fastscape library is available, if so link it with aspect.
 # If the library is not found, then remove fastscape .cc and .h from list

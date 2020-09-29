@@ -162,13 +162,10 @@ namespace aspect
       bool use_ghost;
       
       /* Parameters added for andaman study */
-      mutable bool start_processes;
       // Sediment rain value in meters. Updated every timestep
       double sediment_rain;
-      // Time to recall erosional parameters
-      double recall_erosion;
-      // What to reduce diffusion to when recalling erosional parameters.
-      double reduced_diffusion;
+      // when to stop bottom flux.
+      double stop_flux;
       
 
 

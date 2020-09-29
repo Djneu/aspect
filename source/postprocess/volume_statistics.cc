@@ -80,7 +80,7 @@ namespace aspect
       }
 
       std::ostringstream output;
-      output.precision(3);
+      output.precision(5);
       output << global_volume_square_integral;
 
       return std::pair<std::string, std::string> ("Volume:",
