@@ -478,6 +478,19 @@ ELSE()
   MESSAGE(STATUS "FastScape library not found")
 ENDIF()
 
+# Check if a fastscape library is available, if so link it with aspect.
+# If the library is not found, then remove fastscape .cc and .h from list
+# so aspect can still compile.
+# TODO: likely need to switch ENV and normal positions so it checks ENV second.
+FIND_LIBRARY(FASTSCAPE NAMES fastscapelib_fortran PATHS $ENV{FASTSCAPE_DIR} ${FASTSCAPE_DIR} PATH_SUFFIXES lib NO_DEFAULT_PATH)
+IF(FASTSCAPE)
+  MESSAGE(STATUS "FastScape found at ${FASTSCAPE}")
+ELSE()
+  FIND_FILE(FASTSCAPE_SRC fastscape.cc HINTS "${CMAKE_SOURCE_DIR}/source/mesh_deformation")
+  LIST(REMOVE_ITEM TARGET_SRC ${FASTSCAPE_SRC})
+  MESSAGE(STATUS "FastScape library not found")
+ENDIF()
+
 ADD_EXECUTABLE(${TARGET} ${TARGET_SRC})
 DEAL_II_SETUP_TARGET(${TARGET})
 
