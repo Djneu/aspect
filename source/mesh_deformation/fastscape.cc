@@ -936,7 +936,7 @@ namespace aspect
                              "Flag to use ghost nodes");
           prm.declare_entry("Sediment rain", "0",
                             Patterns::Double(),
-                            "Sediment rain in m/yr. This will be added to as an uplift rate to FastScape.");
+                            "Sediment rain in m/yr. This will be added to as flat height increase to FastScape at every node.");
 
           prm.enter_subsection ("Boundary conditions");
           {
