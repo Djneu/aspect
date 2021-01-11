@@ -653,7 +653,7 @@ namespace aspect
                       if (h[i] < sl)
                         {
                           // If the rain would put us above sea level, set height to sea level.
-                          if (h[i] + sediment_rain*a_dt > sl)
+                          if ((h[i] + sediment_rain*a_dt) > sl)
                             h[i] = sl;
                           else
                             h[i] = h[i] + sediment_rain*a_dt;
