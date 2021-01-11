@@ -646,8 +646,19 @@ namespace aspect
                     }
                     
                    // Here we add the sediment rain (m/yr) as a flat increase in height.
-                   // This is done because adding it as an uplift rate would affect the topography and the basement.
-                   h[i] = h[i] + sediment_rain*a_dt; 
+                   // This is done because adding it as an uplift rate would affect the basement.
+                   if(sediment_rain > 0)
+                   {
+                     // Only apply sediment rain to areas below sea level.
+                     if(h[i] < sl)
+                     {
+                     // If the rain would put us above sea level, set height to sea level.
+                     if(h[i] + sediment_rain*a_dt > sl)
+                       h[i] = sl; 
+                     else
+                       h[i] = h[i] + sediment_rain*a_dt; 	
+                     }
+                   }   
                 }
 
               // Get current fastscape timestep.
