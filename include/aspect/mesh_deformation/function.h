@@ -29,53 +29,53 @@
 
 namespace aspect
 {
-  using namespace dealii;
+using namespace dealii;
 
-  namespace MeshDeformation
+namespace MeshDeformation
+{
+  template<int dim>
+  class BoundaryFunction : public Interface<dim>, public SimulatorAccess<dim>
   {
-    template<int dim>
-    class BoundaryFunction : public Interface<dim>, public SimulatorAccess<dim>
-    {
-      public:
-        /**
-         * Constructor.
-         */
-        BoundaryFunction();
+    public:
+      /**
+       * Constructor.
+       */
+      BoundaryFunction();
 
-        /**
-         *
-         */
-        void update() override;
+      /**
+       *
+       */
+      void update() override;
 
-        /**
-         * A function that creates constraints for the velocity of certain mesh
-         * vertices (e.g. the surface vertices) for a specific boundary.
-         * The calling class will respect
-         * these constraints when computing the new vertex positions.
-         */
-        void
-        compute_velocity_constraints_on_boundary(const DoFHandler<dim> &mesh_deformation_dof_handler,
-                                                 AffineConstraints<double> &mesh_velocity_constraints,
-                                                 const std::set<types::boundary_id> &boundary_id) const override;
+      /**
+       * A function that creates constraints for the velocity of certain mesh
+       * vertices (e.g. the surface vertices) for a specific boundary.
+       * The calling class will respect
+       * these constraints when computing the new vertex positions.
+       */
+      void
+      compute_velocity_constraints_on_boundary(const DoFHandler<dim> &mesh_deformation_dof_handler,
+                                               AffineConstraints<double> &mesh_velocity_constraints,
+                                               const std::set<types::boundary_id> &boundary_id) const override;
 
-        /**
-         * Declare parameters for the free surface handling.
-         */
-        static
-        void declare_parameters (ParameterHandler &prm);
+      /**
+       * Declare parameters for the free surface handling.
+       */
+      static
+      void declare_parameters (ParameterHandler &prm);
 
-        /**
-         * Parse parameters for the free surface handling.
-         */
-        void parse_parameters (ParameterHandler &prm) override;
+      /**
+       * Parse parameters for the free surface handling.
+       */
+      void parse_parameters (ParameterHandler &prm) override;
 
-      private:
-        /**
-         * A function object representing the mesh deformation.
-         */
-        Functions::ParsedFunction<dim> function;
-    };
-  }
+    private:
+      /**
+       * A function object representing the mesh deformation.
+       */
+      Functions::ParsedFunction<dim> function;
+  };
+}
 }
 
 

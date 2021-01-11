@@ -55,8 +55,8 @@ namespace aspect
           const std::vector<std::string> names = mesh_deformation_boundary_indicators_map[*p];
           for (unsigned int i = 0; i < names.size(); ++i )
             {
-                if(names[i] == "fastscape")
-                  AssertThrow((*p == relevant_boundary),
+              if (names[i] == "fastscape")
+                AssertThrow((*p == relevant_boundary),
                             ExcMessage("Fastscape can only be called on the surface boundary."));
             }
         }
@@ -245,7 +245,7 @@ namespace aspect
               std::unique_ptr<double[]> slopep (new double[array_size]());
               std::unique_ptr<double[]> b (new double[array_size]());
               std::vector<double> h_old(array_size);
-              
+
 
               // Create variables for output directory and restart file
               std::string dirname = this->get_output_directory();
@@ -334,8 +334,8 @@ namespace aspect
                         }
                       else if (!in)
                         AssertThrow(false,ExcMessage("Cannot open file to restart FastScape."));
-                      
-                     // Load in b values.
+
+                      // Load in b values.
                       std::ifstream in_b;
                       in_b.open(restart_filename_basement.c_str());
                       if (in_b)
@@ -390,7 +390,7 @@ namespace aspect
                     fastscape_set_marine_parameters_(&sl, &p1, &p2, &z1, &z2, &r, &l, &kds1, &kds2);
 
                   // Only set the basement if it's a restart
-                  if(current_timestep != 1)
+                  if (current_timestep != 1)
                     fastscape_set_basement_(b.get());
                 }
               else
@@ -398,7 +398,7 @@ namespace aspect
                   // If it isn't the first timestep we ignore initialization and instead copy all height values from FastScape.
                   fastscape_copy_h_(h.get());
                 }
-                
+
               /*
                * Generally, any additional modifications should occur below this point.
                */
@@ -626,7 +626,7 @@ namespace aspect
                     }
                 }
 
-                
+
               /*
                * Keep initial h values so we can calculate velocity later.
                * In the first timestep, h will be given from other processors.
@@ -644,21 +644,21 @@ namespace aspect
                       const double h_seed = (std::rand()%100)/10 - 5;
                       h[i] = h[i] + h_seed;
                     }
-                    
-                   // Here we add the sediment rain (m/yr) as a flat increase in height.
-                   // This is done because adding it as an uplift rate would affect the basement.
-                   if(sediment_rain > 0)
-                   {
-                     // Only apply sediment rain to areas below sea level.
-                     if(h[i] < sl)
-                     {
-                     // If the rain would put us above sea level, set height to sea level.
-                     if(h[i] + sediment_rain*a_dt > sl)
-                       h[i] = sl; 
-                     else
-                       h[i] = h[i] + sediment_rain*a_dt; 	
-                     }
-                   }   
+
+                  // Here we add the sediment rain (m/yr) as a flat increase in height.
+                  // This is done because adding it as an uplift rate would affect the basement.
+                  if (sediment_rain > 0)
+                    {
+                      // Only apply sediment rain to areas below sea level.
+                      if (h[i] < sl)
+                        {
+                          // If the rain would put us above sea level, set height to sea level.
+                          if (h[i] + sediment_rain*a_dt > sl)
+                            h[i] = sl;
+                          else
+                            h[i] = h[i] + sediment_rain*a_dt;
+                        }
+                    }
                 }
 
               // Get current fastscape timestep.
@@ -671,23 +671,23 @@ namespace aspect
                   (this->get_parameters().checkpoint_steps > 0) &&
                   (current_timestep % this->get_parameters().checkpoint_steps == 0))
                 {
-            
+
                   std::ofstream out_h (restart_filename.c_str());
                   std::ofstream out_step (restart_step_filename.c_str());
                   std::ofstream out_b (restart_filename_basement.c_str());
                   std::stringstream bufferb;
                   std::stringstream bufferh;
-                  
+
                   fastscape_copy_basement_(b.get());
 
                   out_step << (istep+restart_step) << "\n";
 
                   for (int i=0; i<array_size; i++)
-                  {
-                   bufferh << h[i] << "\n";
-                   bufferb << b[i] << "\n";
-                  }
-                  
+                    {
+                      bufferh << h[i] << "\n";
+                      bufferb << b[i] << "\n";
+                    }
+
                   out_h << bufferh.str();
                   out_b << bufferb.str();
                 }

@@ -29,68 +29,68 @@
 
 namespace aspect
 {
-  namespace BoundaryTemperature
+namespace BoundaryTemperature
+{
+  /**
+   * A class that implements a temperature boundary condition for an
+   * arbitrary geometry, where it returns a constant value for a given
+   * boundary indicator. Takes an ordered list of temperatures, where the
+   * position in the list corresponds to the indicator for that temperature.
+   *
+   * @ingroup BoundaryTemperatures
+   */
+  template <int dim>
+  class Constant : public Interface<dim>, public SimulatorAccess<dim>
   {
-    /**
-     * A class that implements a temperature boundary condition for an
-     * arbitrary geometry, where it returns a constant value for a given
-     * boundary indicator. Takes an ordered list of temperatures, where the
-     * position in the list corresponds to the indicator for that temperature.
-     *
-     * @ingroup BoundaryTemperatures
-     */
-    template <int dim>
-    class Constant : public Interface<dim>, public SimulatorAccess<dim>
-    {
-      public:
-        /**
-         * This function returns user-defined constant temperatures at the
-         * boundaries of arbitrary geometries.
-         *
-         * @copydoc aspect::BoundaryTemperature::Interface::boundary_temperature()
-         */
-        double boundary_temperature (const types::boundary_id boundary_indicator,
-                                     const Point<dim> &position) const override;
+    public:
+      /**
+       * This function returns user-defined constant temperatures at the
+       * boundaries of arbitrary geometries.
+       *
+       * @copydoc aspect::BoundaryTemperature::Interface::boundary_temperature()
+       */
+      double boundary_temperature (const types::boundary_id boundary_indicator,
+                                   const Point<dim> &position) const override;
 
-        /**
-         * Return the minimal the temperature on that part of the boundary on
-         * which Dirichlet conditions are posed.
-         *
-         * This value is used in computing dimensionless numbers such as the
-         * Nusselt number indicating heat flux.
-         */
-        double minimal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids) const override;
+      /**
+       * Return the minimal the temperature on that part of the boundary on
+       * which Dirichlet conditions are posed.
+       *
+       * This value is used in computing dimensionless numbers such as the
+       * Nusselt number indicating heat flux.
+       */
+      double minimal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids) const override;
 
-        /**
-         * Return the maximal the temperature on that part of the boundary on
-         * which Dirichlet conditions are posed.
-         *
-         * This value is used in computing dimensionless numbers such as the
-         * Nusselt number indicating heat flux.
-         */
-        double maximal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids) const override;
+      /**
+       * Return the maximal the temperature on that part of the boundary on
+       * which Dirichlet conditions are posed.
+       *
+       * This value is used in computing dimensionless numbers such as the
+       * Nusselt number indicating heat flux.
+       */
+      double maximal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids) const override;
 
-        /**
-         * Declare the parameters this class takes through input files. This
-         * class declares the inner and outer boundary temperatures.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
+      /**
+       * Declare the parameters this class takes through input files. This
+       * class declares the inner and outer boundary temperatures.
+       */
+      static
+      void
+      declare_parameters (ParameterHandler &prm);
 
-        /**
-         * Read the parameters this class declares from the parameter file.
-         */
-        void
-        parse_parameters (ParameterHandler &prm) override;
+      /**
+       * Read the parameters this class declares from the parameter file.
+       */
+      void
+      parse_parameters (ParameterHandler &prm) override;
 
-      private:
-        /**
-         * Temperatures at the boundaries.
-         */
-        std::map<types::boundary_id, double> boundary_temperatures;
-    };
-  }
+    private:
+      /**
+       * Temperatures at the boundaries.
+       */
+      std::map<types::boundary_id, double> boundary_temperatures;
+  };
+}
 }
 
 
