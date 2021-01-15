@@ -30,63 +30,63 @@
 
 namespace aspect
 {
-  namespace InitialTopographyModel
+namespace InitialTopographyModel
+{
+  using namespace dealii;
+
+  /**
+   * A class that implements initial topography based
+   * on a user-defined function..
+   *
+   * @ingroup InitialTopographyModels
+   */
+  template <int dim>
+  class Function : public Interface<dim>, public SimulatorAccess<dim>
   {
-    using namespace dealii;
+    public:
+      /**
+       * Constructor.
+       */
+      Function ();
 
-    /**
-     * A class that implements initial topography based
-     * on a user-defined function..
-     *
-     * @ingroup InitialTopographyModels
-     */
-    template <int dim>
-    class Function : public Interface<dim>, public SimulatorAccess<dim>
-    {
-      public:
-        /**
-         * Constructor.
-         */
-        Function ();
+      /**
+       * Return the value of the initial topography as a function
+       * of surface position.
+       */
+      double
+      value (const Point<dim-1> &p) const override;
 
-        /**
-         * Return the value of the initial topography as a function
-         * of surface position.
-         */
-        double
-        value (const Point<dim-1> &p) const override;
+      /**
+       * Return the maximum value of the elevation.
+       */
+      double max_topography () const override;
 
-        /**
-         * Return the maximum value of the elevation.
-         */
-        double max_topography () const override;
+      static
+      void
+      declare_parameters (ParameterHandler &prm);
 
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
+      void
+      parse_parameters (ParameterHandler &prm) override;
 
-        void
-        parse_parameters (ParameterHandler &prm) override;
+    private:
 
-      private:
+      /**
+       * The maximum value the topography can take.
+       */
+      double max_topo;
 
-        /**
-         * The maximum value the topography can take.
-         */
-        double max_topo;
+      /**
+       * A function object representing the topography.
+       */
+      Functions::ParsedFunction<dim> initial_topography_function;
 
-        /**
-         * A function object representing the topography.
-         */
-        Functions::ParsedFunction<dim> initial_topography_function;
-
-        /**
-         * The coordinate representation to evaluate the function. Possible
-         * choices are cartesian and spherical.
-         */
-        Utilities::Coordinates::CoordinateSystem coordinate_system;
-    };
-  }
+      /**
+       * The coordinate representation to evaluate the function. Possible
+       * choices are cartesian and spherical.
+       */
+      Utilities::Coordinates::CoordinateSystem coordinate_system;
+  };
+}
 }
 
 
