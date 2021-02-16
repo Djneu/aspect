@@ -24,6 +24,7 @@
 
 #include <aspect/plugins.h>
 #include <aspect/simulator_access.h>
+#include <aspect/simulator/assemblers/interface.h>
 
 #include <aspect/global.h>
 
@@ -44,6 +45,35 @@ namespace aspect
   using namespace dealii;
 
   template <int dim> class Simulator;
+
+  namespace Assemblers
+  {
+    /**
+     * Apply stabilization to a cell of the system matrix. The
+     * stabilization is only added to cells on a free surface. The
+     * scheme is based on that of Kaus et. al., 2010. Called during
+     * assembly of the system matrix.
+     */
+    template <int dim>
+    class ApplyStabilization: public Assemblers::Interface<dim>,
+      public SimulatorAccess<dim>
+    {
+      public:
+        ApplyStabilization(const double stabilization_theta);
+
+        void
+        execute (internal::Assembly::Scratch::ScratchBase<dim>   &scratch,
+                 internal::Assembly::CopyData::CopyDataBase<dim> &data) const override;
+
+      private:
+        /**
+         * Stabilization parameter for the free surface. Should be between
+         * zero and one. A value of zero means no stabilization. See Kaus
+         * et. al. 2010 for more details.
+         */
+        const double surface_stabilization_theta;
+    };
+  }
 
   /**
    * A namespace that contains everything that is related to the deformation
@@ -163,6 +193,13 @@ namespace aspect
          * The default implementation of this function does nothing.
          */
         void initialize();
+
+        /**
+         * Called by Simulator::set_assemblers() to allow the FreeSurface plugin
+         * to register its assembler.
+         */
+        void set_assemblers(const SimulatorAccess<dim> &simulator_access,
+                            aspect::Assemblers::Manager<dim> &assemblers) const;
 
         /**
          * Update function of the MeshDeformationHandler. This function
@@ -499,6 +536,14 @@ namespace aspect
         std::set<types::boundary_id> free_surface_boundary_indicators;
 
         bool include_initial_topography;
+
+        /**
+         * Stabilization parameter for the free surface. Should be between
+         * zero and one. A value of zero means no stabilization. See Kaus
+         * et. al. 2010 for more details.
+         */
+        double surface_stabilization_theta;
+
 
         friend class Simulator<dim>;
         friend class SimulatorAccess<dim>;
