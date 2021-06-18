@@ -450,7 +450,7 @@ namespace aspect
               
                   // Here we add the sediment rain (m/yr) as a flat increase in height.
                   // This is done because adding it as an uplift rate would affect the basement.
-                  if (sediment_rain > 0)
+                  if (sediment_rain > 0 && use_marine)
                     {
                       // Only apply sediment rain to areas below sea level.
                       if (h[i] < sl)
@@ -461,9 +461,8 @@ namespace aspect
                           else
                             h[i] = h[i] + sediment_rain*a_dt;
                         }
-                    }
+                    }                                
                 }
-
 
               /*
                * The ghost nodes are added as a single layer of nodes surrounding the entire model,
@@ -474,6 +473,105 @@ namespace aspect
               if (use_ghost)
                  set_ghost_nodes(h.get(), vx.get(), vy.get(), vz.get(), nx, ny);
 
+              //////// Section to apply orographic controls /////////
+
+	      // First for the wind barrier, we find the maximum height and index
+              // along each line in the x and y direction.
+              // If wind is east or west, we find maximum point for each ny row along x.
+              std::vector<std::vector<double>> hmaxx(2, std::vector<double>(ny, 0.0));
+	      if(wd == 0 || wd == 1)
+		{
+		  for (int i=0; i<ny; i++)
+               	    {
+                      for (int j=0; j<nx; j++)
+                        {
+                          if( h[nx*i+j] > hmaxx[0][i])
+		            {
+	                      hmaxx[0][i] = h[nx*i+j];
+                              hmaxx[1][i] = j;
+                            }
+                        }
+                    }
+                }
+
+              // If wind is north or south, we find maximum point for each nx row along y.
+              std::vector<std::vector<double>> hmaxy(2, std::vector<double>(nx, 0.0));
+	      if(wd == 2 || wd == 3)
+		{
+		  for (int i=0; i<nx; i++)
+               	    {
+                      for (int j=0; j<ny; j++)
+                        {
+                          if( h[nx*j+i] > hmaxy[0][i])
+		            {
+	                      hmaxy[0][i] = h[nx*j+i];
+                              hmaxy[1][i] = j;
+                            }
+                        }
+                     }
+                } 
+ 
+
+              // Now we loop through all the points again and apply the reductions.
+              for (int i=0; i<ny; i++)
+                {
+
+                // Reduction from wind barrier. Apply a switch based off wind direction. 
+                // Where 0 is wind going to the west, 1 the east, 2 the south, and 3 the north.
+                for (int j=0; j<nx; j++)
+                  {
+                switch(wd)
+                  {
+                  case 0 : 
+                    {
+                      if ( (hmaxx[0][i] > wb) && (j < hmaxx[1][i]) || (h[nx*i+j] > mmax && !stackoro) )
+                        {
+                          kf[nx*i+j] = kf[nx*i+j]/reduc_wb;
+                          kd[nx*i+j] = kd[nx*i+j]/reduc_wb;
+                        }
+                        break;
+                    }
+                  case 1 :
+                    {
+                      if ( (hmaxx[0][i] > wb) && (j > hmaxx[1][i]) || (h[nx*i+j] > mmax && !stackoro) )
+                        {
+                          kf[nx*i+j] = kf[nx*i+j]/reduc_wb;
+                          kd[nx*i+j] = kd[nx*i+j]/reduc_wb;
+                        }
+                        break;
+                    }
+                  case 2 :
+                    {
+                      if ( (hmaxy[0][j] > wb) && (i > hmaxy[1][j]) || (h[nx*i+j] > mmax && !stackoro) )
+                        {
+                          kf[nx*i+j] = kf[nx*i+j]/reduc_wb;
+                          kd[nx*i+j] = kd[nx*i+j]/reduc_wb;
+                        }
+                        break;
+                    }
+                  case 3 :
+                    {
+                      if ( (hmaxy[0][j] > wb) && (i < hmaxy[1][j]) || (h[nx*i+j] > mmax && !stackoro) )
+                        {
+                          kf[nx*i+j] = kf[nx*i+j]/reduc_wb;
+                          kd[nx*i+j] = kd[nx*i+j]/reduc_wb;
+                        }
+                        break;
+                    }
+                  default :
+                    AssertThrow(false, ExcMessage("This does not correspond with a wind direction."));
+                    break;
+                  }   
+
+                  // Apply elevation control.
+                  if(h[nx*i+j] > mmax && stackoro)
+                    {
+                      kf[nx*i+j] = kf[nx*i+j]/reduc_mmax;
+                      kd[nx*i+j] = kd[nx*i+j]/reduc_mmax;
+                    }
+                  }                                 
+                }   
+              //////// End orographic section. Update to erosional parameters applied later. /////////      
 
               // Get current fastscape timestep.
               int istep = 0;
@@ -525,7 +623,9 @@ namespace aspect
                 fastscape_set_v_(vx.get(), vy.get());
               }
 
+              // Set h to new values, and erosional parameters if there have been changes.
               fastscape_set_h_(h.get());
+              fastscape_set_erosional_parameters_(kf.get(), &kfsed, &m, &n, kd.get(), &kdsed, &g, &g, &p);
 
               // The visualization is 1 step behind the current timestep.
               int visualization_step = 0;
@@ -545,7 +645,7 @@ namespace aspect
                 else if (!use_strat && current_timestep == 1)
 		  {
                   this->get_pcout() << "      Writing initial VTK..." << std::endl;
-                  fastscape_named_vtk_(h.get(), &vexp, &visualization_step, c, &length);
+                  fastscape_named_vtk_(kd.get(), &vexp, &visualization_step, c, &length);
                   }
 
                 do
@@ -571,7 +671,7 @@ namespace aspect
               if (make_vtk)
               {
                  this->get_pcout() << "      Writing VTK..." << std::endl;
-                 fastscape_named_vtk_(h.get(), &vexp, &visualization_step, c, &length);
+                 fastscape_named_vtk_(kd.get(), &vexp, &visualization_step, c, &length);
               }
 
               // If we've reached the end time, destroy fastscape.
@@ -1057,10 +1157,10 @@ namespace aspect
                               Patterns::Double(),
                               "Exponent to determine the distribution from the SPL to neighbor nodes, with"
                               "10 being steepest decent and 1 being more varied.");
-            prm.declare_entry("Bedrock deposition coefficient", "-1",
+            prm.declare_entry("Bedrock deposition coefficient", "1",
                               Patterns::Double(),
                               "Deposition coefficient for bedrock");
-            prm.declare_entry("Sediment deposition coefficient", "-1",
+            prm.declare_entry("Sediment deposition coefficient", "1",
                               Patterns::Double(),
                               "Deposition coefficient for sediment");
             prm.declare_entry("Bedrock river incision rate", "-1",
@@ -1075,6 +1175,24 @@ namespace aspect
             prm.declare_entry("Sediment diffusivity", "-1",
                               Patterns::Double(),
                               "Diffusivity of sediment.");
+            prm.declare_entry("Orographic elevation control", "2000",
+                              Patterns::Integer(),
+                              "Anything above this height has a reduction in erodibility.");
+            prm.declare_entry("Orographic wind barrier height", "500",
+                              Patterns::Integer(),
+                              "Once terrain reaches this height, one side has reduced erodibility.");
+            prm.declare_entry("Elevation reduction", "1",
+                              Patterns::Double(),
+                              "Amount to reduce kf and kd past elevation.");
+            prm.declare_entry("Wind barrier reduction", "1",
+                              Patterns::Double(),
+                              "Diffusivity of sediment.");
+            prm.declare_entry ("Stack orographic controls", "false",
+                             Patterns::Bool (),
+                             "Whether or not to apply both controls to a point, or only a maximum of one set as the wind barrier.");
+            prm.declare_entry ("Wind direction", "west",
+                             Patterns::Selection("east|west|south|north"),
+                             "This parameter assumes a wind direction, deciding which side is reduced from the wind barrier.");
           }
           prm.leave_subsection();
 
@@ -1182,6 +1300,24 @@ namespace aspect
             g = prm.get_double("Bedrock deposition coefficient");
             gsed = prm.get_double("Sediment deposition coefficient");
             p = prm.get_double("Multi-direction slope exponent");
+            mmax = prm.get_integer("Orographic elevation control");
+            wb = prm.get_integer("Orographic wind barrier height");
+            reduc_mmax = prm.get_double("Elevation reduction");
+            reduc_wb = prm.get_double("Wind barrier reduction");
+            stackoro = prm.get_bool("Stack orographic controls");
+            
+          // Wind direction
+          if (prm.get ("Wind direction") == "west")
+            wd = 0;
+          else if (prm.get ("Wind direction") == "east")
+            wd = 1;
+          else if (prm.get ("Wind direction") == "north")
+            wd = 2;
+          else if (prm.get ("Wind direction") == "south")
+            wd = 3;
+          else
+            AssertThrow(false, ExcMessage("Not a valid yield mechanism."));
+          
           }
           prm.leave_subsection();
 
