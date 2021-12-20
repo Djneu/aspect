@@ -65,6 +65,31 @@ namespace aspect
       // Initialize parameters for restarting fastscape
       restart = this->get_parameters().resume_computation;
       restart_step = 0;
+      
+      // Since we don't open these until we're on one processor, we need to check if the 
+      // restart files exist before hand.
+      // TODO: This was quickly done and can likely be shortened/improved.
+      if(restart)
+      {
+        // Create variables for output directory and restart file
+        std::string dirname = this->get_output_directory();
+        
+        std::ifstream in;
+        in.open(dirname + "fastscape_h_restart.txt");
+        if (in.fail())
+            AssertThrow(false,ExcMessage("Cannot open topography file to restart FastScape."));
+        in.close();
+        
+        in.open(dirname + "fastscape_b_restart.txt");
+        if (in.fail())
+            AssertThrow(false,ExcMessage("Cannot open basement file to restart FastScape."));
+        in.close();
+        
+        in.open(dirname + "fastscape_steps_restart.txt");
+        if (in.fail())
+            AssertThrow(false,ExcMessage("Cannot open steps file to restart FastScape."));
+        in.close();
+      }
 
       // Since we don't open these until we're on one processor, we need to check if the
       // restart files exist before hand.
