@@ -28,7 +28,7 @@ namespace aspect
   {
     namespace VisualizationPostprocessors
     {
-      namespace internal
+      namespace Surfaceinternal
       {
         namespace SurfaceSymmetricTensorImplementation
         {
@@ -534,14 +534,14 @@ namespace aspect
             switch (method)
               {
                 case SymmetricTensorEigenvectorMethod::hybrid:
-                  return internal::SurfaceSymmetricTensorImplementation::hybrid(T);
+                  return Surfaceinternal::SurfaceSymmetricTensorImplementation::hybrid(T);
                   break;
                 case SymmetricTensorEigenvectorMethod::ql_implicit_shifts:
-                  //return internal::SurfaceSymmetricTensorImplementation::ql_implicit_shifts(
+                  //return Surfaceinternal::SurfaceSymmetricTensorImplementation::ql_implicit_shifts(
                   //  T);
                   break;
                 case SymmetricTensorEigenvectorMethod::jacobi:
-                  //  return internal::SurfaceSymmetricTensorImplementation::jacobi(T);
+                  //  return Surfaceinternal::SurfaceSymmetricTensorImplementation::jacobi(T);
                   break;
                 default:
                   break;
@@ -553,7 +553,7 @@ namespace aspect
 
 
         } // namespace SurfaceSymmetricTensorImplementation
-      } // namespace internal
+      } // namespace Surfaceinternal
 
 
 
@@ -884,14 +884,14 @@ namespace aspect
                                                         SurfaceStressRegime<dim>::eigenvectors(const SymmetricTensor<2, dim, double> &T,
                                                             const SymmetricTensorEigenvectorMethod method) const
       {
-        std::array<std::pair<double, Tensor<1, dim, double>>, dim> eig_vals_vecs = internal::SurfaceSymmetricTensorImplementation::
+        std::array<std::pair<double, Tensor<1, dim, double>>, dim> eig_vals_vecs = Surfaceinternal::SurfaceSymmetricTensorImplementation::
                                                                                    perform_eigenvector_decomposition(T, method);
 
         // Sort in descending order before output.
         std::sort(
           eig_vals_vecs.begin(),
           eig_vals_vecs.end(),
-          internal::SurfaceSymmetricTensorImplementation::SortEigenValuesVectors<dim>());
+          Surfaceinternal::SurfaceSymmetricTensorImplementation::SortEigenValuesVectors<dim>());
         return eig_vals_vecs;
       }
 

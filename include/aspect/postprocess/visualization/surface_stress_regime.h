@@ -63,9 +63,10 @@ namespace aspect
         jacobi
       };
 
-      namespace internal
+      namespace Surfaceinternal
       {
         // I inserted "Surface" for this namespace, as else I got this build error, because I simply copied stress_regime.cc: 
+        // This could for sure be done in a nicer way!
         /**
          * /usr/bin/ld.gold: error: CMakeFiles/aspect.dir/Unity/unity_33.cxx.o: multiple definition of 'aspect::Postprocess::VisualizationPostprocessors::internal::SymmetricTensorImplementation::hybrid(dealii::SymmetricTensor<2, 3, double> const&)'
          * /usr/bin/ld.gold: CMakeFiles/aspect.dir/Unity/unity_34.cxx.o: previous definition here
