@@ -529,18 +529,18 @@ namespace aspect
           std::array<std::pair<double, Tensor<1, dim, double>>, dim>
                                                             perform_eigenvector_decomposition(
                                                               const SymmetricTensor<2, dim, double> &T,
-                                                              const SymmetricTensorEigenvectorMethod method)
+                                                              const SurfaceSymmetricTensorEigenvectorMethod method)
           {
             switch (method)
               {
-                case SymmetricTensorEigenvectorMethod::hybrid:
+                case SurfaceSymmetricTensorEigenvectorMethod::hybrid:
                   return Surfaceinternal::SurfaceSymmetricTensorImplementation::hybrid(T);
                   break;
-                case SymmetricTensorEigenvectorMethod::ql_implicit_shifts:
+                case SurfaceSymmetricTensorEigenvectorMethod::ql_implicit_shifts:
                   //return Surfaceinternal::SurfaceSymmetricTensorImplementation::ql_implicit_shifts(
                   //  T);
                   break;
-                case SymmetricTensorEigenvectorMethod::jacobi:
+                case SurfaceSymmetricTensorEigenvectorMethod::jacobi:
                   //  return Surfaceinternal::SurfaceSymmetricTensorImplementation::jacobi(T);
                   break;
                 default:
@@ -681,7 +681,7 @@ namespace aspect
             case 3:
             {
               // Test getting the eigenvectors and -values
-              std::array<std::pair<double, Tensor< 1, dim, double> >,dim > eigen_vectors = eigenvectors(compressive_stress, SymmetricTensorEigenvectorMethod::hybrid);
+              std::array<std::pair<double, Tensor< 1, dim, double> >,dim > eigen_vectors = eigenvectors(compressive_stress, SurfaceSymmetricTensorEigenvectorMethod::hybrid);
               const Tensor<1,dim> S1 = eigen_vectors[0].second;
               const Tensor<1,dim> S2 = eigen_vectors[1].second;
               const Tensor<1,dim> S3 = eigen_vectors[dim-1].second;
@@ -882,7 +882,7 @@ namespace aspect
       //std::array<std::pair< Number, Tensor<1, dim, Number> >,std::integral_constant<int, dim>::value>
       std::array<std::pair<double, Tensor<1, dim, double>>,dim>
                                                         SurfaceStressRegime<dim>::eigenvectors(const SymmetricTensor<2, dim, double> &T,
-                                                            const SymmetricTensorEigenvectorMethod method) const
+                                                            const SurfaceSymmetricTensorEigenvectorMethod method) const
       {
         std::array<std::pair<double, Tensor<1, dim, double>>, dim> eig_vals_vecs = Surfaceinternal::SurfaceSymmetricTensorImplementation::
                                                                                    perform_eigenvector_decomposition(T, method);

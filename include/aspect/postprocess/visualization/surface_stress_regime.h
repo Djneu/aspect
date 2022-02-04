@@ -31,7 +31,7 @@ namespace aspect
   {
     namespace VisualizationPostprocessors
     {
-      enum struct SymmetricTensorEigenvectorMethod
+      enum struct SurfaceSymmetricTensorEigenvectorMethod
       {
         /**
          * A hybrid approach that preferentially uses the characteristic equation to
@@ -103,7 +103,7 @@ namespace aspect
           template <int dim>
           std::array<std::pair<double, Tensor<1, dim, double>>, dim>
                                                             perform_eigenvector_decomposition(const SymmetricTensor<2, dim, double> &T,
-                                                                const SymmetricTensorEigenvectorMethod method);
+                                                                const SurfaceSymmetricTensorEigenvectorMethod method);
 
           /**
            * A struct that is used to sort arrays of pairs of eign=envalues and
@@ -182,7 +182,7 @@ namespace aspect
         private:
           std::array<std::pair<double, Tensor<1, dim, double> >, dim>
           eigenvectors(const SymmetricTensor<2, dim, double> &,
-                       const SymmetricTensorEigenvectorMethod) const;
+                       const SurfaceSymmetricTensorEigenvectorMethod) const;
 
 
       };
