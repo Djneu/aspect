@@ -134,7 +134,8 @@ namespace aspect
       class SurfaceStressRegime
         : public DataPostprocessor<dim>,
           public SimulatorAccess<dim>,
-          public Interface<dim>
+          public Interface<dim>,
+          public SurfaceOnlyVisualization<dim>
       {
         public:
           virtual

@@ -900,10 +900,10 @@ namespace aspect
       SurfaceStressRegime<dim>::get_names () const
       {
         std::vector<std::string> names(dim+1);
-        names[0] = "surf_sigma_H_x";
-        names[dim-1] = "surf_sigma_H_z";
-        names[1] = "surf_sigma_H_y";
-        names[dim] = "surf_stress_regime";
+        names[0] = "surface sigma_H_x";
+        names[dim-1] = "surface sigma_H_z";
+        names[1] = "surface sigma_H_y";
+        names[dim] = "surface stress_regime";
         return names;
       }
 
