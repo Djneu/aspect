@@ -552,6 +552,15 @@ namespace Assemblers
     }
 
 
+    template <int dim>
+    double
+    MeshDeformationHandler<dim>::get_surface_theta()const
+    {
+      return surface_theta;
+    }
+
+
+
 
     template <int dim>
     void MeshDeformationHandler<dim>::make_constraints()

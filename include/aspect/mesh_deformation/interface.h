@@ -363,6 +363,12 @@ namespace Assemblers
                         << arg1
                         << "> among the names of registered mesh deformation objects.");
 
+        /**
+         * Return the stabilization parameter for the free surface.
+         */
+
+        double get_surface_theta () const;
+
       private:
         /**
          * Compute the initial constraints for the mesh displacement
