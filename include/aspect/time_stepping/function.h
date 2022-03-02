@@ -27,45 +27,45 @@
 
 namespace aspect
 {
-  namespace TimeStepping
+namespace TimeStepping
+{
+  using namespace dealii;
+
+  /**
+   * A class that implements a time stepping plugin on a function
+   * description provided in the input file.
+   *
+   * @ingroup TimeStepping
+   */
+  template <int dim>
+  class Function : public Interface<dim>, public SimulatorAccess<dim>
   {
-    using namespace dealii;
+    public:
+      /**
+       * Constructor.
+       */
+      Function () = default;
 
-    /**
-     * A class that implements a time stepping plugin on a function
-     * description provided in the input file.
-     *
-     * @ingroup TimeStepping
-     */
-    template <int dim>
-    class Function : public Interface<dim>, public SimulatorAccess<dim>
-    {
-      public:
-        /**
-         * Constructor.
-         */
-        Function () = default;
+      /**
+       * The main execute() function.
+       */
+      double
+      execute() override;
 
-        /**
-         * The main execute() function.
-         */
-        double
-        execute() override;
+      static
+      void
+      declare_parameters (ParameterHandler &prm);
 
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
+      void
+      parse_parameters (ParameterHandler &prm) override;
 
-        void
-        parse_parameters (ParameterHandler &prm) override;
-
-      private:
-        /**
-         * The function object.
-         */
-        Functions::ParsedFunction<1> function;
-    };
-  }
+    private:
+      /**
+       * The function object.
+       */
+      Functions::ParsedFunction<1> function;
+  };
+}
 }
 
 

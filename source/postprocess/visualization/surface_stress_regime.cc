@@ -638,9 +638,9 @@ namespace aspect
       template <int dim>
       std::pair<Tensor<1,dim>, double>
       SurfaceStressRegime<dim>::compute_sigmaH_and_stress_regime(const SymmetricTensor<2,dim> compressive_stress,
-                                                          const double pressure,
-                                                          const Tensor<1,dim> vertical_direction,
-                                                          const std::array<Tensor<1,dim>,dim-1 > orthogonal_directions) const
+                                                                 const double pressure,
+                                                                 const Tensor<1,dim> vertical_direction,
+                                                                 const std::array<Tensor<1,dim>,dim-1 > orthogonal_directions) const
       {
         double stress_regime = std::numeric_limits<double>::quiet_NaN(), stress_regime_old = std::numeric_limits<double>::quiet_NaN();
         Tensor<1,dim> maximum_horizontal_compressive_stress;

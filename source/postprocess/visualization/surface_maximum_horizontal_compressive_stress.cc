@@ -94,11 +94,11 @@ namespace aspect
                 case 2:
                 {
                   surface_maximum_horizontal_compressive_stress = orthogonal_directions[0] *
-                                                          (orthogonal_directions[0] *
-                                                           ((compressive_stress
-                                                             -
-                                                             in.pressure[q] * unit_symmetric_tensor<dim>()) *
-                                                            orthogonal_directions[0]));
+                                                                  (orthogonal_directions[0] *
+                                                                   ((compressive_stress
+                                                                     -
+                                                                     in.pressure[q] * unit_symmetric_tensor<dim>()) *
+                                                                    orthogonal_directions[0]));
                   break;
                 }
 

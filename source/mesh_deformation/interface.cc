@@ -54,7 +54,7 @@
 namespace aspect
 {
 
-namespace Assemblers
+  namespace Assemblers
   {
     template <int dim>
     ApplyStabilization<dim>::ApplyStabilization(const double stabilization_theta)
@@ -270,7 +270,7 @@ namespace Assemblers
 
     template <int dim>
     void MeshDeformationHandler<dim>::set_assemblers(const SimulatorAccess<dim> &,
-                                          aspect::Assemblers::Manager<dim> &assemblers) const
+                                                     aspect::Assemblers::Manager<dim> &assemblers) const
     {
       aspect::Assemblers::ApplyStabilization<dim> *surface_stabilization
         = new aspect::Assemblers::ApplyStabilization<dim>(surface_theta);
@@ -362,17 +362,17 @@ namespace Assemblers
                            "\n\n"
                            "The format is id1: object1 \\& object2, id2: object3 \\& object2, where "
                            "objects are one of " + std::get<dim>(registered_plugins).get_description_string());
-          prm.declare_entry("Surface stabilization theta", "0.5",
-                            Patterns::Double(0., 1.),
-                            "Theta parameter described in \\cite{KMM2010}. "
-                            "An unstabilized free surface can overshoot its "
-                            "equilibrium position quite easily and generate "
-                            "unphysical results.  One solution is to use a "
-                            "quasi-implicit correction term to the forces near the "
-                            "free surface.  This parameter describes how much "
-                            "the free surface is stabilized with this term, "
-                            "where zero is no stabilization, and one is fully "
-                            "implicit.");
+        prm.declare_entry("Surface stabilization theta", "0.5",
+                          Patterns::Double(0., 1.),
+                          "Theta parameter described in \\cite{KMM2010}. "
+                          "An unstabilized free surface can overshoot its "
+                          "equilibrium position quite easily and generate "
+                          "unphysical results.  One solution is to use a "
+                          "quasi-implicit correction term to the forces near the "
+                          "free surface.  This parameter describes how much "
+                          "the free surface is stabilized with this term, "
+                          "where zero is no stabilization, and one is fully "
+                          "implicit.");
 
       }
       prm.leave_subsection ();

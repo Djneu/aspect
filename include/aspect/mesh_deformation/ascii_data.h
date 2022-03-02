@@ -29,62 +29,62 @@
 
 namespace aspect
 {
-  namespace MeshDeformation
+namespace MeshDeformation
+{
+  using namespace dealii;
+
+  /**
+   * A class that implements initial topography determined
+   * from an AsciiData input file.
+   *
+   * @ingroup InitialTopographyModel
+   */
+  template <int dim>
+  class AsciiData : public Utilities::AsciiDataBoundary<dim>, public Interface<dim>
   {
-    using namespace dealii;
+    public:
+      /**
+       * Empty Constructor.
+       */
+      AsciiData ();
 
-    /**
-     * A class that implements initial topography determined
-     * from an AsciiData input file.
-     *
-     * @ingroup InitialTopographyModel
-     */
-    template <int dim>
-    class AsciiData : public Utilities::AsciiDataBoundary<dim>, public Interface<dim>
-    {
-      public:
-        /**
-         * Empty Constructor.
-         */
-        AsciiData ();
+      /**
+       * Initialization function. This function is called once at the
+       * beginning of the program. Sets the boundary id of the surface boundary.
+       */
+      void
+      initialize () override;
 
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program. Sets the boundary id of the surface boundary.
-         */
-        void
-        initialize () override;
+      // avoid -Woverloaded-virtual:
+      using Utilities::AsciiDataBoundary<dim>::initialize;
 
-        // avoid -Woverloaded-virtual:
-        using Utilities::AsciiDataBoundary<dim>::initialize;
+      /**
+       * Return the surface topography as a function of position along the surface.
+       * For the current class, this function returns a value from the text files.
+       *
+       * @copydoc aspect::InitialTopographyModel::Interface::value()
+       */
+      Tensor<1,dim>
+      compute_initial_deformation_on_boundary(const types::boundary_id boundary_indicator,
+                                              const Point<dim> &position) const override;
 
-        /**
-         * Return the surface topography as a function of position along the surface.
-         * For the current class, this function returns a value from the text files.
-         *
-         * @copydoc aspect::InitialTopographyModel::Interface::value()
-         */
-        Tensor<1,dim>
-        compute_initial_deformation_on_boundary(const types::boundary_id boundary_indicator,
-                                                const Point<dim> &position) const override;
+      /**
+       * Declare the parameters this class takes through input files.
+       */
+      static
+      void
+      declare_parameters (ParameterHandler &prm);
 
-        /**
-         * Declare the parameters this class takes through input files.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
+      /**
+       * Read the parameters this class declares from the parameter file.
+       */
+      void
+      parse_parameters (ParameterHandler &prm) override;
 
-        /**
-         * Read the parameters this class declares from the parameter file.
-         */
-        void
-        parse_parameters (ParameterHandler &prm) override;
-
-      private:
-        types::boundary_id surface_boundary_id;
-    };
-  }
+    private:
+      types::boundary_id surface_boundary_id;
+  };
+}
 }
 
 

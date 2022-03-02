@@ -40,158 +40,158 @@
 
 namespace aspect
 {
-  using namespace dealii;
+using namespace dealii;
 
-  template <int dim> class Simulator;
+template <int dim> class Simulator;
 
 namespace Assemblers
+{
+  /**
+   * Apply stabilization to a cell of the system matrix. The
+   * stabilization is only added to cells on a free surface. The
+   * scheme is based on that of Kaus et. al., 2010. Called during
+   * assembly of the system matrix.
+   */
+  template <int dim>
+  class ApplyStabilization: public Assemblers::Interface<dim>,
+    public SimulatorAccess<dim>
   {
-    /**
-     * Apply stabilization to a cell of the system matrix. The
-     * stabilization is only added to cells on a free surface. The
-     * scheme is based on that of Kaus et. al., 2010. Called during
-     * assembly of the system matrix.
-     */
-    template <int dim>
-    class ApplyStabilization: public Assemblers::Interface<dim>,
-      public SimulatorAccess<dim>
-    {
-      public:
-        ApplyStabilization(const double stabilization_theta);
+    public:
+      ApplyStabilization(const double stabilization_theta);
 
-        void
-        execute (internal::Assembly::Scratch::ScratchBase<dim>   &scratch,
-                 internal::Assembly::CopyData::CopyDataBase<dim> &data) const override;
+      void
+      execute (internal::Assembly::Scratch::ScratchBase<dim>   &scratch,
+               internal::Assembly::CopyData::CopyDataBase<dim> &data) const override;
 
-      private:
-        /**
-         * Stabilization parameter for the free surface. Should be between
-         * zero and one. A value of zero means no stabilization. See Kaus
-         * et. al. 2010 for more details.
-         */
-        const double surface_theta;
-    };
-  }
+    private:
+      /**
+       * Stabilization parameter for the free surface. Should be between
+       * zero and one. A value of zero means no stabilization. See Kaus
+       * et. al. 2010 for more details.
+       */
+      const double surface_theta;
+  };
+}
+
+
+/**
+ * A namespace that contains everything that is related to the deformation
+ * of the mesh vertices over time.
+ */
+namespace MeshDeformation
+{
+  /**
+   * A base class for mesh deformation plugins. Each derived class should
+   * implement a function that determines the deformation velocity for certain
+   * mesh vertices and store them in a AffineConstraints<double> object. The velocities
+   * for all non-constrained vertices will be computed by solving a Laplace-
+   * problem with the given constraints.
+   */
+  template<int dim>
+  class Interface
+  {
+    public:
+      /**
+       * Destructor. Made virtual to enforce that derived classes also have
+       * virtual destructors.
+       */
+      virtual ~Interface() = default;
+
+      /**
+       * Initialization function. This function is called once at the
+       * beginning of the program after parse_parameters is run and after
+       * the SimulatorAccess (if applicable) is initialized.
+       *
+       * The default implementation of this function does nothing.
+       */
+      virtual void initialize ();
+
+      /**
+       * A function that is called at the beginning of each time step and
+       * that allows the implementation to update internal data structures.
+       * This is useful, for example, if you have mesh deformation that
+       * depends on time, or on the solution of the previous step.
+       *
+       * The default implementation of this function does nothing.
+       */
+      virtual void update();
+
+      /**
+       * A function that returns the initial deformation of points on the
+       * boundary (e.g. the surface vertices). @p position is the undeformed
+       * position and this function is expected to return the
+       * displacement vector of this position. The default implementation
+       * returns a zero displacement (= no initial deformation).
+       */
+      virtual
+      Tensor<1,dim>
+      compute_initial_deformation_on_boundary(const types::boundary_id boundary_indicator,
+                                              const Point<dim> &position) const;
+
+      /**
+       * A function that creates constraints for the velocity of certain mesh
+       * vertices (e.g. the surface vertices) for a specific set of boundaries.
+       * The calling class will respect
+       * these constraints when computing the new vertex positions.
+       * The default implementation creates no constraints.
+       */
+      virtual
+      void
+      compute_velocity_constraints_on_boundary(const DoFHandler<dim> &mesh_deformation_dof_handler,
+                                               AffineConstraints<double> &mesh_velocity_constraints,
+                                               const std::set<types::boundary_id> &boundary_id) const;
+
+      /**
+       * Declare the parameters this class takes through input files. The
+       * default implementation of this function does not describe any
+       * parameters. Consequently, derived classes do not have to overload
+       * this function if they do not take any runtime parameters.
+       */
+      static
+      void
+      declare_parameters (ParameterHandler &prm);
+
+      /**
+       * Read the parameters this class declares from the parameter file.
+       * The default implementation of this function does not read any
+       * parameters. Consequently, derived classes do not have to overload
+       * this function if they do not take any runtime parameters.
+       */
+      virtual
+      void
+      parse_parameters (ParameterHandler &prm);
+  };
+
 
 
   /**
-   * A namespace that contains everything that is related to the deformation
-   * of the mesh vertices over time.
+   * The MeshDeformationHandler that handles the motion
+   * of the surface, the internal nodes and computes the
+   * Arbitrary-Lagrangian-Eulerian correction terms.
    */
-  namespace MeshDeformation
+  template<int dim>
+  class MeshDeformationHandler: public SimulatorAccess<dim>
   {
-    /**
-     * A base class for mesh deformation plugins. Each derived class should
-     * implement a function that determines the deformation velocity for certain
-     * mesh vertices and store them in a AffineConstraints<double> object. The velocities
-     * for all non-constrained vertices will be computed by solving a Laplace-
-     * problem with the given constraints.
-     */
-    template<int dim>
-    class Interface
-    {
-      public:
-        /**
-         * Destructor. Made virtual to enforce that derived classes also have
-         * virtual destructors.
-         */
-        virtual ~Interface() = default;
+    public:
+      /**
+       * Initialize the mesh deformation handler, allowing it to read in
+       * relevant parameters as well as giving it a reference to the
+       * Simulator that owns it, since it needs to make fairly extensive
+       * changes to the internals of the simulator.
+       */
+      MeshDeformationHandler(Simulator<dim> &simulator);
 
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program after parse_parameters is run and after
-         * the SimulatorAccess (if applicable) is initialized.
-         *
-         * The default implementation of this function does nothing.
-         */
-        virtual void initialize ();
+      /**
+       * Destructor for the mesh deformation handler.
+       */
+      ~MeshDeformationHandler() override;
 
-        /**
-         * A function that is called at the beginning of each time step and
-         * that allows the implementation to update internal data structures.
-         * This is useful, for example, if you have mesh deformation that
-         * depends on time, or on the solution of the previous step.
-         *
-         * The default implementation of this function does nothing.
-         */
-        virtual void update();
-
-        /**
-         * A function that returns the initial deformation of points on the
-         * boundary (e.g. the surface vertices). @p position is the undeformed
-         * position and this function is expected to return the
-         * displacement vector of this position. The default implementation
-         * returns a zero displacement (= no initial deformation).
-         */
-        virtual
-        Tensor<1,dim>
-        compute_initial_deformation_on_boundary(const types::boundary_id boundary_indicator,
-                                                const Point<dim> &position) const;
-
-        /**
-         * A function that creates constraints for the velocity of certain mesh
-         * vertices (e.g. the surface vertices) for a specific set of boundaries.
-         * The calling class will respect
-         * these constraints when computing the new vertex positions.
-         * The default implementation creates no constraints.
-         */
-        virtual
-        void
-        compute_velocity_constraints_on_boundary(const DoFHandler<dim> &mesh_deformation_dof_handler,
-                                                 AffineConstraints<double> &mesh_velocity_constraints,
-                                                 const std::set<types::boundary_id> &boundary_id) const;
-
-        /**
-         * Declare the parameters this class takes through input files. The
-         * default implementation of this function does not describe any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
-
-        /**
-         * Read the parameters this class declares from the parameter file.
-         * The default implementation of this function does not read any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        virtual
-        void
-        parse_parameters (ParameterHandler &prm);
-    };
-
-
-
-    /**
-     * The MeshDeformationHandler that handles the motion
-     * of the surface, the internal nodes and computes the
-     * Arbitrary-Lagrangian-Eulerian correction terms.
-     */
-    template<int dim>
-    class MeshDeformationHandler: public SimulatorAccess<dim>
-    {
-      public:
-        /**
-         * Initialize the mesh deformation handler, allowing it to read in
-         * relevant parameters as well as giving it a reference to the
-         * Simulator that owns it, since it needs to make fairly extensive
-         * changes to the internals of the simulator.
-         */
-        MeshDeformationHandler(Simulator<dim> &simulator);
-
-        /**
-         * Destructor for the mesh deformation handler.
-         */
-        ~MeshDeformationHandler() override;
-
-        /**
-         * Initialization function of the MeshDeformationHandler.
-         *
-         * The default implementation of this function does nothing.
-         */
-        void initialize();
+      /**
+       * Initialization function of the MeshDeformationHandler.
+       *
+       * The default implementation of this function does nothing.
+       */
+      void initialize();
 
       /**
        * Called by Simulator::set_assemblers() to allow the FreeSurface plugin
@@ -652,7 +652,7 @@ namespace Assemblers
         dummy_ ## classname ## _3d (&aspect::MeshDeformation::MeshDeformationHandler<3>::register_mesh_deformation, \
                                     name, description); \
   }
-  }
+}
 }
 
 #endif
