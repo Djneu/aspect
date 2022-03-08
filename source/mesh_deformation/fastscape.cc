@@ -925,9 +925,9 @@ namespace aspect
           // of the model domain
           if (use_extra_base_level)
             {
-              if (right==1)
+              if ((right==1) && (h[index_right]<h_extra_base_level))
                 h[index_right] = h_extra_base_level;
-              if (left==1)
+              if ((left==1) && (h[index_left]<h_extra_base_level))
                 h[index_left] = h_extra_base_level;
             }
 
@@ -1042,9 +1042,9 @@ namespace aspect
 
           if (use_extra_base_level)
             {
-              if (bottom==1)
+              if ((bottom==1) && (h[index_bot]<h_extra_base_level))
                 h[index_bot] = h_extra_base_level;
-              if (top==1)
+              if ((top==1) && (h[index_top]<h_extra_base_level))
                 h[index_top] = h_extra_base_level;
             }
 
@@ -1381,6 +1381,9 @@ namespace aspect
 
             // set fixed ghost nodes to a base level for erosion that differs from sea level
             use_extra_base_level = prm.get_bool("Use an erosional base level differing from sea level");
+            AssertThrow(use_extra_base_level && use_ghost, ExcMessage(
+                          "If you want to use an erosional base level differing from sea level, "
+                          "you need to use ghost nodes."));
             h_extra_base_level = prm.get_double("Erosional base level differing from sea level");
           }
           prm.leave_subsection();
