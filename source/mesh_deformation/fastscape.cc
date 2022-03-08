@@ -1381,9 +1381,10 @@ namespace aspect
 
             // set fixed ghost nodes to a base level for erosion that differs from sea level
             use_extra_base_level = prm.get_bool("Use an erosional base level differing from sea level");
-            AssertThrow(use_extra_base_level && use_ghost, ExcMessage(
-                          "If you want to use an erosional base level differing from sea level, "
-                          "you need to use ghost nodes."));
+            if (use_extra_base_level)
+              AssertThrow(use_extra_base_level && use_ghost, ExcMessage(
+                            "If you want to use an erosional base level differing from sea level, "
+                            "you need to use ghost nodes."));
             h_extra_base_level = prm.get_double("Erosional base level differing from sea level");
           }
           prm.leave_subsection();
