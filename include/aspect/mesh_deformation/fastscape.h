@@ -75,7 +75,7 @@ namespace aspect
     //void folder_output_(int *length, int *astep, const char *c);
     // Copy slopes, used in determined ghost node height for mass flux flow in from a boundary.
     void fastscape_copy_slope_(double *slopep);
-    
+
     // View additional information from FastScape, not included in the .cc.
     void fastscape_view_();
     void fastscape_debug_();

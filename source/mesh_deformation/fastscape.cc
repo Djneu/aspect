@@ -885,14 +885,14 @@ namespace aspect
                */
               slope = left_flux/kdd;
               h[index_left] = h[index_left+1] + slope*2*dx;
-          // This sets the ghost nodes of fixed boundaries to a user specified height which will
-          // be used as an erosional baselevel by fastscape and may limit erosional flux out
-          // of the model domain
-          if (use_extra_base_level)
-            {
-              if ((left==1) && (h[index_left]<h_extra_base_level))
-                h[index_left] = h_extra_base_level;
-            }
+              // This sets the ghost nodes of fixed boundaries to a user specified height which will
+              // be used as an erosional baselevel by fastscape and may limit erosional flux out
+              // of the model domain
+              if (use_extra_base_level)
+                {
+                  if ((left==1) && (h[index_left]<h_extra_base_level))
+                    h[index_left] = h_extra_base_level;
+                }
             }
           else
             {
@@ -915,11 +915,11 @@ namespace aspect
             {
               slope = right_flux/kdd;
               h[index_right] = h[index_right-1] + slope*2*dx;
-          if (use_extra_base_level)
-            {
-              if ((right==1) && (h[index_right]<h_extra_base_level))
-                h[index_right] = h_extra_base_level;
-            }
+              if (use_extra_base_level)
+                {
+                  if ((right==1) && (h[index_right]<h_extra_base_level))
+                    h[index_right] = h_extra_base_level;
+                }
             }
           else
             {
@@ -1012,11 +1012,11 @@ namespace aspect
             {
               slope = top_flux/kdd;
               h[index_top] = h[index_top-nx] + slope*2*dx;
-          if (use_extra_base_level)
-            {
-              if ((top==1) && (h[index_top]<h_extra_base_level))
-                h[index_top] = h_extra_base_level;
-            }
+              if (use_extra_base_level)
+                {
+                  if ((top==1) && (h[index_top]<h_extra_base_level))
+                    h[index_top] = h_extra_base_level;
+                }
 
             }
           else
@@ -1035,11 +1035,11 @@ namespace aspect
             {
               slope = bottom_flux/kdd;
               h[index_bot] = h[index_bot+nx] + slope*2*dx;
-          if (use_extra_base_level)
-            {
-              if ((bottom==1) && (h[index_bot]<h_extra_base_level))
-                h[index_bot] = h_extra_base_level;
-            }
+              if (use_extra_base_level)
+                {
+                  if ((bottom==1) && (h[index_bot]<h_extra_base_level))
+                    h[index_bot] = h_extra_base_level;
+                }
             }
           else
             {
