@@ -861,6 +861,15 @@ namespace aspect
               // so we need to consider the slope over 2 dx.
               slope = left_flux/kdd;
               h[index_left] = h[index_left+1] + slope*2*dx;
+
+              // This sets the ghost nodes of fixed boundaries to a user specified height which will
+              // be used as an erosional baselevel by fastscape and may limit erosional flux out
+              // of the model domain
+              if (use_extra_base_level)
+                {
+                  if ((left==1) && (h[index_left]<h_extra_base_level))
+                    h[index_left] = h_extra_base_level;
+                }
             }
           else
             {
@@ -881,6 +890,11 @@ namespace aspect
             {
               slope = right_flux/kdd;
               h[index_right] = h[index_right-1] + slope*2*dx;
+              if (use_extra_base_level)
+                {
+                  if ((right==1) && (h[index_right]<h_extra_base_level))
+                    h[index_right] = h_extra_base_level;
+                }
             }
           else
             {
@@ -969,6 +983,11 @@ namespace aspect
             {
               slope = top_flux/kdd;
               h[index_top] = h[index_top-nx] + slope*2*dx;
+              if (use_extra_base_level)
+                {
+                  if ((top==1) && (h[index_top]<h_extra_base_level))
+                    h[index_top] = h_extra_base_level;
+                }
             }
           else
             {
@@ -980,6 +999,11 @@ namespace aspect
                 slope = top_flux/kdd - std::tan(slopep[index_top-nx]*numbers::PI/180.);
 
               h[index_top] = h[index_top] + slope*2*dx;
+              if (use_extra_base_level)
+                {
+                  if ((bottom==1) && (h[index_bot]<h_extra_base_level))
+                    h[index_bot] = h_extra_base_level;
+                }
             }
 
           if (current_timestep == 1 || bottom_flux == 0)
@@ -1265,6 +1289,27 @@ namespace aspect
             prm.declare_entry ("Wind direction", "west",
                                Patterns::Selection("east|west|south|north"),
                                "This parameter assumes a wind direction, deciding which side is reduced from the wind barrier.");
+            prm.declare_entry ("Use an erosional base level differing from sea level", "false",
+                               Patterns::Bool (),
+                               "Whether or not to use an erosional base level that differs from sea level. Setting this parameter to "
+                               "true will set all ghost nodes of fixed FastScape boundaries to the height you specify in "
+                               "'set Erosional base level differing from sea level'. \nThis can make "
+                               "sense for a continental model where the model surrounding topography is assumed above sea level, "
+                               "e.g. highlands. If the sea level would be used as an erosional base level in this case, all topography "
+                               "erodes away with lots of 'sediment volume' lost through the sides of the model. This is mostly "
+                               "important, when there are mountains in the middle of the model, while it is less important when there "
+                               "is lower relief in the middle of the model. \n"
+                               "In the FastScape  visualization files, setting the extra base level may show up as a strong "
+                               "slope at the fixed boundaries of the model. However, in the ASPECT visualization files it will not "
+                               "show up, as the ghost nodes only exist in FastScape.");
+            prm.declare_entry("Erosional base level differing from sea level", "0",
+                              Patterns::Double(),
+                              "When 'Use an erosional base level differing from sea level' is set to true, all ghost nodes of fixed "
+                              "FastScape boundaries where no mass flux is specified by the user (FastScape boundary condition set to 1 "
+                              "and 'Left/Right/Bottom/Top mass flux' set to 0) will be fixed to this elevation. The "
+                              "reflecting boundaries (FastScape boundary condition set to 0) will not be affected, nor are the "
+                              "boundaries where a mass flux is specified. \n"
+                              "Units: m");
           }
           prm.leave_subsection();
 
@@ -1413,6 +1458,14 @@ namespace aspect
               wind_direction = 3;
             else
               AssertThrow(false, ExcMessage("Not a valid wind direction."));
+
+            // set fixed ghost nodes to a base level for erosion that differs from sea level
+            use_extra_base_level = prm.get_bool("Use an erosional base level differing from sea level");
+            if (use_extra_base_level)
+              AssertThrow(use_extra_base_level && use_ghost, ExcMessage(
+                            "If you want to use an erosional base level differing from sea level, "
+                            "you need to use ghost nodes."));
+            h_extra_base_level = prm.get_double("Erosional base level differing from sea level");
           }
           prm.leave_subsection();
 

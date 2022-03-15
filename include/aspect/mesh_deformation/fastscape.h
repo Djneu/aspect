@@ -514,6 +514,11 @@ namespace aspect
        */
       double sl;
 
+      // Parameters to set an extra erosional base level
+      // on the ghost nodes that differs from sea level.
+      bool use_extra_base_level;
+      double h_extra_base_level;
+
       /**
        * Surface porosity for sand.
        */
