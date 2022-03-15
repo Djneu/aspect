@@ -75,7 +75,7 @@ namespace aspect
     //void folder_output_(int *length, int *astep, const char *c);
     // Copy slopes, used in determined ghost node height for mass flux flow in from a boundary.
     void fastscape_copy_slope_(double *slopep);
-
+    
     // View additional information from FastScape, not included in the .cc.
     void fastscape_view_();
     void fastscape_debug_();
@@ -112,12 +112,12 @@ namespace aspect
        */
       void parse_parameters (ParameterHandler &prm);
 
-        /**
-         * A function that fills the viscosity derivatives in the
-         * MaterialModelOutputs object that is handed over, if they exist.
-         * Does nothing otherwise.
-         */
-        void set_ghost_nodes(double *h, double *vx, double *vy, double *vz, int nx, int ny) const;
+      /**
+       * A function that fills the viscosity derivatives in the
+       * MaterialModelOutputs object that is handed over, if they exist.
+       * Does nothing otherwise.
+       */
+      void set_ghost_nodes(double *h, double *vx, double *vy, double *vz, int nx, int ny) const;
 
     private:
       // Number of FastScape steps per ASPECT timestep.
@@ -213,7 +213,7 @@ namespace aspect
       double kdd;
       // Sediment transport coefficient.
       double kdsed;
-      
+
       // Orographic parameters
       int mmax;
       int wb;
@@ -221,6 +221,11 @@ namespace aspect
       double reduc_mmax;
       double reduc_wb;
       bool stackoro;
+
+      // Parameters to set an extra erosional base level
+      // on the ghost nodes that differs from sea level.
+      bool use_extra_base_level;
+      double h_extra_base_level;
 
       /**
        * Marine parameters
@@ -259,18 +264,18 @@ namespace aspect
       double precision;
 
 
-        /**
-         * Interval between the generation of graphical output. This parameter
-         * is read from the input file and consequently is not part of the
-         * state that needs to be saved and restored.
-         */
-        double output_interval;
+      /**
+       * Interval between the generation of graphical output. This parameter
+       * is read from the input file and consequently is not part of the
+       * state that needs to be saved and restored.
+       */
+      double output_interval;
 
-        /**
-         * A time (in seconds) at which the last graphical output was supposed
-         * to be produced. Used to check for the next necessary output time.
-         */
-        mutable double last_output_time;
+      /**
+       * A time (in seconds) at which the last graphical output was supposed
+       * to be produced. Used to check for the next necessary output time.
+       */
+      mutable double last_output_time;
   };
 }
 }
