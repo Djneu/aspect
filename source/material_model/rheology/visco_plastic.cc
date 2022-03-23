@@ -453,6 +453,20 @@ namespace aspect
               composition_mask.set(i,false);
           }
 
+        // These are the compositional fields used to track deposition depth and
+        // sediment age of the sediments deposited by the FastScape plugin.
+        // ToDo: insert check that these fields are only set as a mask when fastscape is used?
+        if (this->introspection().compositional_name_exists("sediment_age"))
+          {
+            const int sedi_age_position_tmp = this->introspection().compositional_index_for_name("sediment_age");
+            composition_mask.set(sedi_age_position_tmp,false);
+          }
+        if (this->introspection().compositional_name_exists("deposition_depth"))
+          {
+            const int depo_depth_position_tmp = this->introspection().compositional_index_for_name("deposition_depth");
+            composition_mask.set(depo_depth_position_tmp,false);
+          }
+
         return composition_mask;
       }
 

@@ -112,12 +112,12 @@ namespace aspect
        */
       void parse_parameters (ParameterHandler &prm);
 
-        /**
-         * A function that fills the viscosity derivatives in the
-         * MaterialModelOutputs object that is handed over, if they exist.
-         * Does nothing otherwise.
-         */
-        void set_ghost_nodes(double *h, double *vx, double *vy, double *vz, int nx, int ny) const;
+      /**
+       * A function that fills the viscosity derivatives in the
+       * MaterialModelOutputs object that is handed over, if they exist.
+       * Does nothing otherwise.
+       */
+      void set_ghost_nodes(double *h, double *vx, double *vy, double *vz, int nx, int ny) const;
 
     private:
       // Number of FastScape steps per ASPECT timestep.
@@ -213,7 +213,7 @@ namespace aspect
       double kdd;
       // Sediment transport coefficient.
       double kdsed;
-      
+
       // Orographic parameters
       int mmax;
       int wb;
@@ -259,18 +259,18 @@ namespace aspect
       double precision;
 
 
-        /**
-         * Interval between the generation of graphical output. This parameter
-         * is read from the input file and consequently is not part of the
-         * state that needs to be saved and restored.
-         */
-        double output_interval;
+      /**
+       * Interval between the generation of graphical output. This parameter
+       * is read from the input file and consequently is not part of the
+       * state that needs to be saved and restored.
+       */
+      double output_interval;
 
-        /**
-         * A time (in seconds) at which the last graphical output was supposed
-         * to be produced. Used to check for the next necessary output time.
-         */
-        mutable double last_output_time;
+      /**
+       * A time (in seconds) at which the last graphical output was supposed
+       * to be produced. Used to check for the next necessary output time.
+       */
+      mutable double last_output_time;
   };
 }
 }

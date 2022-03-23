@@ -65,31 +65,31 @@ namespace aspect
       // Initialize parameters for restarting fastscape
       restart = this->get_parameters().resume_computation;
       restart_step = 0;
-      
-      // Since we don't open these until we're on one processor, we need to check if the 
+
+      // Since we don't open these until we're on one processor, we need to check if the
       // restart files exist before hand.
       // TODO: This was quickly done and can likely be shortened/improved.
-      if(restart)
-      {
-        // Create variables for output directory and restart file
-        std::string dirname = this->get_output_directory();
-        
-        std::ifstream in;
-        in.open(dirname + "fastscape_h_restart.txt");
-        if (in.fail())
+      if (restart)
+        {
+          // Create variables for output directory and restart file
+          std::string dirname = this->get_output_directory();
+
+          std::ifstream in;
+          in.open(dirname + "fastscape_h_restart.txt");
+          if (in.fail())
             AssertThrow(false,ExcMessage("Cannot open topography file to restart FastScape."));
-        in.close();
-        
-        in.open(dirname + "fastscape_b_restart.txt");
-        if (in.fail())
+          in.close();
+
+          in.open(dirname + "fastscape_b_restart.txt");
+          if (in.fail())
             AssertThrow(false,ExcMessage("Cannot open basement file to restart FastScape."));
-        in.close();
-        
-        in.open(dirname + "fastscape_steps_restart.txt");
-        if (in.fail())
+          in.close();
+
+          in.open(dirname + "fastscape_steps_restart.txt");
+          if (in.fail())
             AssertThrow(false,ExcMessage("Cannot open steps file to restart FastScape."));
-        in.close();
-      }
+          in.close();
+        }
 
       // second is for maximum coordinates, first for minimum.
       for (unsigned int i=0; i<dim; ++i)
@@ -280,26 +280,26 @@ namespace aspect
               const std::string restart_step_filename = dirname + "fastscape_steps_restart.txt";
               const std::string restart_filename_basement = dirname + "fastscape_b_restart.txt";
 
-	      // Determine whether to create a VTK file this timestep.
+              // Determine whether to create a VTK file this timestep.
               bool make_vtk = 0;
               if (this->get_time() >= last_output_time + output_interval || this->get_time()+a_dt >= end_time)
-              {
-                // Don't create a visualization file on a restart.
-                if(!restart)
-		  make_vtk = 1;
+                {
+                  // Don't create a visualization file on a restart.
+                  if (!restart)
+                    make_vtk = 1;
 
-                if (output_interval > 0)
-               {
-                // We need to find the last time output was supposed to be written.
-                // this is the last_output_time plus the largest positive multiple
-                // of output_intervals that passed since then. We need to handle the
-                // edge case where last_output_time+output_interval==current_time,
-                // we did an output and std::floor sadly rounds to zero. This is done
-                // by forcing std::floor to round 1.0-eps to 1.0.
-                const double magic = 1.0+2.0*std::numeric_limits<double>::epsilon();
-                last_output_time = last_output_time + std::floor((this->get_time()-last_output_time)/output_interval*magic) * output_interval/magic;
+                  if (output_interval > 0)
+                    {
+                      // We need to find the last time output was supposed to be written.
+                      // this is the last_output_time plus the largest positive multiple
+                      // of output_intervals that passed since then. We need to handle the
+                      // edge case where last_output_time+output_interval==current_time,
+                      // we did an output and std::floor sadly rounds to zero. This is done
+                      // by forcing std::floor to round 1.0-eps to 1.0.
+                      const double magic = 1.0+2.0*std::numeric_limits<double>::epsilon();
+                      last_output_time = last_output_time + std::floor((this->get_time()-last_output_time)/output_interval*magic) * output_interval/magic;
+                    }
                 }
-              } 
 
               // Initialize kf and kd.
               for (int i=0; i<array_size; i++)
@@ -436,17 +436,17 @@ namespace aspect
               else
                 {
                   // If it isn't the first timestep we ignore initialization and instead copy all height values from FastScape.
-                 if(use_v)
-                   fastscape_copy_h_(h.get());
+                  if (use_v)
+                    fastscape_copy_h_(h.get());
                 }
 
-                // Find the appropriate sediment rain based off the time interval.
-                double time = this->get_time()/year_in_seconds;
-                double sediment_rain = sr_values[0];
-                for (unsigned int j=0; j<sr_times.size(); j++)
+              // Find the appropriate sediment rain based off the time interval.
+              double time = this->get_time()/year_in_seconds;
+              double sediment_rain = sr_values[0];
+              for (unsigned int j=0; j<sr_times.size(); j++)
                 {
-                  if(time > sr_times[j])
-                       sediment_rain = sr_values[j+1];
+                  if (time > sr_times[j])
+                    sediment_rain = sr_values[j+1];
                 }
 
               /*
@@ -466,7 +466,7 @@ namespace aspect
                       const double h_seed = (std::rand()%( 2*noise_h+1 )) - noise_h;
                       h[i] = h[i] + h_seed;
                     }
-              
+
                   // Here we add the sediment rain (m/yr) as a flat increase in height.
                   // This is done because adding it as an uplift rate would affect the basement.
                   if (sediment_rain > 0 && use_marine)
@@ -491,107 +491,107 @@ namespace aspect
                */
               // I redid the indexing here, at some point I should double check that these still work without issue.
               if (use_ghost)
-                 set_ghost_nodes(h.get(), vx.get(), vy.get(), vz.get(), nx, ny);
+                set_ghost_nodes(h.get(), vx.get(), vy.get(), vz.get(), nx, ny);
 
               //////// Section to apply orographic controls /////////
 
-	          // First for the wind barrier, we find the maximum height and index
+              // First for the wind barrier, we find the maximum height and index
               // along each line in the x and y direction.
               // If wind is east or west, we find maximum point for each ny row along x.
               std::vector<std::vector<double>> hmaxx(2, std::vector<double>(ny, 0.0));
-	          if(wd == 0 || wd == 1)
-              {
-              for (int i=0; i<ny; i++)
-               	    {
+              if (wd == 0 || wd == 1)
+                {
+                  for (int i=0; i<ny; i++)
+                    {
                       for (int j=0; j<nx; j++)
                         {
-                          if( h[nx*i+j] > hmaxx[0][i])
+                          if ( h[nx*i+j] > hmaxx[0][i])
                             {
-	                          hmaxx[0][i] = h[nx*i+j];
+                              hmaxx[0][i] = h[nx*i+j];
                               hmaxx[1][i] = j;
                             }
                         }
                     }
                 }
 
-                // If wind is north or south, we find maximum point for each nx row along y.
-                std::vector<std::vector<double>> hmaxy(2, std::vector<double>(nx, 0.0));
-	            if(wd == 2 || wd == 3)
-		        {
+              // If wind is north or south, we find maximum point for each nx row along y.
+              std::vector<std::vector<double>> hmaxy(2, std::vector<double>(nx, 0.0));
+              if (wd == 2 || wd == 3)
+                {
                   for (int i=0; i<nx; i++)
                     {
                       for (int j=0; j<ny; j++)
                         {
-                          if( h[nx*j+i] > hmaxy[0][i])
-		                    {
-	                          hmaxy[0][i] = h[nx*j+i];
+                          if ( h[nx*j+i] > hmaxy[0][i])
+                            {
+                              hmaxy[0][i] = h[nx*j+i];
                               hmaxy[1][i] = j;
                             }
                         }
-                     }
-                   } 
- 
+                    }
+                }
+
 
               // Now we loop through all the points again and apply the reductions.
               for (int i=0; i<ny; i++)
                 {
 
-                // Reduction from wind barrier. Apply a switch based off wind direction. 
-                // Where 0 is wind going to the west, 1 the east, 2 the south, and 3 the north.
-                for (int j=0; j<nx; j++)
-                  {
-                switch(wd)
-                  {
-                  case 0 : 
+                  // Reduction from wind barrier. Apply a switch based off wind direction.
+                  // Where 0 is wind going to the west, 1 the east, 2 the south, and 3 the north.
+                  for (int j=0; j<nx; j++)
                     {
-                      if ( (hmaxx[0][i] > wb) && (j < hmaxx[1][i]) || (h[nx*i+j] > mmax && !stackoro) )
+                      switch (wd)
                         {
-                          kf[nx*i+j] = kf[nx*i+j]*reduc_wb;
-                          kd[nx*i+j] = kd[nx*i+j]*reduc_wb;
+                          case 0 :
+                          {
+                            if ( (hmaxx[0][i] > wb) && (j < hmaxx[1][i]) || (h[nx*i+j] > mmax && !stackoro) )
+                              {
+                                kf[nx*i+j] = kf[nx*i+j]*reduc_wb;
+                                kd[nx*i+j] = kd[nx*i+j]*reduc_wb;
+                              }
+                            break;
+                          }
+                          case 1 :
+                          {
+                            if ( (hmaxx[0][i] > wb) && (j > hmaxx[1][i]) || (h[nx*i+j] > mmax && !stackoro) )
+                              {
+                                kf[nx*i+j] = kf[nx*i+j]*reduc_wb;
+                                kd[nx*i+j] = kd[nx*i+j]*reduc_wb;
+                              }
+                            break;
+                          }
+                          case 2 :
+                          {
+                            if ( (hmaxy[0][j] > wb) && (i > hmaxy[1][j]) || (h[nx*i+j] > mmax && !stackoro) )
+                              {
+                                kf[nx*i+j] = kf[nx*i+j]*reduc_wb;
+                                kd[nx*i+j] = kd[nx*i+j]*reduc_wb;
+                              }
+                            break;
+                          }
+                          case 3 :
+                          {
+                            if ( (hmaxy[0][j] > wb) && (i < hmaxy[1][j]) || (h[nx*i+j] > mmax && !stackoro) )
+                              {
+                                kf[nx*i+j] = kf[nx*i+j]*reduc_wb;
+                                kd[nx*i+j] = kd[nx*i+j]*reduc_wb;
+                              }
+                            break;
+                          }
+                          default :
+                            AssertThrow(false, ExcMessage("This does not correspond with a wind direction."));
+                            break;
                         }
-                        break;
-                    }
-                  case 1 :
-                    {
-                      if ( (hmaxx[0][i] > wb) && (j > hmaxx[1][i]) || (h[nx*i+j] > mmax && !stackoro) )
-                        {
-                          kf[nx*i+j] = kf[nx*i+j]*reduc_wb;
-                          kd[nx*i+j] = kd[nx*i+j]*reduc_wb;
-                        }
-                        break;
-                    }
-                  case 2 :
-                    {
-                      if ( (hmaxy[0][j] > wb) && (i > hmaxy[1][j]) || (h[nx*i+j] > mmax && !stackoro) )
-                        {
-                          kf[nx*i+j] = kf[nx*i+j]*reduc_wb;
-                          kd[nx*i+j] = kd[nx*i+j]*reduc_wb;
-                        }
-                        break;
-                    }
-                  case 3 :
-                    {
-                      if ( (hmaxy[0][j] > wb) && (i < hmaxy[1][j]) || (h[nx*i+j] > mmax && !stackoro) )
-                        {
-                          kf[nx*i+j] = kf[nx*i+j]*reduc_wb;
-                          kd[nx*i+j] = kd[nx*i+j]*reduc_wb;
-                        }
-                        break;
-                    }
-                  default :
-                    AssertThrow(false, ExcMessage("This does not correspond with a wind direction."));
-                    break;
-                  }   
 
-                  // Apply elevation control.
-                  if(h[nx*i+j] > mmax && stackoro)
-                    {
-                      kf[nx*i+j] = kf[nx*i+j]*reduc_mmax;
-                      kd[nx*i+j] = kd[nx*i+j]*reduc_mmax;
+                      // Apply elevation control.
+                      if (h[nx*i+j] > mmax && stackoro)
+                        {
+                          kf[nx*i+j] = kf[nx*i+j]*reduc_mmax;
+                          kd[nx*i+j] = kd[nx*i+j]*reduc_mmax;
+                        }
                     }
-                  }                                 
-                }   
-              //////// End orographic section. Update to erosional parameters applied later. /////////  
+                }
+              //////// End orographic section. Update to erosional parameters applied later. /////////
 
               // Get current fastscape timestep.
               int istep = 0;
@@ -637,11 +637,11 @@ namespace aspect
               fastscape_set_dt_(&f_dt);
 
               // Set velocity components.
-              if(use_v)
-              {
-                fastscape_set_u_(vz.get());
-                fastscape_set_v_(vx.get(), vy.get());
-              }
+              if (use_v)
+                {
+                  fastscape_set_u_(vz.get());
+                  fastscape_set_v_(vx.get(), vy.get());
+                }
 
               // Set h to new values, and erosional parameters if there have been changes.
               fastscape_set_h_(h.get());
@@ -691,10 +691,10 @@ namespace aspect
 
               visualization_step = current_timestep;
               if (make_vtk)
-              {
-                 this->get_pcout() << "      Writing VTK..." << std::endl;
-                 fastscape_named_vtk_(kd.get(), &vexp, &visualization_step, c, &length);
-              }
+                {
+                  this->get_pcout() << "      Writing VTK..." << std::endl;
+                  fastscape_named_vtk_(kd.get(), &vexp, &visualization_step, c, &length);
+                }
 
               // If we've reached the end time, destroy fastscape.
               if (this->get_time()+a_dt >= end_time)
@@ -835,241 +835,243 @@ namespace aspect
     template <int dim>
     void FastScape<dim>::set_ghost_nodes(double *h, double *vx, double *vy, double *vz, int nx, int ny) const
     {
-                 const int current_timestep = this->get_timestep_number ();
-                 std::unique_ptr<double[]> slopep (new double[array_size]());
+      const int current_timestep = this->get_timestep_number ();
+      std::unique_ptr<double[]> slopep (new double[array_size]());
 
-                 /*
-                  * Copy the slopes at each point, this will be used to set an H
-                  * at the ghost nodes if a boundary mass flux is given.
-                  */
-                  fastscape_copy_slope_(slopep.get());
+      /*
+       * Copy the slopes at each point, this will be used to set an H
+       * at the ghost nodes if a boundary mass flux is given.
+       */
+      fastscape_copy_slope_(slopep.get());
 
-                  /*
-                   * Here we set the ghost nodes at the left and right boundaries. In most cases,
-                   * this involves setting the node to the same values of v and h as the inward node.
-                   * With the inward node being above or below for the bottom and top rows of ghost nodes,
-                   * or to the left and right for the right and left columns of ghost nodes.
-                   */
-                  for (int j=0; j<ny; j++)
-                    {
-                      /*
-                      * Nx*j will give us the row we're in, and one is subtracted as FastScape starts from 1 not zero.
-                      * If we're on the left, the multiple of the row will always represent the first node.
-                      * Subtracting one to the row above this gives us the last node of the previous row.
-                      */
-                      const int index_left = nx*j;
-                      const int index_right = nx*(j+1)-1;
-                      double slope = 0;
+      /*
+       * Here we set the ghost nodes at the left and right boundaries. In most cases,
+       * this involves setting the node to the same values of v and h as the inward node.
+       * With the inward node being above or below for the bottom and top rows of ghost nodes,
+       * or to the left and right for the right and left columns of ghost nodes.
+       */
+      for (int j=0; j<ny; j++)
+        {
+          /*
+          * Nx*j will give us the row we're in, and one is subtracted as FastScape starts from 1 not zero.
+          * If we're on the left, the multiple of the row will always represent the first node.
+          * Subtracting one to the row above this gives us the last node of the previous row.
+          */
+          const int index_left = nx*j;
+          const int index_right = nx*(j+1)-1;
+          double slope = 0;
 
-                      /*
-                      * Here we set the ghost nodes to the ones next to them, where for the left we
-                      * add one to go to the node to the right, and for the right side
-                      * we subtract one to go to the inner node to the left.
-                      */
-                      vz[index_right] = vz[index_right-1];
-                      vz[index_left] =  vz[index_left+1];
+          /*
+          * Here we set the ghost nodes to the ones next to them, where for the left we
+          * add one to go to the node to the right, and for the right side
+          * we subtract one to go to the inner node to the left.
+          */
+          vz[index_right] = vz[index_right-1];
+          vz[index_left] =  vz[index_left+1];
 
-                      vy[index_right] = vy[index_right-1];
-                      vy[index_left] = vy[index_left+1];
+          vy[index_right] = vy[index_right-1];
+          vy[index_left] = vy[index_left+1];
 
-                      vx[index_right] = vx[index_right-1];
-                      vx[index_left] = vx[index_left+1];
+          vx[index_right] = vx[index_right-1];
+          vx[index_left] = vx[index_left+1];
 
-                      if (current_timestep == 1 || left_flux == 0)
-                        {
-                          /*
-                           * If its the first timestep add in initial slope. If we have no flux,
-                           * set the ghost node to the node next to it.
-                           * FastScape calculates the slope by looking at all nodes surrounding the point
-                           * so we need to consider the slope over 2 dx.
-                           */
-                          slope = left_flux/kdd;
-                          h[index_left] = h[index_left+1] + slope*2*dx;
-                        }
-                      else
-                        {
-                          /*
-                           * If we have flux through a boundary, we need to update the height to keep the correct slope.
-                           * Because the corner nodes always show a slope of zero, this will update them according to
-                           * the closest non-ghost node. E.g. if we're at a corner node, look instead up a row and inward.
-                           */
-                          if (j == 0)
-                            slope = left_flux/kdd - std::tan(slopep[index_left+nx+1]*numbers::PI/180.);
-                          else if (j==(ny-1))
-                            slope = left_flux/kdd - std::tan(slopep[index_left-nx+1]*numbers::PI/180.);
-                          else
-                            slope = left_flux/kdd - std::tan(slopep[index_left+1]*numbers::PI/180.);
+          if (current_timestep == 1 || left_flux == 0)
+            {
+              /*
+               * If its the first timestep add in initial slope. If we have no flux,
+               * set the ghost node to the node next to it.
+               * FastScape calculates the slope by looking at all nodes surrounding the point
+               * so we need to consider the slope over 2 dx.
+               */
+              slope = left_flux/kdd;
+              h[index_left] = h[index_left+1] + slope*2*dx;
+            }
+          else
+            {
+              /*
+               * If we have flux through a boundary, we need to update the height to keep the correct slope.
+               * Because the corner nodes always show a slope of zero, this will update them according to
+               * the closest non-ghost node. E.g. if we're at a corner node, look instead up a row and inward.
+               */
+              if (j == 0)
+                slope = left_flux/kdd - std::tan(slopep[index_left+nx+1]*numbers::PI/180.);
+              else if (j==(ny-1))
+                slope = left_flux/kdd - std::tan(slopep[index_left-nx+1]*numbers::PI/180.);
+              else
+                slope = left_flux/kdd - std::tan(slopep[index_left+1]*numbers::PI/180.);
 
-                          h[index_left] = h[index_left] + slope*2*dx;
-                        }
+              h[index_left] = h[index_left] + slope*2*dx;
+            }
 
-                      if (current_timestep == 1 || right_flux == 0)
-                        {
-                          slope = right_flux/kdd;
-                          h[index_right] = h[index_right-1] + slope*2*dx;
-                        }
-                      else
-                        {
-                          if (j == 0)
-                            slope = right_flux/kdd - std::tan(slopep[index_right+nx-1]*numbers::PI/180.);
-                          else if (j==(ny-1))
-                            slope = right_flux/kdd - std::tan(slopep[index_right-nx-1]*numbers::PI/180.);
-                          else
-                            slope = right_flux/kdd - std::tan(slopep[index_right-1]*numbers::PI/180.);
+          if (current_timestep == 1 || right_flux == 0)
+            {
+              slope = right_flux/kdd;
+              h[index_right] = h[index_right-1] + slope*2*dx;
+            }
+          else
+            {
+              if (j == 0)
+                slope = right_flux/kdd - std::tan(slopep[index_right+nx-1]*numbers::PI/180.);
+              else if (j==(ny-1))
+                slope = right_flux/kdd - std::tan(slopep[index_right-nx-1]*numbers::PI/180.);
+              else
+                slope = right_flux/kdd - std::tan(slopep[index_right-1]*numbers::PI/180.);
 
-                          h[index_right] = h[index_right] + slope*2*dx;
-                        }
+              h[index_right] = h[index_right] + slope*2*dx;
+            }
 
-                      /*
-                      * If the boundaries are periodic, then we look at the velocities on both sides of the
-                      * model, and set the ghost node according to the direction of flow. As FastScape will
-                      * receive all velocities it will have a direction, and we only need to look at the (non-ghost)
-                      * nodes directly to the left and right.
-                      */
-                      if (left == 0 && right == 0)
-                        {
-                          // First we assume that flow is going to the left.
-                          int side = index_left;
-	                  int op_side = index_right;
+          /*
+          * If the boundaries are periodic, then we look at the velocities on both sides of the
+          * model, and set the ghost node according to the direction of flow. As FastScape will
+          * receive all velocities it will have a direction, and we only need to look at the (non-ghost)
+          * nodes directly to the left and right.
+          */
+          if (left == 0 && right == 0)
+            {
+              // First we assume that flow is going to the left.
+              int side = index_left;
+              int op_side = index_right;
 
-                          // Indexing depending on which side the ghost node is being set to.
-                          int jj = 1;
+              // Indexing depending on which side the ghost node is being set to.
+              int jj = 1;
 
-                          /*
-                          * If nodes on both sides are going the same direction, then set the respective
-                          * ghost nodes to equal these sides. By doing this, the ghost nodes at the opposite
-                          * side of flow will work as a mirror mimicing what is happening on the other side.
-                          */
-                          if (vx[index_right-1] > 0 && vx[index_left+1] >= 0)
-                            {
-                              side = index_right;
-                              op_side = index_left;
-                              jj = -1;
-                            }
-                          else if (vx[index_right-1] <= 0 && vx[index_left+1] < 0)
-                            {
-                              side = index_left;
-                              op_side = index_right;
-                              jj = 1;
-                            }
-                          else
-                            continue;
+              /*
+              * If nodes on both sides are going the same direction, then set the respective
+              * ghost nodes to equal these sides. By doing this, the ghost nodes at the opposite
+              * side of flow will work as a mirror mimicing what is happening on the other side.
+              */
+              if (vx[index_right-1] > 0 && vx[index_left+1] >= 0)
+                {
+                  side = index_right;
+                  op_side = index_left;
+                  jj = -1;
+                }
+              else if (vx[index_right-1] <= 0 && vx[index_left+1] < 0)
+                {
+                  side = index_left;
+                  op_side = index_right;
+                  jj = 1;
+                }
+              else
+                continue;
 
-                          // Set right ghost node
-                          h[index_right] = h[side+jj];
-                          vx[index_right] = vx[side+jj];
-                          vy[index_right] = vy[side+jj];
-                          vz[index_right] = vz[side+jj];
+              // Set right ghost node
+              h[index_right] = h[side+jj];
+              vx[index_right] = vx[side+jj];
+              vy[index_right] = vy[side+jj];
+              vz[index_right] = vz[side+jj];
 
-                          // Set left ghost node
-                          h[index_left] = h[side+jj];
-                          vx[index_left] = vx[side+jj];
-                          vy[index_left] = vy[side+jj];
-                          vz[index_left] = vz[side+jj];
+              // Set left ghost node
+              h[index_left] = h[side+jj];
+              vx[index_left] = vx[side+jj];
+              vy[index_left] = vy[side+jj];
+              vz[index_left] = vz[side+jj];
 
-                          // Set opposing ASPECT boundary so it's periodic.
-                          h[op_side-jj] = h[side+jj];
-                          vx[op_side-jj] = vx[side+jj];
-                          vz[op_side-jj] = vz[side+jj];
-                          vy[op_side-jj] = vy[side+jj];
-                        }
-                    }
+              // Set opposing ASPECT boundary so it's periodic.
+              h[op_side-jj] = h[side+jj];
+              vx[op_side-jj] = vx[side+jj];
+              vz[op_side-jj] = vz[side+jj];
+              vy[op_side-jj] = vy[side+jj];
+            }
+        }
 
-                  // Now do the same for the top and bottom ghost nodes.
-                  for (int j=0; j<nx; j++)
-                    {
-                      // The bottom row indexes are 0 to nx-1.
-                      const int index_bot = j;
+      // Now do the same for the top and bottom ghost nodes.
+      for (int j=0; j<nx; j++)
+        {
+          // The bottom row indexes are 0 to nx-1.
+          const int index_bot = j;
 
-                      // Nx multiplied by (total rows - 1) gives us the start of
-                      // the top row, and j gives the position in the row.
-                      const int index_top = nx*(ny-1)+j;
-                      double slope = 0;
+          // Nx multiplied by (total rows - 1) gives us the start of
+          // the top row, and j gives the position in the row.
+          const int index_top = nx*(ny-1)+j;
+          double slope = 0;
 
-                      vz[index_bot] = vz[index_bot+nx];
-                      vz[index_top] = vz[index_top-nx];
+          vz[index_bot] = vz[index_bot+nx];
+          vz[index_top] = vz[index_top-nx];
 
-                      vy[index_bot] = vy[index_bot+nx];
-                      vy[index_top] =  vy[index_top-nx];
+          vy[index_bot] = vy[index_bot+nx];
+          vy[index_top] =  vy[index_top-nx];
 
-                      vx[index_bot] = vx[index_bot+nx];
-                      vx[index_top] =  vx[index_top-nx];
+          vx[index_bot] = vx[index_bot+nx];
+          vx[index_top] =  vx[index_top-nx];
 
-                      if (current_timestep == 1 || top_flux == 0)
-                        {
-                          slope = top_flux/kdd;
-                          h[index_top] = h[index_top-nx] + slope*2*dx;
-                        }
-                      else
-                        {
-                          if (j == 0)
-                            slope = top_flux/kdd - std::tan(slopep[index_top-nx+1]*numbers::PI/180.);
-                          else if (j==(nx-1))
-                            slope = top_flux/kdd - std::tan(slopep[index_top-nx-1]*numbers::PI/180.);
-                          else
-                            slope = top_flux/kdd - std::tan(slopep[index_top-nx]*numbers::PI/180.);
+          if (current_timestep == 1 || top_flux == 0)
+            {
+              slope = top_flux/kdd;
+              h[index_top] = h[index_top-nx] + slope*2*dx;
+            }
+          else
+            {
+              if (j == 0)
+                slope = top_flux/kdd - std::tan(slopep[index_top-nx+1]*numbers::PI/180.);
+              else if (j==(nx-1))
+                slope = top_flux/kdd - std::tan(slopep[index_top-nx-1]*numbers::PI/180.);
+              else
+                slope = top_flux/kdd - std::tan(slopep[index_top-nx]*numbers::PI/180.);
 
-                          h[index_top] = h[index_top] + slope*2*dx;
-                        }
+              h[index_top] = h[index_top] + slope*2*dx;
+            }
 
-                      if (current_timestep == 1 || bottom_flux == 0)
-                        {
-                          slope = bottom_flux/kdd;
-                          h[index_bot] = h[index_bot+nx] + slope*2*dx;
-                        }
-                      else
-                        {
-                          if (j == 0)
-                            slope = bottom_flux/kdd - std::tan(slopep[index_bot+nx+1]*numbers::PI/180.);
-                          else if (j==(nx-1))
-                            slope = bottom_flux/kdd - std::tan(slopep[index_bot+nx-1]*numbers::PI/180.);
-                          else
-                            slope = bottom_flux/kdd - std::tan(slopep[index_bot+nx]*numbers::PI/180.);
+          if (current_timestep == 1 || bottom_flux == 0)
+            {
+              slope = bottom_flux/kdd;
+              h[index_bot] = h[index_bot+nx] + slope*2*dx;
+            }
+          else
+            {
+              if (j == 0)
+                slope = bottom_flux/kdd - std::tan(slopep[index_bot+nx+1]*numbers::PI/180.);
+              else if (j==(nx-1))
+                slope = bottom_flux/kdd - std::tan(slopep[index_bot+nx-1]*numbers::PI/180.);
+              else
+                slope = bottom_flux/kdd - std::tan(slopep[index_bot+nx]*numbers::PI/180.);
 
-                          h[index_bot] = h[index_bot] + slope*2*dx;
-                        }
+              h[index_bot] = h[index_bot] + slope*2*dx;
+            }
 
-                      if (bottom == 0 && top == 0)
-                        {
-                          int side = index_bot;
-                          int op_side = index_top;
-                          int jj = nx;
+          if (bottom == 0 && top == 0)
+            {
+              int side = index_bot;
+              int op_side = index_top;
+              int jj = nx;
 
-                          if (vy[index_bot+nx-1] > 0 && vy[index_top-nx-1] >= 0)
-                            {
-                              side = index_top;
-                              op_side = index_bot;
-                              jj = -nx;
-                            }
-                          else if (vy[index_bot+nx-1] <= 0 && vy[index_top-nx-1] < 0)
-                            {
-                              side = index_bot;
-                              op_side = index_top;
-                              jj = nx;
-                            }
-                          else
-                            continue;
+              if (vy[index_bot+nx-1] > 0 && vy[index_top-nx-1] >= 0)
+                {
+                  side = index_top;
+                  op_side = index_bot;
+                  jj = -nx;
+                }
+              else if (vy[index_bot+nx-1] <= 0 && vy[index_top-nx-1] < 0)
+                {
+                  side = index_bot;
+                  op_side = index_top;
+                  jj = nx;
+                }
+              else
+                continue;
 
-                          // Set top ghost node
-                          h[index_top] = h[side+jj];
-                          vx[index_top] = vx[side+jj];
-                          vy[index_top] = vy[side+jj];
-                          vz[index_top] = vz[side+jj];
+              // Set top ghost node
+              h[index_top] = h[side+jj];
+              vx[index_top] = vx[side+jj];
+              vy[index_top] = vy[side+jj];
+              vz[index_top] = vz[side+jj];
 
-                          // Set bottom ghost node
-                          h[index_bot] = h[side+jj];
-                          vx[index_bot] = vx[side+jj];
-                          vy[index_bot] = vy[side+jj];
-                          vz[index_bot] = vz[side+jj];
+              // Set bottom ghost node
+              h[index_bot] = h[side+jj];
+              vx[index_bot] = vx[side+jj];
+              vy[index_bot] = vy[side+jj];
+              vz[index_bot] = vz[side+jj];
 
-                          // Set opposing ASPECT boundary so it's periodic.
-                          h[op_side-jj] = h[side+jj];
-                          vx[op_side-jj] = vx[side+jj];
-                          vz[op_side-jj] = vz[side+jj];
-                          vy[op_side-jj] = vy[side+jj];
-                        }
-                    }    
+              // Set opposing ASPECT boundary so it's periodic.
+              h[op_side-jj] = h[side+jj];
+              vx[op_side-jj] = vx[side+jj];
+              vz[op_side-jj] = vz[side+jj];
+              vy[op_side-jj] = vy[side+jj];
+            }
+        }
     }
+
+
 
     // TODO: Give better explanations of variables and cite the fastscape documentation.
     template <int dim>
@@ -1200,7 +1202,7 @@ namespace aspect
             prm.declare_entry("Sediment diffusivity", "-1",
                               Patterns::Double(),
                               "Diffusivity of sediment.");
-                        prm.declare_entry("Orographic elevation control", "2000",
+            prm.declare_entry("Orographic elevation control", "2000",
                               Patterns::Integer(),
                               "Anything above this height has a change in erodibility.");
             prm.declare_entry("Orographic wind barrier height", "500",
@@ -1213,11 +1215,11 @@ namespace aspect
                               Patterns::Double(),
                               "Amount to multiply kf and kd by past wind barrier.");
             prm.declare_entry ("Stack orographic controls", "false",
-                             Patterns::Bool (),
-                             "Whether or not to apply both controls to a point, or only a maximum of one set as the wind barrier.");
+                               Patterns::Bool (),
+                               "Whether or not to apply both controls to a point, or only a maximum of one set as the wind barrier.");
             prm.declare_entry ("Wind direction", "west",
-                             Patterns::Selection("east|west|south|north"),
-                             "This parameter assumes a wind direction, deciding which side is reduced from the wind barrier.");
+                               Patterns::Selection("east|west|south|north"),
+                               "This parameter assumes a wind direction, deciding which side is reduced from the wind barrier.");
           }
           prm.leave_subsection();
 
@@ -1287,12 +1289,12 @@ namespace aspect
           precision = prm.get_double("Precision");
           noise_h = prm.get_integer("Initial noise magnitude");
           sr_values = Utilities::string_to_double
-                             (Utilities::split_string_list(prm.get ("Sediment rain")));
+                      (Utilities::split_string_list(prm.get ("Sediment rain")));
           sr_times = Utilities::string_to_double
-                             (Utilities::split_string_list(prm.get ("Sediment rain intervals")));
+                     (Utilities::split_string_list(prm.get ("Sediment rain intervals")));
 
-              if (sr_values.size() != sr_times.size()+1)
-                  AssertThrow(false, ExcMessage("Error: There must be one more sediment rain value than interval."));
+          if (sr_values.size() != sr_times.size()+1)
+            AssertThrow(false, ExcMessage("Error: There must be one more sediment rain value than interval."));
 
 
           prm.enter_subsection("Boundary conditions");
@@ -1331,18 +1333,18 @@ namespace aspect
             reduc_mmax = prm.get_double("Elevation factor");
             reduc_wb = prm.get_double("Wind barrier factor");
             stackoro = prm.get_bool("Stack orographic controls");
-            
-          // Wind direction
-          if (prm.get ("Wind direction") == "west")
-            wd = 0;
-          else if (prm.get ("Wind direction") == "east")
-            wd = 1;
-          else if (prm.get ("Wind direction") == "north")
-            wd = 2;
-          else if (prm.get ("Wind direction") == "south")
-            wd = 3;
-          else
-            AssertThrow(false, ExcMessage("Not a valid wind direction."));
+
+            // Wind direction
+            if (prm.get ("Wind direction") == "west")
+              wd = 0;
+            else if (prm.get ("Wind direction") == "east")
+              wd = 1;
+            else if (prm.get ("Wind direction") == "north")
+              wd = 2;
+            else if (prm.get ("Wind direction") == "south")
+              wd = 3;
+            else
+              AssertThrow(false, ExcMessage("Not a valid wind direction."));
           }
           prm.leave_subsection();
 
