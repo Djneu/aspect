@@ -159,6 +159,13 @@ namespace aspect
       Utilities::create_directory (this->get_output_directory() + "VTK/",
                                    this->get_mpi_communicator(),
                                    false);
+
+      // if stratigraphy is used, create a visualization folder for stratigraphy too
+      if (use_strat)
+        Utilities::create_directory (this->get_output_directory() + "VTK_strat/",
+                                     this->get_mpi_communicator(),
+                                     false);
+
       last_output_time = 0;
     }
 
