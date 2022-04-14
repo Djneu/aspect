@@ -668,12 +668,19 @@ namespace aspect
                  * run for, need to figure out how to work this in better.
                  */
                 if (use_strat && current_timestep == 1)
-                  fastscape_strati_(&nstepp, &nreflectorp, &steps, &vexp);
+                  {
+                    // Folder_output (k, istep, foldername)
+                    folder_output_(&length, &visualization_step, c);
+                    fastscape_strati_(&nstepp, &nreflectorp, &steps, &vexp);
+                  }
                 else if (!use_strat && current_timestep == 1)
                   {
                     this->get_pcout() << "      Writing initial VTK..." << std::endl;
                     // Note: Here, the HHHHH field in visualization is set to show the diffusivity. However, you can change this so any parameter
                     // is visualized.
+                    // TODO why is this output step skipped when use_strat = true,
+                    // but not in subsequent timepsteps (line 707).
+                    // Fastscape_Named_VTK (f, vex, istep, foldername, k)
                     fastscape_named_vtk_(kd.get(), &vexp, &visualization_step, c, &length);
                   }
 
