@@ -427,6 +427,12 @@ namespace aspect
       unsigned int left;
 
       /**
+       * Paramters that set the fastscape boundaries periodic even though the ghost nodes are set 'fixed'
+       */
+      bool topbottom_ghost_nodes_periodic;
+      bool leftright_ghost_nodes_periodic;
+
+      /**
        * Integer that holds the full boundary conditions sent to FastScape (e.g., 1111).
        */
       int bc;

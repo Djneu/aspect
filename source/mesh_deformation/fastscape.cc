@@ -908,11 +908,26 @@ namespace aspect
               h[index_right] = h[index_right] + slope*2*dx;
             }
 
+          // This sets the ghost nodes of fixed boundaries to a user specified height which will
+          // be used as an erosional baselevel by fastscape and may limit erosional flux out
+          // of the model domain
+          if (use_extra_base_level)
+            {
+              if (right==1
+                  && h[index_right]<h_extra_base_level
+                  && leftright_ghost_nodes_periodic == false)
+                h[index_right] = h_extra_base_level;
+              if (left==1
+                  && h[index_left]<h_extra_base_level
+                  && leftright_ghost_nodes_periodic == false)
+                h[index_left] = h_extra_base_level;
+            }
+
           // If the boundaries are periodic, then we look at the velocities on both sides of the
           // model, and set the ghost node according to the direction of flow. As FastScape will
           // receive all velocities it will have a direction, and we only need to look at the (non-ghost)
           // nodes directly to the left and right.
-          if (left == 0 && right == 0)
+          if (left == 0 && right == 0 | leftright_ghost_nodes_periodic == true)
             {
               // First we assume that flow is going to the left.
               int side = index_left;
@@ -1023,7 +1038,19 @@ namespace aspect
               h[index_bot] = h[index_bot] + slope*2*dx;
             }
 
-          if (bottom == 0 && top == 0)
+          if (use_extra_base_level)
+            {
+              if (bottom==1
+                  && h[index_bot]<h_extra_base_level
+                  && topbottom_ghost_nodes_periodic == false)
+                h[index_bot] = h_extra_base_level;
+              if (top==1
+                  && h[index_top]<h_extra_base_level
+                  && topbottom_ghost_nodes_periodic == false)
+                h[index_top] = h_extra_base_level;
+            }
+
+          if (bottom == 0 && top == 0 || topbottom_ghost_nodes_periodic == true)
             {
               int side = index_bot;
               int op_side = index_top;
@@ -1235,6 +1262,14 @@ namespace aspect
             prm.declare_entry("Bottom mass flux", "0",
                               Patterns::Double(),
                               "Flux per unit length through bottom boundary. Units: $\\{m^2/yr}$ ");
+            prm.declare_entry ("Top bottom ghost nodes periodic", "false",
+                               Patterns::Bool (),
+                               "Whether to set the ghost nodes at the FastScape top and bottom boundary "
+                               "to periodic even if 'Bottom' and 'Top' are set to fixed boundary.");
+            prm.declare_entry ("Left right ghost nodes periodic", "false",
+                               Patterns::Bool (),
+                               "Whether to set the ghost nodes at the FastScape left and right boundary "
+                               "to periodic even if 'Left' and 'Right' are set to fixed boundary.");
           }
           prm.leave_subsection();
 
@@ -1418,6 +1453,9 @@ namespace aspect
             if ((left_flux != 0 && top_flux != 0) || (left_flux != 0 && bottom_flux != 0) ||
                 (right_flux != 0 && bottom_flux != 0) || (right_flux != 0 && top_flux != 0))
               AssertThrow(false,ExcMessage("Currently the plugin does not support mass flux through adjacent boundaries."));
+
+            topbottom_ghost_nodes_periodic = prm.get_bool("Top bottom ghost nodes periodic");
+            leftright_ghost_nodes_periodic = prm.get_bool("Left right ghost nodes periodic");
           }
           prm.leave_subsection();
 
