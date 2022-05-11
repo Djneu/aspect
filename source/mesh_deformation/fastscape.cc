@@ -951,7 +951,7 @@ namespace aspect
           * receive all velocities it will have a direction, and we only need to look at the (non-ghost)
           * nodes directly to the left and right.
           */
-          if (left == 0 && right == 0)
+          if (left == 0 && right == 0 | leftright_periodic == true)
             {
               // First we assume that flow is going to the left.
               int side = index_left;
@@ -1062,7 +1062,7 @@ namespace aspect
                 h[index_top] = h_extra_base_level;
             }
 
-          if (bottom == 0 && top == 0)
+          if (bottom == 0 && top == 0 || topbottom_periodic == true)
             {
               int side = index_bot;
               int op_side = index_top;
@@ -1202,6 +1202,14 @@ namespace aspect
             prm.declare_entry("Bottom mass flux", "0",
                               Patterns::Double(),
                               "Flux per unit length through bottom boundary (m^2/yr)");
+            prm.declare_entry ("Top bottom periodic", "false",
+                               Patterns::Bool (),
+                               "Whether to set the FastScape top and bottom boundary "
+                               "to periodic even if 'Bottom' and 'Top' are set to fixed boundary.");
+            prm.declare_entry ("Left right periodic", "false",
+                               Patterns::Bool (),
+                               "Whether to set the FastScape left and right boundary "
+                               "to periodic even if 'Left' and 'Right' are set to fixed boundary.");
           }
           prm.leave_subsection();
 
@@ -1363,6 +1371,9 @@ namespace aspect
             if ((left_flux != 0 && top_flux != 0) || (left_flux != 0 && bottom_flux != 0) ||
                 (right_flux != 0 && bottom_flux != 0) || (right_flux != 0 && top_flux != 0))
               AssertThrow(false,ExcMessage("Currently the plugin does not support mass flux through adjacent boundaries."));
+
+            topbottom_periodic = prm.get_bool("Top bottom periodic");
+            leftright_periodic = prm.get_bool("Left right periodic");
           }
           prm.leave_subsection();
 

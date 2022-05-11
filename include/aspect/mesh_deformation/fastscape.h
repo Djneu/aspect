@@ -188,6 +188,8 @@ namespace aspect
       unsigned int top;
       unsigned int right;
       unsigned int left;
+      bool topbottom_periodic;
+      bool leftright_periodic;
       // Integer that holds the full boundary conditions (e.g. 1111).
       int bc;
 
