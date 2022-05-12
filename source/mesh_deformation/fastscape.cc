@@ -964,9 +964,13 @@ namespace aspect
           // of the model domain
           if (use_extra_base_level)
             {
-              if ((right==1) && (h[index_right]<h_extra_base_level))
+              if (right==1
+                  && h[index_right]<h_extra_base_level
+                  && leftright_ghost_nodes_periodic == false)
                 h[index_right] = h_extra_base_level;
-              if ((left==1) && (h[index_left]<h_extra_base_level))
+              if (left==1
+                  && h[index_left]<h_extra_base_level
+                  && leftright_ghost_nodes_periodic == false)
                 h[index_left] = h_extra_base_level;
             }
 
@@ -1081,9 +1085,13 @@ namespace aspect
 
           if (use_extra_base_level)
             {
-              if ((bottom==1) && (h[index_bot]<h_extra_base_level))
+              if (bottom==1
+                  && h[index_bot]<h_extra_base_level
+                  && topbottom_ghost_nodes_periodic == false)
                 h[index_bot] = h_extra_base_level;
-              if ((top==1) && (h[index_top]<h_extra_base_level))
+              if (top==1
+                  && h[index_top]<h_extra_base_level
+                  && topbottom_ghost_nodes_periodic == false)
                 h[index_top] = h_extra_base_level;
             }
 
