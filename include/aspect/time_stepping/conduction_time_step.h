@@ -27,35 +27,35 @@
 
 namespace aspect
 {
-  namespace TimeStepping
+namespace TimeStepping
+{
+  using namespace dealii;
+
+  /**
+   * Compute the conduction time step based on the current solution and
+   * return this as the time step.
+   *
+   * @ingroup TimeStepping
+   */
+  template <int dim>
+  class ConductionTimeStep : public Interface<dim>, public SimulatorAccess<dim>
   {
-    using namespace dealii;
-
-    /**
-     * Compute the conduction time step based on the current solution and
-     * return this as the time step.
-     *
-     * @ingroup TimeStepping
-     */
-    template <int dim>
-    class ConductionTimeStep : public Interface<dim>, public SimulatorAccess<dim>
-    {
-      public:
-        /**
-         * Constructor.
-         */
-        ConductionTimeStep () = default;
+    public:
+      /**
+       * Constructor.
+       */
+      ConductionTimeStep () = default;
 
 
-        /**
-         * @copydoc aspect::TimeStepping::Interface<dim>::execute()
-         */
-        virtual
-        double
-        execute() override;
+      /**
+       * @copydoc aspect::TimeStepping::Interface<dim>::execute()
+       */
+      virtual
+      double
+      execute() override;
 
-    };
-  }
+  };
+}
 }
 
 

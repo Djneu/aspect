@@ -64,6 +64,8 @@ namespace aspect
     // Functions to run FastScape
     void fastscape_get_step_(int *sstep);
     void fastscape_execute_step_();
+    // Set the output file directory and visualization step
+    void folder_output_(int *length, int *asetp, const char *c);
     // Create a visualization file into the ASPECT/VTK folder
     void fastscape_named_vtk_(double *fp, const double *vexp, int *astep, const char *c, int *length);
     // Copy the height array from FastScape back into ASPECT.
@@ -75,6 +77,9 @@ namespace aspect
     //void folder_output_(int *length, int *astep, const char *c);
     // Copy slopes, used in determined ghost node height for mass flux flow in from a boundary.
     void fastscape_copy_slope_(double *slopep);
+
+    // extracts tectonic flux, erosion flux, boundary flux in m3/yr
+    void fastscape_get_fluxes_(double *tflux, double *eflux, double *bflux);
 
     // View additional information from FastScape, not included in the .cc.
     void fastscape_view_();
@@ -112,12 +117,12 @@ namespace aspect
        */
       void parse_parameters (ParameterHandler &prm);
 
-        /**
-         * A function that fills the viscosity derivatives in the
-         * MaterialModelOutputs object that is handed over, if they exist.
-         * Does nothing otherwise.
-         */
-        void set_ghost_nodes(double *h, double *vx, double *vy, double *vz, int nx, int ny) const;
+      /**
+       * A function that fills the viscosity derivatives in the
+       * MaterialModelOutputs object that is handed over, if they exist.
+       * Does nothing otherwise.
+       */
+      void set_ghost_nodes(double *h, double *vx, double *vy, double *vz, int nx, int ny) const;
 
     private:
       // Number of FastScape steps per ASPECT timestep.
@@ -183,6 +188,8 @@ namespace aspect
       unsigned int top;
       unsigned int right;
       unsigned int left;
+      bool topbottom_ghost_nodes_periodic;
+      bool leftright_ghost_nodes_periodic;
       // Integer that holds the full boundary conditions (e.g. 1111).
       int bc;
 
@@ -213,7 +220,7 @@ namespace aspect
       double kdd;
       // Sediment transport coefficient.
       double kdsed;
-      
+
       // Orographic parameters
       int mmax;
       int wb;
@@ -221,6 +228,11 @@ namespace aspect
       double reduc_mmax;
       double reduc_wb;
       bool stackoro;
+
+      // Parameters to set an extra erosional base level
+      // on the ghost nodes that differs from sea level.
+      bool use_extra_base_level;
+      double h_extra_base_level;
 
       /**
        * Marine parameters
@@ -259,18 +271,18 @@ namespace aspect
       double precision;
 
 
-        /**
-         * Interval between the generation of graphical output. This parameter
-         * is read from the input file and consequently is not part of the
-         * state that needs to be saved and restored.
-         */
-        double output_interval;
+      /**
+       * Interval between the generation of graphical output. This parameter
+       * is read from the input file and consequently is not part of the
+       * state that needs to be saved and restored.
+       */
+      double output_interval;
 
-        /**
-         * A time (in seconds) at which the last graphical output was supposed
-         * to be produced. Used to check for the next necessary output time.
-         */
-        mutable double last_output_time;
+      /**
+       * A time (in seconds) at which the last graphical output was supposed
+       * to be produced. Used to check for the next necessary output time.
+       */
+      mutable double last_output_time;
   };
 }
 }

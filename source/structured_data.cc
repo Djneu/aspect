@@ -588,7 +588,7 @@ namespace aspect
           const std::string filename (create_filename (current_file_number, boundary_id));
 
           this->get_pcout() << std::endl << "   Loading Ascii data boundary file "
-                            << filename << "." << std::endl << std::endl;
+                            << filename << '.' << std::endl << std::endl;
 
 
           AssertThrow(Utilities::fexists(filename) || filename_is_url(filename),
@@ -613,7 +613,7 @@ namespace aspect
               if (Utilities::fexists(filename))
                 {
                   this->get_pcout() << std::endl << "   Also loading next Ascii data boundary file "
-                                    << filename << "." << std::endl << std::endl;
+                                    << filename << '.' << std::endl << std::endl;
                   lookups.find(boundary_id)->second.swap(old_lookups.find(boundary_id)->second);
                   lookups.find(boundary_id)->second->load_file(filename, this->get_mpi_communicator());
                 }
@@ -816,7 +816,7 @@ namespace aspect
         {
           const std::string filename (create_filename (current_file_number,boundary_id));
           this->get_pcout() << std::endl << "   Loading Ascii data boundary file "
-                            << filename << "." << std::endl << std::endl;
+                            << filename << '.' << std::endl << std::endl;
           if (Utilities::fexists(filename))
             {
               lookups.find(boundary_id)->second.swap(old_lookups.find(boundary_id)->second);
@@ -837,7 +837,7 @@ namespace aspect
 
       const std::string filename (create_filename (next_file_number,boundary_id));
       this->get_pcout() << std::endl << "   Loading Ascii data boundary file "
-                        << filename << "." << std::endl << std::endl;
+                        << filename << '.' << std::endl << std::endl;
       if (Utilities::fexists(filename))
         {
           lookups.find(boundary_id)->second.swap(old_lookups.find(boundary_id)->second);
@@ -1217,15 +1217,15 @@ namespace aspect
 
 
 
-    template <int dim>
-    AsciiDataInitial<dim>::AsciiDataInitial ()
+    template <int dim, int spacedim>
+    AsciiDataInitial<dim, spacedim>::AsciiDataInitial ()
     {}
 
 
 
-    template <int dim>
+    template <int dim, int spacedim>
     void
-    AsciiDataInitial<dim>::initialize (const unsigned int components)
+    AsciiDataInitial<dim, spacedim>::initialize (const unsigned int components)
     {
       AssertThrow ((Plugins::plugin_type_matches<const GeometryModel::SphericalShell<dim>> (this->get_geometry_model()))
                    || (Plugins::plugin_type_matches<const GeometryModel::Chunk<dim>> (this->get_geometry_model()))
@@ -1235,13 +1235,13 @@ namespace aspect
                    ExcMessage ("This ascii data plugin can only be used when using "
                                "a spherical shell, chunk, or box geometry."));
 
-      lookup = std::make_unique<Utilities::StructuredDataLookup<dim>> (components,
-                                                                       this->scale_factor);
+      lookup = std::make_unique<Utilities::StructuredDataLookup<spacedim>> (components,
+                                                                            this->scale_factor);
 
       const std::string filename = this->data_directory + this->data_file_name;
 
       this->get_pcout() << std::endl << "   Loading Ascii data initial file "
-                        << filename << "." << std::endl << std::endl;
+                        << filename << '.' << std::endl << std::endl;
 
 
       AssertThrow(Utilities::fexists(filename) || filename_is_url(filename),
@@ -1255,21 +1255,21 @@ namespace aspect
 
 
 
-    template <int dim>
+    template <int dim, int spacedim>
     double
-    AsciiDataInitial<dim>::
-    get_data_component (const Point<dim>                    &position,
+    AsciiDataInitial<dim, spacedim>::
+    get_data_component (const Point<spacedim>                    &position,
                         const unsigned int                   component) const
     {
-      Point<dim> internal_position = position;
+      Point<spacedim> internal_position = position;
 
       if (Plugins::plugin_type_matches<const GeometryModel::SphericalShell<dim>> (this->get_geometry_model())
           || (Plugins::plugin_type_matches<const GeometryModel::Chunk<dim>> (this->get_geometry_model())))
         {
-          const std::array<double,dim> spherical_position =
+          const std::array<double,spacedim> spherical_position =
             Utilities::Coordinates::cartesian_to_spherical_coordinates(position);
 
-          for (unsigned int i = 0; i < dim; i++)
+          for (unsigned int i = 0; i < spacedim; i++)
             internal_position[i] = spherical_position[i];
         }
       return lookup->get_data(internal_position,component);
@@ -1378,8 +1378,9 @@ namespace aspect
     template class AsciiDataBoundary<3>;
     template class AsciiDataLayered<2>;
     template class AsciiDataLayered<3>;
-    template class AsciiDataInitial<2>;
-    template class AsciiDataInitial<3>;
+    template class AsciiDataInitial<2, 2>;
+    template class AsciiDataInitial<2, 3>;
+    template class AsciiDataInitial<3, 3>;
     template class AsciiDataProfile<1>;
     template class AsciiDataProfile<2>;
     template class AsciiDataProfile<3>;

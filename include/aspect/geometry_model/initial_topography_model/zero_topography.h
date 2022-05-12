@@ -26,34 +26,34 @@
 
 namespace aspect
 {
-  namespace InitialTopographyModel
+namespace InitialTopographyModel
+{
+  using namespace dealii;
+
+  /**
+   * A class that implements zero initial topography.
+   *
+   * @ingroup InitialTopographyModels
+   */
+  template <int dim>
+  class ZeroTopography : public Interface<dim>
   {
-    using namespace dealii;
+    public:
+      /**
+       * Return the value of the initial topography as a function of position.
+       *
+       * For the current class, this function obviously simply returns a zero
+       * value.
+       */
+      double
+      value (const Point<dim-1> &p) const override;
 
-    /**
-     * A class that implements zero initial topography.
-     *
-     * @ingroup InitialTopographyModels
-     */
-    template <int dim>
-    class ZeroTopography : public Interface<dim>
-    {
-      public:
-        /**
-         * Return the value of the initial topography as a function of position.
-         *
-         * For the current class, this function obviously simply returns a zero
-         * value.
-         */
-        double
-        value (const Point<dim-1> &p) const override;
-
-        /**
-         * Return the maximum value of the elevation.
-         */
-        double max_topography () const override;
-    };
-  }
+      /**
+       * Return the maximum value of the elevation.
+       */
+      double max_topography () const override;
+  };
+}
 }
 
 

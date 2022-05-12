@@ -3533,7 +3533,7 @@ If the function you are describing represents a vector-valued function with mult
 {\it Default:} 
 
 
-{\it Description:} A comma separated list denoting the solution method of each compositional field. Each entry of the list must be one of the currently implemented field types.
+{\it Description:} A comma separated list denoting the solution method of each compositional field. Each entry of the list must be one of the currently implemented field methods.
 
 These choices correspond to the following methods by which compositional fields gain their values:\begin{itemize}\item ``field'': If a compositional field is marked with this method, then its values are computed in each time step by advecting along the values of the previous time step using the velocity field, and applying reaction rates to it. In other words, this corresponds to the usual notion of a composition field as mentioned in Section~\ref{sec:compositional}. 
 \item ``particles'': If a compositional field is marked with this method, then its values are obtained in each time step by interpolating the corresponding properties from the particles located on each cell. The time evolution therefore happens because particles move along with the velocity field, and particle properties can react with each other as well. See Section~\ref{sec:particles} for more information about how particles behave.
@@ -3615,6 +3615,23 @@ The format of valid entries for this parameter is that of a map given as ``key1:
 
 
 {\it Possible values:} An integer $n$ such that $0\leq n \leq 2147483647$
+\item {\it Parameter name:} {\tt Types of fields}
+\phantomsection\label{parameters:Compositional fields/Types of fields}
+\label{parameters:Compositional_20fields/Types_20of_20fields}
+
+
+\index[prmindex]{Types of fields}
+\index[prmindexfull]{Compositional fields!Types of fields}
+{\it Value:} unspecified
+
+
+{\it Default:} unspecified
+
+
+{\it Description:} A type for each of the compositional fields requested. Each entry of the list must be one of several recognized types: chemical composition, stress, grain size, porosity, general and unspecified. The generic type is intended to be a placeholder type that has no effect on the running of any material model, while the unspecified type is intended to tell ASPECT that the user has not explicitly indicated the type of field (facilitating parameter file checking). If a plugin such as a material model uses these types, the choice of type will affect how that module functions.
+
+
+{\it Possible values:} A list of 0 to 4294967295 elements where each element is [Any one of chemical composition, stress, grain size, porosity, density, generic, unspecified]
 \end{itemize}
 
 \subsection{Parameters in section \tt Discretization}
@@ -3851,6 +3868,23 @@ For an in-depth discussion of these issues and a quantitative evaluation of the 
 
 
 {\it Possible values:} A floating point number $v$ such that $-\text{MAX\_DOUBLE} \leq v \leq \text{MAX\_DOUBLE}$
+\item {\it Parameter name:} {\tt List of compositional fields with disabled boundary entropy viscosity}
+\phantomsection\label{parameters:Discretization/Stabilization parameters/List of compositional fields with disabled boundary entropy viscosity}
+\label{parameters:Discretization/Stabilization_20parameters/List_20of_20compositional_20fields_20with_20disabled_20boundary_20entropy_20viscosity}
+
+
+\index[prmindex]{List of compositional fields with disabled boundary entropy viscosity}
+\index[prmindexfull]{Discretization!Stabilization parameters!List of compositional fields with disabled boundary entropy viscosity}
+{\it Value:} 
+
+
+{\it Default:} 
+
+
+{\it Description:} Select for which compositional fields to skip the entropy viscosity stabilization at dirichlet boundaries. This is only advisable for compositional fieldsthat have intrinsic physical diffusion terms, otherwise oscillations may develop. The parameter should contain a list of compositional field names.
+
+
+{\it Possible values:} A list of 0 to 4294967295 elements where each element is [Any string]
 \item {\it Parameter name:} {\tt Stabilization method}
 \phantomsection\label{parameters:Discretization/Stabilization parameters/Stabilization method}
 \label{parameters:Discretization/Stabilization_20parameters/Stabilization_20method}
@@ -4125,7 +4159,7 @@ For an in-depth discussion of these issues and a quantitative evaluation of the 
 
 `box': A box geometry parallel to the coordinate directions. The extent of the box in each coordinate direction is set in the parameter file. The box geometry labels its 2*dim sides as follows: in 2d, boundary indicators 0 through 3 denote the left, right, bottom and top boundaries; in 3d, boundary indicators 0 through 5 indicate left, right, front, back, bottom and top boundaries (see also the documentation of the deal.II class ``GeometryInfo''). You can also use symbolic names ``left'', ``right'', etc., to refer to these boundaries in input files. It is also possible to add initial topography to the box model. Note however that this is done after the last initial adaptive refinement cycle. Also, initial topography is supposed to be small, as it is not taken into account when depth or a representative point is computed. 
 
-`box with lithosphere boundary indicators': A box geometry parallel to the coordinate directions. The extent of the box in each coordinate direction is set in the parameter file. This geometry model labels its sides with 2*dim+2*(dim-1) boundary indicators: in 2d, boundary indicators 0 through 3 denote the left, right, bottom and top boundaries, while indicators4 and 5 denote the upper part of the left and right vertical boundary, respectively. In 3d, boundary indicators 0 through 5 indicate left, right, front, back, bottom and top boundaries (see also the documentation of the deal.II class ``GeometryInfo''), while indicators 6, 7, 8 and 9 denote the left, right, front and back upper parts of the vertical boundaries, respectively. You can also use symbolic names ``left'', ``right'', ``left lithosphere'', etc., to refer to these boundaries in input files.
+`box with lithosphere boundary indicators': A box geometry parallel to the coordinate directions. The extent of the box in each coordinate direction is set in the parameter file. This geometry model labels its sides with 2*dim+2*(dim-1) boundary indicators: in 2d, boundary indicators 0 through 3 denote the left, right, bottom and top boundaries, while indicators4 and 5 denote the upper part of the left and right vertical boundary, respectively. In 3d, boundary indicators 0 through 5 indicate left, right, front, back, bottom and top boundaries (see also the documentation of the deal.II class ``ReferenceCell''), while indicators 6, 7, 8 and 9 denote the left, right, front and back upper parts of the vertical boundaries, respectively. You can also use symbolic names ``left'', ``right'', ``left lithosphere'', etc., to refer to these boundaries in input files.
 
 Note that for a given ``Global refinement level'' and no user-specified ``Repetitions'', the lithosphere part of the mesh will be more refined. 
 
@@ -6252,7 +6286,7 @@ If the function you are describing represents a vector-valued function with mult
 
 The following composition models are available:
 
-`adiabatic density': Specify the initial composition as the adiabatic reference density at each position. Note that only the field with the name 'density\_field' will be filled for all other fields this plugin returns 0.0.
+`adiabatic density': Specify the initial composition as the adiabatic reference density at each position. Note that only the field of the type 'density' will be filled. For all other fields this plugin returns 0.0.
 
 `ascii data': Implementation of a model in which the initial composition is derived from files containing data in ascii format. Note the required format of the input data: The first lines may contain any number of comments if they begin with `\#', but one of these lines needs to contain the number of grid points in each dimension as for example `\# POINTS: 3 3'. The order of the data columns has to be `x', `y', `composition1', `composition2', etc. in a 2d model and `x', `y', `z', `composition1', `composition2', etc. in a 3d model, according to the number of compositional fields, which means that there has to be a single column for every composition in the model.Note that the data in the input files need to be sorted in a specific order: the first coordinate needs to ascend first, followed by the second and the third at last in order to assign the correct data to the prescribed coordinates. If you use a spherical model, then the assumed grid changes. `x' will be replaced by the radial distance of the point to the bottom of the model, `y' by the azimuth angle and `z' by the polar angle measured positive from the north pole. The grid will be assumed to be a latitude-longitude grid. Note that the order of spherical coordinates is `r', `phi', `theta' and not `r', `theta', `phi', since this allows for dimension independent expressions.
 
@@ -6298,7 +6332,7 @@ The following composition models are available:
 
 {\it Description:} Select one of the following models:
 
-`adiabatic density': Specify the initial composition as the adiabatic reference density at each position. Note that only the field with the name 'density\_field' will be filled for all other fields this plugin returns 0.0.
+`adiabatic density': Specify the initial composition as the adiabatic reference density at each position. Note that only the field of the type 'density' will be filled. For all other fields this plugin returns 0.0.
 
 `ascii data': Implementation of a model in which the initial composition is derived from files containing data in ascii format. Note the required format of the input data: The first lines may contain any number of comments if they begin with `\#', but one of these lines needs to contain the number of grid points in each dimension as for example `\# POINTS: 3 3'. The order of the data columns has to be `x', `y', `composition1', `composition2', etc. in a 2d model and `x', `y', `z', `composition1', `composition2', etc. in a 3d model, according to the number of compositional fields, which means that there has to be a single column for every composition in the model.Note that the data in the input files need to be sorted in a specific order: the first coordinate needs to ascend first, followed by the second and the third at last in order to assign the correct data to the prescribed coordinates. If you use a spherical model, then the assumed grid changes. `x' will be replaced by the radial distance of the point to the bottom of the model, `y' by the azimuth angle and `z' by the polar angle measured positive from the north pole. The grid will be assumed to be a latitude-longitude grid. Note that the order of spherical coordinates is `r', `phi', `theta' and not `r', `theta', `phi', since this allows for dimension independent expressions.
 
@@ -8393,14 +8427,14 @@ If the function you are describing represents a vector-valued function with mult
 
 {\it Description:} Whether or not (and in the first case, how) to do any averaging of material model output data when constructing the linear systems for velocity/pressure, temperature, and compositions in each time step, as well as their corresponding preconditioners.
 
-Possible choices: none|arithmetic average|harmonic average|geometric average|pick largest|project to Q1|log average|harmonic average only viscosity|project to Q1 only viscosity
+Possible choices: none|arithmetic average|harmonic average|geometric average|pick largest|project to Q1|log average|harmonic average only viscosity|geometric average only viscosity|project to Q1 only viscosity
 
 The process of averaging, and where it may be used, is discussed in more detail in Section~\ref{sec:sinker-with-averaging}.
 
 More averaging schemes are available in the averaging material model. This material model is a ``compositing material model'' which can be used in combination with other material models.
 
 
-{\it Possible values:} Any one of none, arithmetic average, harmonic average, geometric average, pick largest, project to Q1, log average, harmonic average only viscosity, project to Q1 only viscosity
+{\it Possible values:} Any one of none, arithmetic average, harmonic average, geometric average, pick largest, project to Q1, log average, harmonic average only viscosity, geometric average only viscosity, project to Q1 only viscosity
 \item {\it Parameter name:} {\tt Model name}
 \phantomsection\label{parameters:Material model/Model name}
 \label{parameters:Material_20model/Model_20name}
@@ -15175,10 +15209,10 @@ Units: \si{\pascal\second}.
 {\it Default:} 1e28
 
 
-{\it Description:} Upper cutoff for effective viscosity. Units: \si{\pascal\second}.
+{\it Description:} Upper cutoff for effective viscosity. Units: \si{\pascal\second}. List with as many components as active compositional fields (material data is assumed to be in order with the ordering of the fields). 
 
 
-{\it Possible values:} A floating point number $v$ such that $0 \leq v \leq \text{MAX\_DOUBLE}$
+{\it Possible values:} Any string
 \item {\it Parameter name:} {\tt Maximum yield stress}
 \phantomsection\label{parameters:Material model/Visco Plastic/Maximum yield stress}
 \label{parameters:Material_20model/Visco_20Plastic/Maximum_20yield_20stress}
@@ -15226,10 +15260,10 @@ Units: \si{\pascal\second}.
 {\it Default:} 1e17
 
 
-{\it Description:} Lower cutoff for effective viscosity. Units: \si{\pascal\second}.
+{\it Description:} Lower cutoff for effective viscosity. Units: \si{\pascal\second}. List with as many components as active compositional fields (material data is assumed to be in order with the ordering of the fields). 
 
 
-{\it Possible values:} A floating point number $v$ such that $0 \leq v \leq \text{MAX\_DOUBLE}$
+{\it Possible values:} Any string
 \item {\it Parameter name:} {\tt Peierls creep flow law}
 \phantomsection\label{parameters:Material model/Visco Plastic/Peierls creep flow law}
 \label{parameters:Material_20model/Visco_20Plastic/Peierls_20creep_20flow_20law}
@@ -17451,6 +17485,8 @@ As stated, this postprocessor computes the \textit{outbound} mass flux. If you a
 
 `memory statistics': A postprocessor that computes some statistics about the memory consumption. In particular, it computes the memory usage of the system matrix, triangulation, p4est, DoFHandler, current constraints, solution vector, and peak virtual memory usage, all in MB. It also outputs the memory usage of the system matrix to the screen.
 
+`mobility statistics': A postprocessor that computes some statistics about mobility following Tackley (2000) and Lourenco et al. (2020).
+
 `particle count statistics': A postprocessor that computes some statistics about the particle distribution, if present in this simulation. In particular, it computes minimal, average and maximal values of particles per cell in the global domain.
 
 `particles': A Postprocessor that creates particles that follow the velocity field of the simulation. The particles can be generated and propagated in various ways and they can carry a number of constant or time-varying properties. The postprocessor can write output positions and properties of all particles at chosen intervals, although this is not mandatory. It also allows other parts of the code to query the particles for information.
@@ -17483,7 +17519,7 @@ The file format then consists of lines with Euclidean coordinates followed by th
 `volume of fluid statistics': A postprocessor that computes some statistics about the volume-of-fluid fields.
 
 
-{\it Possible values:} A comma-separated list of any of Stokes residual, basic statistics, boundary densities, boundary pressures, boundary velocity residual statistics, command, composition statistics, core statistics, depth average, dynamic topography, entropy viscosity statistics, geoid, global statistics, gravity calculation, heat flux densities, heat flux map, heat flux statistics, heating statistics, load balance statistics, mass flux statistics, material statistics, matrix statistics, maximum depth of field, melt statistics, memory statistics, particle count statistics, particles, point values, pressure statistics, rotation statistics, spherical velocity statistics, temperature statistics, topography, velocity boundary statistics, velocity statistics, viscous dissipation statistics, visualization, volume of fluid statistics
+{\it Possible values:} A comma-separated list of any of Stokes residual, basic statistics, boundary densities, boundary pressures, boundary velocity residual statistics, command, composition statistics, core statistics, depth average, dynamic topography, entropy viscosity statistics, geoid, global statistics, gravity calculation, heat flux densities, heat flux map, heat flux statistics, heating statistics, load balance statistics, mass flux statistics, material statistics, matrix statistics, maximum depth of field, melt statistics, memory statistics, mobility statistics, particle count statistics, particles, point values, pressure statistics, rotation statistics, spherical velocity statistics, temperature statistics, topography, velocity boundary statistics, velocity statistics, viscous dissipation statistics, visualization, volume of fluid statistics
 \item {\it Parameter name:} {\tt Run postprocessors on nonlinear iterations}
 \phantomsection\label{parameters:Postprocess/Run postprocessors on nonlinear iterations}
 \label{parameters:Postprocess/Run_20postprocessors_20on_20nonlinear_20iterations}
@@ -19815,6 +19851,8 @@ The variable that is outputted this way is computed by taking the pressure at ea
 
 `stress': A visualization output object that generates output for the 3 (in 2d) or 6 (in 3d) components of the stress tensor, i.e., for the components of the tensor $-2\eta\varepsilon(\mathbf u)+pI$ in the incompressible case and $-2\eta\left[\varepsilon(\mathbf u)-\tfrac 13(\textrm{tr}\;\varepsilon(\mathbf u))\mathbf I\right]+pI$ in the compressible case. If elasticity is used, the elastic contribution is being accounted for. Note that the convention of positive compressive stress is followed. 
 
+`stress second invariant': A visualization output object that outputs the second moment invariant of the deviatoric stress tensor.
+
 `surface dynamic topography': A visualization output object that generates output for the dynamic topography at the top and bottom of the model space. The approach to determine the dynamic topography requires us to compute the stress tensor and evaluate the component of it in the direction in which gravity acts. In other words, we compute $\sigma_{rr}={\hat g}^T(2 \eta \varepsilon(\mathbf u)-\frac 13 (\textrm{div}\;\mathbf u)I)\hat g - p_d$ where $\hat g = \mathbf g/\|\mathbf g\|$ is the direction of the gravity vector $\mathbf g$ and $p_d=p-p_a$ is the dynamic pressure computed by subtracting the adiabatic pressure $p_a$ from the total pressure $p$ computed as part of the Stokes solve. From this, the dynamic topography is computed using the formula $h=\frac{\sigma_{rr}}{(\mathbf g \cdot \mathbf n)  \rho}$ where $\rho$ is the density at the cell center. For the bottom surface we chose the convection that positive values are up (out) and negative values are in (down), analogous to the deformation of the upper surface. Note that this implementation takes the direction of gravity into account, which means that reversing the flow in backward advection calculations will not reverse the instantaneous topography because the reverse flow will be divided by the reverse surface gravity.
 
 In contrast to the `dynamic topography' visualization postprocessor, this plugin really only evaluates the dynamic topography at faces of cells that are adjacent to `bottom' and `top' boundaries, and only outputs information on the surface of the domain, rather than padding the information with zeros in the interior of the domain.
@@ -19830,7 +19868,7 @@ In contrast to the `dynamic topography' visualization postprocessor, this plugin
 `volumetric strain rate': A visualization output object that generates output for the volumetric strain rate, i.e., for the quantity $\nabla\cdot\mathbf u = \textrm{div}\; \mathbf u = \textrm{trace}\; \varepsilon(\mathbf u)$. This should be zero (in some average sense) in incompressible convection models, but can be non-zero in compressible models and models with melt transport.
 
 
-{\it Possible values:} A comma-separated list of any of ISA rotation timescale, Vp anomaly, Vs anomaly, adiabat, artificial viscosity, artificial viscosity composition, boundary indicators, boundary velocity residual, compositional vector, depth, dynamic topography, error indicator, geoid, grain lag angle, gravity, heat flux map, heating, material properties, maximum horizontal compressive stress, melt fraction, melt material properties, named additional outputs, nonadiabatic pressure, nonadiabatic temperature, particle count, partition, principal stress, shear stress, spd factor, spherical velocity components, strain rate, strain rate tensor, stress, surface dynamic topography, surface stress, temperature anomaly, vertical heat flux, volume of fluid values, volumetric strain rate, density, specific heat, thermal conductivity, thermal diffusivity, thermal expansivity, viscosity
+{\it Possible values:} A comma-separated list of any of ISA rotation timescale, Vp anomaly, Vs anomaly, adiabat, artificial viscosity, artificial viscosity composition, boundary indicators, boundary velocity residual, compositional vector, depth, dynamic topography, error indicator, geoid, grain lag angle, gravity, heat flux map, heating, material properties, maximum horizontal compressive stress, melt fraction, melt material properties, named additional outputs, nonadiabatic pressure, nonadiabatic temperature, particle count, partition, principal stress, shear stress, spd factor, spherical velocity components, strain rate, strain rate tensor, stress, stress second invariant, surface dynamic topography, surface stress, temperature anomaly, vertical heat flux, volume of fluid values, volumetric strain rate, density, specific heat, thermal conductivity, thermal diffusivity, thermal expansivity, viscosity
 \item {\it Parameter name:} {\tt Number of grouped files}
 \phantomsection\label{parameters:Postprocess/Visualization/Number of grouped files}
 \label{parameters:Postprocess/Visualization/Number_20of_20grouped_20files}
@@ -21198,6 +21236,23 @@ If the function you are describing represents a vector-valued function with mult
 \label{parameters:Solver_20parameters/Matrix_20Free}
 
 \begin{itemize}
+\item {\it Parameter name:} {\tt Execute solver timings}
+\phantomsection\label{parameters:Solver parameters/Matrix Free/Execute solver timings}
+\label{parameters:Solver_20parameters/Matrix_20Free/Execute_20solver_20timings}
+
+
+\index[prmindex]{Execute solver timings}
+\index[prmindexfull]{Solver parameters!Matrix Free!Execute solver timings}
+{\it Value:} false
+
+
+{\it Default:} false
+
+
+{\it Description:} Executes different parts of the Stokes solver repeatedly and print timing information. This is for internal benchmarking purposes: It is useful if you want to see how the solver performs. Otherwise, you don't want to enable this, since it adds additional computational cost to get the timing information.
+
+
+{\it Possible values:} A boolean value (true or false)
 \item {\it Parameter name:} {\tt Output details}
 \phantomsection\label{parameters:Solver parameters/Matrix Free/Output details}
 \label{parameters:Solver_20parameters/Matrix_20Free/Output_20details}
@@ -21268,7 +21323,7 @@ If the function you are describing represents a vector-valued function with mult
 {\it Default:} 0.9
 
 
-{\it Description:} The linear Stokes solver tolerance is dynamically chosen for the Newton solver, based on the Eisenstat walker 1994 paper (https://doi.org/10.1137/0917003), equation 2.2. Because this value can become larger then one, we limit this value by this parameter.
+{\it Description:} The linear Stokes solver tolerance is dynamically chosen for the Newton solver, based on the Eisenstat Walker (1994) paper (https://doi.org/10.1137/0917003), equation 2.2. Because this value can become larger than one, we limit this value by this parameter.
 
 
 {\it Possible values:} A floating point number $v$ such that $0 \leq v \leq 1$
@@ -21719,6 +21774,8 @@ These choices correspond to the following methods by which the temperature field
 `end time': Terminate the simulation once the end time specified in the input file has been reached. Unlike all other termination criteria, this criterion is \textit{always} active, whether it has been explicitly selected or not in the input file (this is done to preserve historical behavior of \aspect{}, but it also likely does not inconvenience anyone since it is what would be selected in most cases anyway).
 
 `steady state heat flux': A criterion that terminates the simulation when the integrated heat flux over a given list of boundaries stays within a certain range for a specified period of time.
+
+The criterion considers the total heat flux over all boundaries listed by their boundary indicators, rather than each boundary separately. As a consequence, if the \textit{sum} of heat fluxes over individual parts of the boundary no longer changes, then this criterion recommends termination, even if the heat flux over individual parts of the boundary continues to change.
 
 `steady state temperature': A criterion that terminates the simulation when the global integral of the temperature field stays within a certain range for a specified period of time.
 

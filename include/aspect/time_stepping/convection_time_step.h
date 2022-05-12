@@ -27,36 +27,36 @@
 
 namespace aspect
 {
-  namespace TimeStepping
+namespace TimeStepping
+{
+  using namespace dealii;
+
+  /**
+   * Compute the convection time step based on the current solution and
+   * return it.
+   *
+   * @ingroup TimeStepping
+   */
+  template <int dim>
+  class ConvectionTimeStep : public Interface<dim>, public SimulatorAccess<dim>
   {
-    using namespace dealii;
-
-    /**
-     * Compute the convection time step based on the current solution and
-     * return it.
-     *
-     * @ingroup TimeStepping
-     */
-    template <int dim>
-    class ConvectionTimeStep : public Interface<dim>, public SimulatorAccess<dim>
-    {
-      public:
-        /**
-         * Constructor.
-         */
-        ConvectionTimeStep () = default;
+    public:
+      /**
+       * Constructor.
+       */
+      ConvectionTimeStep () = default;
 
 
-        /**
-         * @copydoc aspect::TimeStepping::Interface<dim>::execute()
-         */
-        virtual
-        double
-        execute() override;
+      /**
+       * @copydoc aspect::TimeStepping::Interface<dim>::execute()
+       */
+      virtual
+      double
+      execute() override;
 
-      private:
-    };
-  }
+    private:
+  };
+}
 }
 
 

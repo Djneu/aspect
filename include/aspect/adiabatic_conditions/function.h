@@ -30,77 +30,77 @@
 
 namespace aspect
 {
-  namespace AdiabaticConditions
+namespace AdiabaticConditions
+{
+  using namespace dealii;
+
+  /**
+   * A simple class that sets the adiabatic conditions based on given
+   * a given function with three components: temperature, pressure, density.
+   */
+  template <int dim>
+  class Function : public Interface<dim>
   {
-    using namespace dealii;
+    public:
+      /**
+       * Constructor. Initialize variables.
+       */
+      Function ();
 
-    /**
-     * A simple class that sets the adiabatic conditions based on given
-     * a given function with three components: temperature, pressure, density.
-     */
-    template <int dim>
-    class Function : public Interface<dim>
-    {
-      public:
-        /**
-         * Constructor. Initialize variables.
-         */
-        Function ();
+      /**
+       * Initialization function.
+       */
+      void initialize () override;
 
-        /**
-         * Initialization function.
-         */
-        void initialize () override;
+      /**
+       * Some plugins need to know whether the adiabatic conditions are
+       * already calculated, this is always true for the Function class.
+       */
+      bool is_initialized() const override;
 
-        /**
-         * Some plugins need to know whether the adiabatic conditions are
-         * already calculated, this is always true for the Function class.
-         */
-        bool is_initialized() const override;
-
-        /**
-         * Return the adiabatic temperature at a given point of the domain.
-         */
-        double temperature (const Point<dim> &p) const override;
+      /**
+       * Return the adiabatic temperature at a given point of the domain.
+       */
+      double temperature (const Point<dim> &p) const override;
 
 
-        /**
-         * Return the adiabatic pressure at a given point of the domain.
-         */
-        double pressure (const Point<dim> &p) const override;
+      /**
+       * Return the adiabatic pressure at a given point of the domain.
+       */
+      double pressure (const Point<dim> &p) const override;
 
-        /**
-         * Return the reference_density at a given point of the domain.
-         */
-        double density (const Point<dim> &p) const override;
+      /**
+       * Return the reference_density at a given point of the domain.
+       */
+      double density (const Point<dim> &p) const override;
 
-        /**
-         * Return the derivative of the density with respect to depth
-         * at the given point @p p.
-         */
-        double density_derivative (const Point<dim> &p) const override;
+      /**
+       * Return the derivative of the density with respect to depth
+       * at the given point @p p.
+       */
+      double density_derivative (const Point<dim> &p) const override;
 
-        /**
-         * Declare the parameters for the input files.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
+      /**
+       * Declare the parameters for the input files.
+       */
+      static
+      void
+      declare_parameters (ParameterHandler &prm);
 
-        /**
-         * Read the parameters from the parameter file.
-         */
-        void
-        parse_parameters (ParameterHandler &prm) override;
+      /**
+       * Read the parameters from the parameter file.
+       */
+      void
+      parse_parameters (ParameterHandler &prm) override;
 
-      private:
+    private:
 
-        /**
-         * ParsedFunction: depth->(temperature, pressure, density)
-         */
-        Functions::ParsedFunction<1> function;
-    };
-  }
+      /**
+       * ParsedFunction: depth->(temperature, pressure, density)
+       */
+      Functions::ParsedFunction<1> function;
+  };
+}
 }
 
 

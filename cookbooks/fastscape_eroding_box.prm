@@ -21,11 +21,11 @@ subsection Geometry model
     set X repetitions = 4
     set Y repetitions = 4
   end
-  
+
   subsection Initial topography model
     set Model name = function
     subsection Function
-      set Function expression = if(y>20e3 && y<80e3 && x>20e3 && x<80e3, 2500, 0)          
+      set Function expression = if(y>20e3 && y<80e3 && x>20e3 && x<80e3, 2500, 0)
     end
   end
 end
@@ -52,7 +52,7 @@ end
 # Here we setup the top boundary with fastscape.
 subsection Mesh deformation
   set Mesh deformation boundary indicators = top : fastscape
-  
+
     subsection Fastscape
       # As the highest resolution at the surface is 4 in the mesh refiniment function, we set this the same.
       set Surface resolution = 4
@@ -87,7 +87,7 @@ subsection Mesh deformation
         set Top    = 1
         set Left   = 1
       end
-   
+
       # We use both SPL and diffusion. The bedrock deposition
       # variable allows deposition of sediment, however, because
       # the sediment variables are not set, they are equal to
@@ -112,7 +112,7 @@ subsection Gravity model
   set Model name = vertical
 
   subsection Vertical
-    set Magnitude = 0   # = Ra 
+    set Magnitude = 0   # = Ra
   end
 end
 
@@ -146,13 +146,13 @@ subsection Mesh refinement
   set Initial adaptive refinement              = 1
   set Time steps between mesh refinement       = 0
   set Strategy                                 = maximum refinement function, minimum refinement function
-  
+
     subsection Maximum refinement function
       set Coordinate system   = cartesian
       set Variable names      = x,y,z
       set Function expression = if(z>=23000, 4, 2)
   end
-  
+
       subsection Minimum refinement function
       set Coordinate system   = cartesian
       set Variable names      = x,y,z

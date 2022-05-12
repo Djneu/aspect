@@ -26,59 +26,59 @@
 
 namespace aspect
 {
-  namespace TimeStepping
+namespace TimeStepping
+{
+  using namespace dealii;
+
+  /**
+   * A class that implements a time stepping plugin to repeat a time step if the
+   * next time step is significantly smaller than the last step.
+   *
+   * @ingroup TimeStepping
+   */
+  template <int dim>
+  class RepeatOnCutback : public Interface<dim>, public SimulatorAccess<dim>
   {
-    using namespace dealii;
+    public:
+      /**
+       * Constructor.
+       */
+      RepeatOnCutback () = default;
 
-    /**
-     * A class that implements a time stepping plugin to repeat a time step if the
-     * next time step is significantly smaller than the last step.
-     *
-     * @ingroup TimeStepping
-     */
-    template <int dim>
-    class RepeatOnCutback : public Interface<dim>, public SimulatorAccess<dim>
-    {
-      public:
-        /**
-         * Constructor.
-         */
-        RepeatOnCutback () = default;
+      /**
+       * @copydoc aspect::TimeStepping::Interface<dim>::execute()
+       */
+      double
+      execute() override;
 
-        /**
-         * @copydoc aspect::TimeStepping::Interface<dim>::execute()
-         */
-        double
-        execute() override;
+      /**
+       * The main execute() function.
+       */
+      std::pair<Reaction, double>
+      determine_reaction(const TimeStepInfo &info) override;
 
-        /**
-         * The main execute() function.
-         */
-        std::pair<Reaction, double>
-        determine_reaction(const TimeStepInfo &info) override;
+      static
+      void
+      declare_parameters (ParameterHandler &prm);
 
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
+      void
+      parse_parameters (ParameterHandler &prm) override;
 
-        void
-        parse_parameters (ParameterHandler &prm) override;
+    private:
+      /**
+       * Parameter to determine how much smaller the time step should be
+       * repeated as.
+       */
+      double cut_back_amount;
 
-      private:
-        /**
-         * Parameter to determine how much smaller the time step should be
-         * repeated as.
-         */
-        double cut_back_amount;
-
-        /**
-         * Parameter that controls when to repeat a time step. If the newly
-         * computed step size is smaller than the last step size multiplied by
-         * this factor, the step is repeated.
-         */
-        double repeat_threshold;
-    };
-  }
+      /**
+       * Parameter that controls when to repeat a time step. If the newly
+       * computed step size is smaller than the last step size multiplied by
+       * this factor, the step is repeated.
+       */
+      double repeat_threshold;
+  };
+}
 }
 
 

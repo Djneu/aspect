@@ -450,21 +450,21 @@ namespace aspect
                         finite_element.dofs_per_cell),
           local_matrices_int_ext ((field_is_discontinuous
                                    ?
-                                   GeometryInfo<dim>::max_children_per_face * GeometryInfo<dim>::faces_per_cell
+                                   finite_element.reference_cell().n_faces() * GeometryInfo<dim>::max_children_per_face
                                    :
                                    0),
                                   FullMatrix<double>(finite_element.dofs_per_cell,
                                                      finite_element.dofs_per_cell)),
           local_matrices_ext_int ((field_is_discontinuous
                                    ?
-                                   GeometryInfo<dim>::max_children_per_face * GeometryInfo<dim>::faces_per_cell
+                                   finite_element.reference_cell().n_faces() * GeometryInfo<dim>::max_children_per_face
                                    :
                                    0),
                                   FullMatrix<double>(finite_element.dofs_per_cell,
                                                      finite_element.dofs_per_cell)),
           local_matrices_ext_ext ((field_is_discontinuous
                                    ?
-                                   GeometryInfo<dim>::max_children_per_face * GeometryInfo<dim>::faces_per_cell
+                                   finite_element.reference_cell().n_faces() * GeometryInfo<dim>::max_children_per_face
                                    :
                                    0),
                                   FullMatrix<double>(finite_element.dofs_per_cell,
@@ -473,14 +473,14 @@ namespace aspect
 
           assembled_matrices ((field_is_discontinuous
                                ?
-                               GeometryInfo<dim>::max_children_per_face * GeometryInfo<dim>::faces_per_cell
+                               finite_element.reference_cell().n_faces() * GeometryInfo<dim>::max_children_per_face
                                :
                                0), false),
 
           local_dof_indices (finite_element.dofs_per_cell),
           neighbor_dof_indices ((field_is_discontinuous
                                  ?
-                                 GeometryInfo<dim>::max_children_per_face * GeometryInfo<dim>::faces_per_cell
+                                 finite_element.reference_cell().n_faces() * GeometryInfo<dim>::max_children_per_face
                                  :
                                  0),
                                 std::vector<types::global_dof_index>(finite_element.dofs_per_cell))
@@ -512,6 +512,44 @@ namespace aspect
 
       return std::vector<double>();
     }
+
+
+
+    template <int dim>
+    AdvectionStabilizationInterface<dim>::~AdvectionStabilizationInterface()
+    {}
+
+
+
+    template <int dim>
+    std::vector<double>
+    AdvectionStabilizationInterface<dim>::advection_prefactors(internal::Assembly::Scratch::ScratchBase<dim> &scratch_base) const
+    {
+      internal::Assembly::Scratch::AdvectionSystem<dim> &scratch = dynamic_cast<internal::Assembly::Scratch::AdvectionSystem<dim>& > (scratch_base);
+
+      std::vector<double> prefactors(scratch.material_model_inputs.n_evaluation_points(), 1.0);
+
+      if (scratch.advection_field->is_temperature())
+        for (unsigned int i=0; i<prefactors.size(); ++i)
+          prefactors[i] = scratch.material_model_outputs.densities[i] * scratch.material_model_outputs.specific_heat[i];
+
+      return prefactors;
+    }
+
+
+
+    template <int dim>
+    std::vector<double>
+    AdvectionStabilizationInterface<dim>::diffusion_prefactors(internal::Assembly::Scratch::ScratchBase<dim> &scratch_base) const
+    {
+      internal::Assembly::Scratch::AdvectionSystem<dim> &scratch = dynamic_cast<internal::Assembly::Scratch::AdvectionSystem<dim>& > (scratch_base);
+
+      if (scratch.advection_field->is_temperature())
+        return scratch.material_model_outputs.thermal_conductivities;
+
+      return std::vector<double> (scratch.material_model_inputs.n_evaluation_points(), 0.0);
+    }
+
 
 
     template <int dim>
@@ -557,6 +595,7 @@ namespace aspect
   } \
   namespace Assemblers { \
     template class Interface<dim>; \
+    template class AdvectionStabilizationInterface<dim>; \
     template class Manager<dim>; \
   }
   ASPECT_INSTANTIATE(INSTANTIATE)

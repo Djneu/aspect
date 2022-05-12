@@ -57,10 +57,10 @@ namespace aspect
               bool coarsen = false;
               bool clear_refine = false;
 
-              for ( unsigned int v = 0; v < GeometryInfo<dim>::vertices_per_cell;  ++v)
+              for (const unsigned int v : cell->vertex_indices())
                 {
                   const Point<dim> vertex = cell->vertex(v);
-                  Utilities::NaturalCoordinate<dim> point =
+                  const Utilities::NaturalCoordinate<dim> point =
                     this->get_geometry_model().cartesian_to_other_coordinates(vertex, coordinate_system);
 
                   const double maximum_refinement_level = max_refinement_level.value(Utilities::convert_array_to_point<dim>(point.get_coordinates()));
