@@ -927,7 +927,7 @@ namespace aspect
           // model, and set the ghost node according to the direction of flow. As FastScape will
           // receive all velocities it will have a direction, and we only need to look at the (non-ghost)
           // nodes directly to the left and right.
-          if (left == 0 && right == 0 | leftright_ghost_nodes_periodic == true)
+          if (left == 0 && right == 0 || leftright_ghost_nodes_periodic == true)
             {
               // First we assume that flow is going to the left.
               int side = index_left;
