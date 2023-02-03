@@ -39,6 +39,7 @@ namespace aspect
       template <int dim>
       const DruckerPragerParameters
       DruckerPrager<dim>::compute_drucker_prager_parameters (const unsigned int composition,
+                                                             const double depth,
                                                              const std::vector<double> &phase_function_values,
                                                              const std::vector<unsigned int> &n_phase_transitions_per_composition) const
       {
@@ -46,11 +47,16 @@ namespace aspect
 
         drucker_prager_parameters.max_yield_stress = max_yield_stress;
 
+        // Create a linear function to determine fluid ratio decrease with depth.
+        //double xx = this->get_geometry_model().depth(in.position[i]);
+
+
         if (phase_function_values == std::vector<double>())
           {
             // no phases
             drucker_prager_parameters.angle_internal_friction = angles_internal_friction[composition];
             drucker_prager_parameters.cohesion = cohesions[composition];
+            drucker_prager_parameters.fluid_ratio = fluid_ratio[composition];
           }
         else
           {
@@ -59,6 +65,8 @@ namespace aspect
                                                                 angles_internal_friction, composition);
             drucker_prager_parameters.cohesion = MaterialModel::MaterialUtilities::phase_average_value(phase_function_values, n_phase_transitions_per_composition,
                                                  cohesions, composition);
+            drucker_prager_parameters.fluid_ratio = MaterialModel::MaterialUtilities::phase_average_value(phase_function_values, n_phases_per_composition,
+                                                 fluid_ratio, composition);
           }
         return drucker_prager_parameters;
       }
@@ -179,6 +187,11 @@ namespace aspect
                            "for a total of N+1 values, where N is the number of compositional fields. "
                            "The extremely large default cohesion value (1e20 Pa) prevents the viscous stress from "
                            "exceeding the yield stress. Units: \\si{\\pascal}.");
+        prm.declare_entry ("Fluid ratio", "0", Patterns::Anything(),
+                           "Lower cutoff for effective viscosity. Units: \\si{\\pascal\\second}. "
+                           "List with as many components as active "
+                           "compositional fields (material data is assumed to "
+                           "be in order with the ordering of the fields). ");
         prm.declare_entry ("Maximum yield stress", "1e12", Patterns::Double (0.),
                            "Limits the maximum value of the yield stress determined by the "
                            "Drucker-Prager plasticity parameters. Default value is chosen so this "
@@ -224,6 +237,13 @@ namespace aspect
                                                          "Cohesions",
                                                          true,
                                                          expected_n_phases_per_composition);
+
+        fluid_ratio = Utilities::parse_map_to_double_array (prm.get("Fluid ratio"),
+                                                          list_of_composition_names,
+                                                          has_background_field,
+                                                          "Fluid ratio",
+                                                          true,
+                                                          expected_n_phases_per_composition);
 
         // Limit maximum value of the Drucker-Prager yield stress
         max_yield_stress = prm.get_double("Maximum yield stress");

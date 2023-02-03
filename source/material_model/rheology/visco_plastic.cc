@@ -40,6 +40,7 @@ namespace aspect
         names.emplace_back("current_cohesions");
         names.emplace_back("current_friction_angles");
         names.emplace_back("current_yield_stresses");
+        names.emplace_back("current_fluid_ratios");
         names.emplace_back("plastic_yielding");
         return names;
       }
@@ -51,6 +52,7 @@ namespace aspect
         cohesions(n_points, numbers::signaling_nan<double>()),
         friction_angles(n_points, numbers::signaling_nan<double>()),
         yield_stresses(n_points, numbers::signaling_nan<double>()),
+		fluid_ratios(n_points, numbers::signaling_nan<double>()),
         yielding(n_points, numbers::signaling_nan<double>())
     {}
 
@@ -60,7 +62,7 @@ namespace aspect
     std::vector<double>
     PlasticAdditionalOutputs<dim>::get_nth_output(const unsigned int idx) const
     {
-      AssertIndexRange (idx, 4);
+      AssertIndexRange (idx, 5);
       switch (idx)
         {
           case 0:
@@ -71,10 +73,12 @@ namespace aspect
 
           case 2:
             return yield_stresses;
-
+			
           case 3:
             return yielding;
-
+			
+		  case 4:
+			return fluid_ratios;
           default:
             AssertThrow(false, ExcInternalError());
         }
@@ -277,12 +281,15 @@ namespace aspect
             // Step 3b: calculate non yielding (viscous or viscous + elastic) stress magnitude
             double non_yielding_stress = 2. * non_yielding_viscosity * effective_edot_ii;
 
-            // Step 4a: calculate the strain-weakened friction and cohesion
+            // Step 4a: calculate strain-weakened friction and cohesion
+            double depth = this->get_geometry_model().depth(in.position[i]);
             const DruckerPragerParameters drucker_prager_parameters = drucker_prager_plasticity.compute_drucker_prager_parameters(j,
+                                                                      depth,
                                                                       phase_function_values,
                                                                       n_phase_transitions_per_composition);
             const double current_cohesion = drucker_prager_parameters.cohesion * weakening_factors[0];
             double current_friction = drucker_prager_parameters.angle_internal_friction * weakening_factors[1];
+            const double current_fluid_ratio = drucker_prager_parameters.fluid_ratio;
 
             // Step 4b: calculate the friction angle dependent on strain rate if specified
             // apply the strain rate dependence to the friction angle (including strain weakening if present)
@@ -303,8 +310,15 @@ namespace aspect
             // than the lithostatic pressure.
 
             double pressure_for_plasticity = in.pressure[i];
+
+            if(use_pore_fluid_pressure && this->get_geometry_model().depth(in.position[i]) < fluid_cutoff)
+            {
+              pressure_for_plasticity = in.pressure[i]*(1 - current_fluid_ratio);
+            }
+            //std::cout<<"p1: "<<pressure_for_plasticity<<std::endl;
+
             if (allow_negative_pressures_in_plasticity == false)
-              pressure_for_plasticity = std::max(in.pressure[i],0.0);
+              pressure_for_plasticity = std::max(pressure_for_plasticity,0.0);
 
             // Step 5a: calculate the Drucker-Prager yield stress
             const double yield_stress = drucker_prager_plasticity.compute_yield_stress(current_cohesion,
@@ -551,6 +565,15 @@ namespace aspect
                            "compositional fields (material data is assumed to "
                            "be in order with the ordering of the fields). ");
 
+        prm.declare_entry ("Pore fluid cutoff depth", "100e3", Patterns::Double (0.),
+                           "Stabilizes strain dependent viscosity. Units: \\si{\\per\\second}.");
+
+        //prm.declare_entry ("Fluid ratio", "0", Patterns::Anything(),
+        //                   "Lower cutoff for effective viscosity. Units: \\si{\\pascal\\second}. "
+        //                   "List with as many components as active "
+        //                   "compositional fields (material data is assumed to "
+        //                   "be in order with the ordering of the fields). ");
+
         // Rheological parameters
         prm.declare_entry ("Viscosity averaging scheme", "harmonic",
                            Patterns::Selection("arithmetic|harmonic|geometric|maximum composition"),
@@ -597,6 +620,10 @@ namespace aspect
         Rheology::PeierlsCreep<dim>::declare_parameters(prm);
 
         prm.declare_entry ("Include Peierls creep", "false",
+                           Patterns::Bool (),
+                           "Whether to include Peierls creep in the rheological formulation.");
+
+        prm.declare_entry ("Include pore fluid pressure", "false",
                            Patterns::Bool (),
                            "Whether to include Peierls creep in the rheological formulation.");
 
@@ -654,6 +681,7 @@ namespace aspect
         // Reference and minimum/maximum values
         min_strain_rate = prm.get_double("Minimum strain rate");
         ref_strain_rate = prm.get_double("Reference strain rate");
+        fluid_cutoff = prm.get_double("Pore fluid cutoff depth");
         minimum_viscosity = Utilities::parse_map_to_double_array (prm.get("Minimum viscosity"),
                                                                   list_of_composition_names,
                                                                   has_background_field,
@@ -728,6 +756,15 @@ namespace aspect
             peierls_creep->parse_parameters(prm, expected_n_phases_per_composition);
           }
 
+        use_pore_fluid_pressure = prm.get_bool ("Include pore fluid pressure");
+
+        //fluid_ratio = Utilities::parse_map_to_double_array (prm.get("Fluid ratio"),
+        //                                                          list_of_composition_names,
+        //                                                          has_background_field,
+        //                                                          "Fluid ratio",
+        //                                                          true,
+        //                                                          expected_n_phases_per_composition);
+
         // Constant viscosity prefactor parameters
         constant_viscosity_prefactors.initialize_simulator (this->get_simulator());
         constant_viscosity_prefactors.parse_parameters(prm);
@@ -787,6 +824,7 @@ namespace aspect
             plastic_out->friction_angles[i] = 0;
             plastic_out->yield_stresses[i] = 0;
             plastic_out->yielding[i] = plastic_yielding ? 1 : 0;
+            plastic_out->fluid_ratios[i] =  0;
 
             const std::vector<double> friction_angles_RAD = isostrain_viscosities.current_friction_angles;
             const std::vector<double> cohesions = isostrain_viscosities.current_cohesions;
@@ -808,6 +846,19 @@ namespace aspect
                                                   friction_angles_RAD[j],
                                                   pressure_for_plasticity,
                                                   max_yield_stress);
+												  
+                // Calculate the strain weakening factors and weakened values
+                const std::array<double, 3> weakening_factors = strain_rheology.compute_strain_weakening_factors(j, in.composition[i]);
+                double depth = this->get_geometry_model().depth(in.position[i]);
+                const DruckerPragerParameters drucker_prager_parameters = drucker_prager_plasticity.compute_drucker_prager_parameters(j,
+                                                                          depth,
+                                                                          phase_function_values,
+                                                                          n_phases_per_composition);
+
+                if(use_pore_fluid_pressure && this->get_geometry_model().depth(in.position[i]) < fluid_cutoff)
+                {
+                  plastic_out->fluid_ratios[i] += volume_fractions[j] * drucker_prager_parameters.fluid_ratio;
+                }
 
               }
           }

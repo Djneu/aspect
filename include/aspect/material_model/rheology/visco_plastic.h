@@ -76,6 +76,13 @@ namespace aspect
         std::vector<double> yield_stresses;
 
         /**
+         * Internal angles of friction at the evaluation points passed to
+         * the instance of MaterialModel::Interface::evaluate() that fills
+         * the current object.
+         */
+        std::vector<double> fluid_ratios;
+
+        /**
          * The area where the viscous stress exceeds the plastic yield stress,
          * and viscosity is rescaled back to the yield envelope.
          */
@@ -303,6 +310,10 @@ namespace aspect
            * Whether to include Peierls creep in the constitutive formulation.
            */
           bool use_peierls_creep;
+
+          bool use_pore_fluid_pressure;
+          double fluid_cutoff;
+          std::vector<double> fluid_ratio;
 
           /**
            * Object for computing Peierls creep viscosities.

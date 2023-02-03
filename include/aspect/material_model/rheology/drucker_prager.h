@@ -51,6 +51,11 @@ namespace aspect
         double cohesion;
 
         /**
+         * Fluid ratio for the current composition and phase
+         */
+        double fluid_ratio;
+
+        /**
          * Limit maximum yield stress from drucker prager yield criterion.
          */
         double max_yield_stress;
@@ -91,6 +96,7 @@ namespace aspect
            */
           const DruckerPragerParameters
           compute_drucker_prager_parameters (const unsigned int composition,
+                                             const double depth,
                                              const std::vector<double> &phase_function_values = std::vector<double>(),
                                              const std::vector<unsigned int> &n_phase_transitions_per_composition = std::vector<unsigned int>()) const;
 
@@ -137,6 +143,13 @@ namespace aspect
 
           std::vector<double> angles_internal_friction;
           std::vector<double> cohesions;
+          std::vector<double> fluid_ratio;
+
+          //std::vector<double> fluid_ratio_top;
+          //std::vector<double> fluid_ratio_base;
+          //std::vector<double> fluid_ratio_length;
+          //double fluid_ratio_cutoff;
+
           double max_yield_stress;
 
           /**
