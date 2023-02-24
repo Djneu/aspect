@@ -36,6 +36,18 @@ namespace aspect
     Interface<dim>::initialize ()
     {}
 
+    template <int dim>
+    void
+    Interface<dim>::update_surface ()
+    {}
+
+    template <int dim>
+    double
+    Interface<dim>::depth_including_mesh_deformation(const Point<dim> &position) const
+    {
+      return depth(position);
+    }
+
 
 
     template <int dim>

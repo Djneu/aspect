@@ -143,12 +143,6 @@ namespace aspect
 
           std::vector<double> angles_internal_friction;
           std::vector<double> cohesions;
-          std::vector<double> fluid_ratio;
-
-          //std::vector<double> fluid_ratio_top;
-          //std::vector<double> fluid_ratio_base;
-          //std::vector<double> fluid_ratio_length;
-          //double fluid_ratio_cutoff;
 
           double max_yield_stress;
 

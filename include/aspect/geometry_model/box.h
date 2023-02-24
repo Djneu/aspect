@@ -53,6 +53,11 @@ namespace aspect
         void topography (typename parallel::distributed::Triangulation<dim> &grid) const;
 
         /**
+         * Function to store data on current surface topography.
+         */
+        void update_surface () override;
+
+        /**
          * Relocate the vertical coordinate of the given point based on
          * the topography at the surface specified by the initial topography
          * model.
@@ -111,6 +116,8 @@ namespace aspect
          * surface without initial topography.
          */
         double depth(const Point<dim> &position) const override;
+
+        double depth_including_mesh_deformation(const Point<dim> &position) const override;
 
         /**
          * Return the height of the given position relative to
@@ -247,6 +254,12 @@ namespace aspect
          * A pointer to the initial topography model.
          */
         InitialTopographyModel::Interface<dim> *topo_model;
+
+      /**
+       * Variables to hold surface topography when checking the depth including mesh deformation.
+       */
+      std::vector<double> surface_xx;
+      std::vector<double> surface_yy;
     };
   }
 }

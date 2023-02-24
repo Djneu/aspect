@@ -72,6 +72,13 @@ namespace aspect
          */
         virtual void initialize ();
 
+                /**
+         * Initialization function. This function is called once at the
+         * beginning of the program after parse_parameters is run and after
+         * the SimulatorAccess (if applicable) is initialized.
+         */
+        virtual void update_surface ();
+
         /**
          * Generate a coarse mesh for the geometry described by this class.
          */
@@ -131,6 +138,9 @@ namespace aspect
          */
         virtual
         double depth(const Point<dim> &position) const = 0;
+
+        virtual
+        double depth_including_mesh_deformation(const Point<dim> &position) const;
 
         /**
          * Return the height of the given position relative to the reference

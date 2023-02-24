@@ -33,6 +33,8 @@
 #include <aspect/material_model/rheology/constant_viscosity_prefactors.h>
 #include <aspect/material_model/rheology/drucker_prager.h>
 #include <aspect/material_model/rheology/elasticity.h>
+//#include "/cluster/project/sgtethz/shared_software/aspect/dneuharth/pore_fluid_pressure/plugins/fluid_ratio/pore_fluid_pressure.h"
+#include <aspect/material_model/rheology/pore_fluid_pressure.h>
 #include <aspect/simulator_access.h>
 
 #include<deal.II/fe/component_mask.h>
@@ -87,6 +89,8 @@ namespace aspect
          * and viscosity is rescaled back to the yield envelope.
          */
         std::vector<double> yielding;
+        std::vector<double> depth_wmd;
+        std::vector<double> depth_womd;
 
     };
 
@@ -223,6 +227,11 @@ namespace aspect
           Rheology::StrainDependent<dim> strain_rheology;
 
           /**
+           * Object for computing the strain dependence of the rheology model.
+           */
+          Rheology::PoreFluidPressure<dim> pore_pressure;
+
+          /**
            * Object for computing the friction dependence of the rheology model.
            */
           Rheology::FrictionModels<dim> friction_models;
@@ -312,8 +321,8 @@ namespace aspect
           bool use_peierls_creep;
 
           bool use_pore_fluid_pressure;
-          double fluid_cutoff;
-          std::vector<double> fluid_ratio;
+          //double fluid_cutoff;
+          //std::vector<double> fluid_ratio;
 
           /**
            * Object for computing Peierls creep viscosities.

@@ -28,6 +28,8 @@
 #include <deal.II/grid/tria_accessor.h>
 #include <deal.II/grid/grid_tools.h>
 
+#include <numeric>
+
 
 namespace aspect
 {
@@ -262,7 +264,9 @@ namespace aspect
       const double topo = topo_model->value(surface_point);
 
       const double d = extents[dim-1] + topo - (position(dim-1)-box_origin[dim-1]);
+
       return std::min (std::max (d, 0.), maximal_depth());
+
     }
 
 
@@ -361,6 +365,175 @@ namespace aspect
         position_point[i] = position_tensor[i];
 
       return position_point;
+    }
+
+    template <int dim>
+    void
+    Box<dim>::
+    update_surface ()
+    {
+        this->get_pcout() << "   Updating surface values... " <<std::endl;
+        // loop over all of the surface cells and save the elevation to a stored value.
+        // This needs to be sent to 1 processor, sorted, and broadcast so that every processor knows the entire surface.
+        // TODO: Is there a better time to call this in regards to mesh deformation?
+        // TODO: Right now this is messy saving two variables, this can be cleaned up by
+        // combining surface_x and surface_y into one variable and broadcasting them in a loop.
+        std::vector<double> surface_x;
+        std::vector<double> surface_y;
+        std::vector<std::vector<double>> local_surface_height(2, std::vector<double>());
+        const types::boundary_id relevant_boundary = this->get_geometry_model().translate_symbolic_boundary_name_to_id ("top");
+        const QTrapezoid<dim-1> face_corners;
+        FEFaceValues<dim> fe_face_values(this->get_mapping(),
+                                          this->get_fe(),
+                                          face_corners,
+                                          update_quadrature_points);
+
+
+        // Loop over all corners at the surface and save their X and Y positions.
+        // TODO: Update this to work in 3D. Spherical?
+        for (const auto &cell : this->get_dof_handler().active_cell_iterators())
+          if (cell->is_locally_owned() && cell->at_boundary())
+            for (const unsigned int face_no : cell->face_indices())
+              if (cell->face(face_no)->at_boundary())
+                {
+                  if ( cell->face(face_no)->boundary_id() != relevant_boundary)
+                    continue;
+
+                  fe_face_values.reinit(cell, face_no);
+
+                  for (unsigned int corner = 0; corner < face_corners.size(); ++corner)
+                    {
+                      const Point<dim> vertex = fe_face_values.quadrature_point(corner);
+
+                      local_surface_height[0].push_back(vertex(0));   // X
+                      local_surface_height[1].push_back(vertex(dim-1));  // Y, now this only works for 2D
+
+                    }
+                }
+
+        // Combine all local_surfaces, combine and sort them, and broadcast back.
+        if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+        {
+          // Only push back them if the x value changes. This is done because
+          // there are two corner points for each position, and we want to remove duplicates.
+          // TODO: Is there an easier way to remove duplicates before getting here?
+          for (unsigned int i=0; i<local_surface_height[1].size(); i++)
+          {
+            if(i==0)
+            {
+              surface_x.push_back(local_surface_height[0][i]);
+              surface_y.push_back(local_surface_height[1][i]);
+            }
+            else
+              if(local_surface_height[0][i] != local_surface_height[0][i-1])
+              {
+                 surface_x.push_back(local_surface_height[0][i]);
+                 surface_y.push_back(local_surface_height[1][i]);
+              }
+          }
+
+          for (unsigned int p=1; p<Utilities::MPI::n_mpi_processes(this->get_mpi_communicator()); ++p)
+          {
+            // First, find out the size of the array a process wants to send.
+            MPI_Status status;
+            MPI_Probe(p, 42, this->get_mpi_communicator(), &status);
+            int incoming_size = 0;
+            MPI_Get_count(&status, MPI_DOUBLE, &incoming_size);
+
+            // Resize the array so it fits whatever the process sends.
+            std::vector<std::vector<double>> temporary_surface(2, std::vector<double>());
+
+            for (unsigned int i=0; i<temporary_surface.size(); ++i)
+                temporary_surface[i].resize(incoming_size);
+
+            for (unsigned int i=0; i<temporary_surface.size(); ++i)
+              MPI_Recv(&temporary_surface[i][0], incoming_size, MPI_DOUBLE, p, 42, this->get_mpi_communicator(), &status);
+
+            for (unsigned int i=0; i<temporary_surface[1].size(); ++i)
+              {
+                if(i==0)
+                {
+                  if(temporary_surface[0][i] != surface_x[surface_x.size() - 1])
+                  {
+                    surface_x.push_back(temporary_surface[0][i]);
+                    surface_y.push_back(temporary_surface[1][i]);
+                  }
+                }
+                else
+                {
+                  if(temporary_surface[0][i] != temporary_surface[0][i-1])
+                  {
+                    surface_x.push_back(temporary_surface[0][i]);
+                    surface_y.push_back(temporary_surface[1][i]);
+                  }
+                }
+              }
+          }
+
+            double vector_size = surface_x.size();
+            MPI_Bcast(&vector_size, 1, MPI_DOUBLE, 0, this->get_mpi_communicator());
+            MPI_Bcast(&surface_x[0], vector_size, MPI_DOUBLE, 0, this->get_mpi_communicator());
+            MPI_Bcast(&surface_y[0], vector_size, MPI_DOUBLE, 0, this->get_mpi_communicator());
+        }
+        else
+        {
+          for (unsigned int i=0; i<local_surface_height.size(); i++)
+              MPI_Ssend(&local_surface_height[i][0], local_surface_height[1].size(), MPI_DOUBLE, 0, 42, this->get_mpi_communicator());
+
+          double vector_size = 0;
+          MPI_Bcast(&vector_size, 1, MPI_DOUBLE, 0, this->get_mpi_communicator());
+          surface_x.resize(vector_size);
+          surface_y.resize(vector_size);
+          MPI_Bcast(&surface_x[0], vector_size, MPI_DOUBLE, 0, this->get_mpi_communicator());
+          MPI_Bcast(&surface_y[0], vector_size, MPI_DOUBLE, 0, this->get_mpi_communicator());
+        }
+
+        surface_xx = surface_x;
+        surface_yy = surface_y;
+    }
+
+    template <int dim>
+    double
+    Box<dim>::depth_including_mesh_deformation(const Point<dim> &position) const
+    {
+          // Compute the depth including free surface position, this only works in 2D
+          // The surface points do not always match position points, so we linearly
+          // Interpolate between the two nearest surface points.
+          // This function is sometimes called before the surface has been saved,
+          // so during timestep zero we call the normal depth function.
+          double depth_from_surface;
+          if(this->get_timestep_number() > 0)
+          {
+            double height = 0;
+            double x1 = 0; double x2 = 0; double y1 = 0; double y2 = 0;
+
+            // Loop through all surface points and find the nearest ones to the given position.
+            for(unsigned int s=0; s<surface_xx.size();++s)
+            {
+              x2 = surface_xx[s];
+              y2 = surface_yy[s];
+
+              if(x2 > position[0])
+                break;
+
+              // If we aren't greater, then increase point1.
+              x1 = x2; y1 = y2;
+            }
+
+            // If we are at the edge of the model domain, use that y value. Otherwise interpolate.
+            if(position[0] >= surface_xx[surface_xx.size() - 1])
+              height = surface_yy[surface_yy.size() - 1];
+            else if (position[0] <= surface_xx[0])
+              height = surface_yy[0];
+            else
+              height = ((y2 - y1)/(x2-x1))*(position[0] - x1) + y1;
+
+            depth_from_surface = height - position[dim-1];
+          }
+          else
+            depth_from_surface = depth(position);
+
+          return std::min (std::max (depth_from_surface, 0.), maximal_depth());
     }
 
 
