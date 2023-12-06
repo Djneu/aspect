@@ -29,6 +29,7 @@
 #include <aspect/mesh_deformation/interface.h>
 #include <aspect/citation_info.h>
 #include <aspect/postprocess/particles.h>
+#include <ctime>
 
 #ifdef ASPECT_WITH_WORLD_BUILDER
 #include <world_builder/world.h>
@@ -637,7 +638,11 @@ namespace aspect
     if (parameters.mesh_deformation_enabled)
       mesh_deformation->update();
 
+    auto t_start = std::chrono::high_resolution_clock::now();
     geometry_model->update_surface();
+    auto t_end = std::chrono::high_resolution_clock::now();
+    double r_time = std::chrono::duration<double>(t_end-t_start).count();
+    pcout << "      Update surface runtime... " << round(r_time*1000)/1000 << "s" << std::endl;
 
     if (prescribed_stokes_solution.get())
       prescribed_stokes_solution->update();

@@ -41,6 +41,9 @@ namespace aspect
     {
       // Get pointer to initial topography model
       topo_model = const_cast<InitialTopographyModel::Interface<dim>*>(&this->get_initial_topography_model());
+
+      //surface_height.resize(dim);
+
       // Check that initial topography is required.
       // If so, connect the initial topography function
       // to the right signals: It should be applied after
@@ -310,6 +313,14 @@ namespace aspect
     }
 
     template <int dim>
+    std::vector<std::vector<double>>
+    Box<dim>::get_surface_test() const
+    {
+      std::vector<std::vector<double>> surface_height;
+      return surface_height;
+    }
+
+    template <int dim>
     bool
     Box<dim>::has_curved_elements() const
     {
@@ -453,10 +464,18 @@ namespace aspect
               {
                 if(i==0)
                 {
-                  if(temporary_surface[0][i] != surface_x[surface_x.size() - 1])
+                  if(surface_x.size() > 0)
                   {
-                    surface_x.push_back(temporary_surface[0][i]);
-                    surface_y.push_back(temporary_surface[1][i]);
+                    if(temporary_surface[0][i] != surface_x[surface_x.size() - 1])
+                    {
+                      surface_x.push_back(temporary_surface[0][i]);
+                      surface_y.push_back(temporary_surface[1][i]);
+                    }
+                  else
+                    {
+                      surface_x.push_back(temporary_surface[0][i]);
+                      surface_y.push_back(temporary_surface[1][i]);
+                    }
                   }
                 }
                 else
@@ -481,12 +500,17 @@ namespace aspect
               MPI_Ssend(&local_surface_height[i][0], local_surface_height[1].size(), MPI_DOUBLE, 0, 42, this->get_mpi_communicator());
 
           double vector_size = 0;
+         //std::vector<std::vector<double>> surface_height(2, std::vector<double>());
           MPI_Bcast(&vector_size, 1, MPI_DOUBLE, 0, this->get_mpi_communicator());
           surface_x.resize(vector_size);
           surface_y.resize(vector_size);
+
           MPI_Bcast(&surface_x[0], vector_size, MPI_DOUBLE, 0, this->get_mpi_communicator());
           MPI_Bcast(&surface_y[0], vector_size, MPI_DOUBLE, 0, this->get_mpi_communicator());
         }
+
+        //surface_height[0] = surface_x;
+        //surface_height[1] = surface_y;
 
         surface_xx = surface_x;
         surface_yy = surface_y;

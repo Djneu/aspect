@@ -58,6 +58,11 @@ namespace aspect
         void update_surface () override;
 
         /**
+         * Function to store data on current surface topography.
+         */
+        std::vector<std::vector<double>> get_surface_test () const;
+
+        /**
          * Relocate the vertical coordinate of the given point based on
          * the topography at the surface specified by the initial topography
          * model.
@@ -260,6 +265,7 @@ namespace aspect
        */
       std::vector<double> surface_xx;
       std::vector<double> surface_yy;
+      //std::vector<std::vector<double>> surface_height;
     };
   }
 }

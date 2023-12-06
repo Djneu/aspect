@@ -54,7 +54,7 @@ namespace aspect
 
         for (unsigned int q=0; q<n_quadrature_points; ++q)
           {
-            computed_quantities[q](0) = this->get_geometry_model().depth (input_data.evaluation_points[q]);
+            computed_quantities[q](0) = this->get_geometry_model().depth_including_mesh_deformation (input_data.evaluation_points[q]);
           }
       }
     }

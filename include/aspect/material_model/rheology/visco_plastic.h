@@ -91,7 +91,6 @@ namespace aspect
         std::vector<double> yielding;
         std::vector<double> depth_wmd;
         std::vector<double> depth_womd;
-
     };
 
     /**

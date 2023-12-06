@@ -42,8 +42,6 @@ namespace aspect
         names.emplace_back("current_yield_stresses");
         names.emplace_back("current_fluid_ratios");
         names.emplace_back("plastic_yielding");
-        names.emplace_back("depth_wmd");
-        names.emplace_back("depth_womd");
         return names;
       }
     }
@@ -66,7 +64,7 @@ namespace aspect
     std::vector<double>
     PlasticAdditionalOutputs<dim>::get_nth_output(const unsigned int idx) const
     {
-      AssertIndexRange (idx, 5);
+      AssertIndexRange (idx, 7);
       switch (idx)
         {
           case 0:
@@ -293,7 +291,7 @@ namespace aspect
             double non_yielding_stress = 2. * non_yielding_viscosity * effective_edot_ii;
 
             // Step 4a: calculate strain-weakened friction and cohesion
-           //double depth = this->get_geometry_model().depth(in.position[i]);
+            //double depth = this->get_geometry_model().depth(in.position[i]);
             double depth = this->get_geometry_model().depth_including_mesh_deformation(in.position[i]);
             const DruckerPragerParameters drucker_prager_parameters = drucker_prager_plasticity.compute_drucker_prager_parameters(j,
                                                                       depth,
@@ -301,7 +299,6 @@ namespace aspect
                                                                       n_phase_transitions_per_composition);
             const double current_cohesion = drucker_prager_parameters.cohesion * weakening_factors[0];
             double current_friction = drucker_prager_parameters.angle_internal_friction * weakening_factors[1];
-            //const double current_fluid_ratio = drucker_prager_parameters.fluid_ratio;
 
             // Step 4b: calculate the friction angle dependent on strain rate if specified
             // apply the strain rate dependence to the friction angle (including strain weakening if present)
@@ -321,11 +318,11 @@ namespace aspect
             // This may be necessary in models without gravity and when the dynamic stresses are much higher
             // than the lithostatic pressure.
             double pressure_for_plasticity = in.pressure[i];
-            double current_fluid_ratio = pore_pressure.compute_fluid_ratio(j,
-                                                                    depth);
-
             if(use_pore_fluid_pressure)
             {
+              double current_fluid_ratio = pore_pressure.compute_fluid_ratio(j,
+                                                                             depth);
+
               pressure_for_plasticity = in.pressure[i]*(1 - current_fluid_ratio);
             }
 
@@ -829,8 +826,6 @@ namespace aspect
             plastic_out->yield_stresses[i] = 0;
             plastic_out->yielding[i] = plastic_yielding ? 1 : 0;
             plastic_out->fluid_ratios[i] =  0;
-            plastic_out->depth_wmd[i] =  0;
-            plastic_out->depth_womd[i] =  0;
 
             const std::vector<double> friction_angles_RAD = isostrain_viscosities.current_friction_angles;
             const std::vector<double> cohesions = isostrain_viscosities.current_cohesions;
@@ -868,8 +863,6 @@ namespace aspect
                   double depth = this->get_geometry_model().depth_including_mesh_deformation(in.position[i]);
                   plastic_out->fluid_ratios[i] += volume_fractions[j] * pore_pressure.compute_fluid_ratio(j,
                                                                                                           depth);
-                  plastic_out->depth_wmd[i] = depth;
-                  plastic_out->depth_womd[i] = this->get_geometry_model().depth(in.position[i]);
                 }
 
               }

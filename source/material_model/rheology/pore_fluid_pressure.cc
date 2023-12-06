@@ -47,16 +47,12 @@ namespace aspect
         // Create a linear function to determine fluid ratio decrease with depth
         double current_fluid_ratio = 0;
 
-        //if(this->get_timestep_number() > 0)
-        //  std::cout<<depth<<std::endl;
-
         if(depth <= fluid_ratio_length[composition])
           current_fluid_ratio = fluid_ratio_top[composition] + depth*(fluid_ratio_base[composition] - fluid_ratio_top[composition])/fluid_ratio_length[composition];
         else if(depth <= fluid_ratio_cutoff)
           current_fluid_ratio = fluid_ratio_base[composition];
         else if(depth <= fluid_ratio_cutoff + fluid_cutoff_taper)
           current_fluid_ratio = fluid_ratio_base[composition] - (depth - fluid_ratio_cutoff)*(fluid_ratio_base[composition])/(fluid_cutoff_taper);
-
 
         return current_fluid_ratio;
       }
@@ -69,17 +65,17 @@ namespace aspect
         prm.declare_entry ("Include pore fluid pressure", "false",
                            Patterns::Bool (),
                            "Whether to include Peierls creep in the rheological formulation.");
-        prm.declare_entry ("Fluid ratio top", "0", Patterns::Anything(),
+        prm.declare_entry ("Fluid ratio top", "0.0", Patterns::Anything(),
                            "Lower cutoff for effective viscosity. Units: \\si{\\pascal\\second}. "
                            "List with as many components as active "
                            "compositional fields (material data is assumed to "
                            "be in order with the ordering of the fields). ");
-        prm.declare_entry ("Fluid ratio base", "0", Patterns::Anything(),
+        prm.declare_entry ("Fluid ratio base", "0.0", Patterns::Anything(),
                            "Lower cutoff for effective viscosity. Units: \\si{\\pascal\\second}. "
                            "List with as many components as active "
                            "compositional fields (material data is assumed to "
                            "be in order with the ordering of the fields). ");
-        prm.declare_entry ("Fluid ratio linear depth", "0", Patterns::Anything(),
+        prm.declare_entry ("Fluid ratio linear depth", "5e3", Patterns::Anything(),
                            "Lower cutoff for effective viscosity. Units: \\si{\\pascal\\second}. "
                            "List with as many components as active "
                            "compositional fields (material data is assumed to "
