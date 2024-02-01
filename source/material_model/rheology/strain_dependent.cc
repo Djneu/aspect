@@ -752,6 +752,9 @@ namespace aspect
         // Store which components to exclude during volume fraction computation.
         ComponentMask strain_mask(this->n_compositional_fields(),true);
 
+		if (this->introspection().compositional_name_exists("stripes"))
+			strain_mask.set(this->introspection().compositional_index_for_name("stripes"),false);
+
         if (weakening_mechanism != none)
           {
             if (weakening_mechanism == plastic_weakening_with_plastic_strain_only || weakening_mechanism == plastic_weakening_with_plastic_strain_and_viscous_weakening_with_viscous_strain)

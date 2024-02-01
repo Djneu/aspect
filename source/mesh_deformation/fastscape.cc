@@ -1,4 +1,4 @@
-/*
+ /*
   Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
@@ -328,6 +328,7 @@ namespace aspect
       // in the order needed for FastScape.
       std::vector<std::vector<double>> local_aspect_values = get_aspect_values();
 
+
       // Run FastScape on single process.
       if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
         {
@@ -343,6 +344,7 @@ namespace aspect
           std::vector<double> basement(fastscape_array_size);
           std::vector<double> silt_fraction(fastscape_array_size);
           std::vector<double> elevation_old(fastscape_array_size);
+
 
           fill_fastscape_arrays(elevation,
                                 bedrock_transport_coefficient_array,
@@ -501,11 +503,21 @@ namespace aspect
 
           // Find out our velocities from the change in height.
           // Where mesh_velocity_z is a vector of array size that exists on all processes.
+		  
+		  double minhh = 1e7; 
+		  double maxhh = -100;
           for (unsigned int i=0; i<fastscape_array_size; ++i)
             {
               mesh_velocity_z[i] = (elevation[i] - elevation_old[i])/aspect_timestep_in_years;
+
+              if (mesh_velocity_z[i] > maxhh)
+				maxhh = mesh_velocity_z[i];
+
+			  if (mesh_velocity_z[i] < minhh)
+				minhh = mesh_velocity_z[i];
             }
 
+          std::cout<<minhh<<"  "<<maxhh<<std::endl;
           Utilities::MPI::broadcast(this->get_mpi_communicator(), mesh_velocity_z, 0);
         }
       else
@@ -549,10 +561,16 @@ namespace aspect
           interpolation_extent[d].second = (grid_extent[d].second + grid_extent[d].first);
         }
 
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+        std::cout<<"fhere1"<<std::endl;
+
       //Functions::InterpolatedUniformGridData<dim> *velocities;
       Functions::InterpolatedUniformGridData<dim> velocities (interpolation_extent,
                                                               table_intervals,
                                                               velocity_table);
+
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+        std::cout<<"fhere2"<<std::endl;
 
       VectorFunctionFromScalarFunctionObject<dim> vector_function_object(
         [&](const Point<dim> &p) -> double
@@ -566,6 +584,9 @@ namespace aspect
                                                 *boundary_ids.begin(),
                                                 vector_function_object,
                                                 mesh_velocity_constraints);
+
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+        std::cout<<"fhere3"<<std::endl;
     }
 
 
@@ -578,7 +599,7 @@ namespace aspect
       std::vector<std::vector<double>> local_aspect_values(dim+2, std::vector<double>());
 
       // Get a quadrature rule that exists only on the corners, and increase the refinement if specified.
-      const QIterated<dim-1> face_corners (QTrapez<1>(),
+      const QIterated<dim-1> face_corners (QTrapezoid<1>(),
                                            std::pow(2,additional_refinement_levels+surface_refinement_difference));
 
       FEFaceValues<dim> fe_face_values (this->get_mapping(),
@@ -1299,6 +1320,19 @@ namespace aspect
               unsigned int side = index_bot;
               unsigned int op_side = index_top;
               int jj = fastscape_nx;
+			  
+			  // Set top ghost node
+              velocity_x[index_top] = velocity_x[index_bot + 2*fastscape_nx];
+              velocity_y[index_top] = velocity_y[index_bot + 2*fastscape_nx];
+              velocity_z[index_top] = velocity_z[index_bot + 2*fastscape_nx] + (elevation[index_bot + 2*fastscape_nx] - elevation[index_top])/fastscape_timestep_in_years;
+		      //elevation[index_top] = elevation[index_bot + 2*fastscape_nx];
+			  
+              // Set bottom ghost node
+              velocity_x[index_bot] = velocity_x[index_top - 2*fastscape_nx];
+              velocity_y[index_bot] = velocity_y[index_top - 2*fastscape_nx];
+              velocity_z[index_bot] = velocity_z[index_top - 2*fastscape_nx] + (elevation[index_top - 2*fastscape_nx] - elevation[index_bot])/fastscape_timestep_in_years;
+			  //elevation[index_bot] = elevation[index_top - 2*fastscape_nx];
+			 
 
               if (velocity_y[index_bot+fastscape_nx-1] > 0 && velocity_y[index_top-fastscape_nx-1] >= 0)
                 {
@@ -1314,16 +1348,6 @@ namespace aspect
                 }
               else
                 continue;
-
-              // Set top ghost node
-              velocity_x[index_top] = velocity_x[index_bot + 2*fastscape_nx];
-              velocity_y[index_top] = velocity_y[index_bot + 2*fastscape_nx];
-              velocity_z[index_top] = velocity_z[index_bot + 2*fastscape_nx] + (elevation[index_bot + 2*fastscape_nx] - elevation[index_top])/fastscape_timestep_in_years;
-
-              // Set bottom ghost node
-              velocity_x[index_bot] = velocity_x[index_top - 2*fastscape_nx];
-              velocity_y[index_bot] = velocity_y[index_top - 2*fastscape_nx];
-              velocity_z[index_bot] = velocity_z[index_top - 2*fastscape_nx] + (elevation[index_top - 2*fastscape_nx] - elevation[index_bot])/fastscape_timestep_in_years;
 
               // Set opposing ASPECT boundary so it's periodic.
               elevation[op_side-jj] = elevation[side+jj];
@@ -1547,6 +1571,14 @@ namespace aspect
       out_basement << buffer_basement.str();
       if (use_marine_component)
         out_silt_fraction << buffer_silt_fraction.str();
+    }
+
+    template <int dim>
+    bool
+    FastScape<dim>::
+    needs_surface_stabilization () const
+    {
+      return true;
     }
 
     template <int dim>

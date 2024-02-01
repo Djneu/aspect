@@ -40,8 +40,9 @@ namespace aspect
         names.emplace_back("current_cohesions");
         names.emplace_back("current_friction_angles");
         names.emplace_back("current_yield_stresses");
+		names.emplace_back("plastic_yielding");
         names.emplace_back("current_fluid_ratios");
-        names.emplace_back("plastic_yielding");
+		names.emplace_back("depth_wmd");
         return names;
       }
     }
@@ -54,8 +55,7 @@ namespace aspect
         yield_stresses(n_points, numbers::signaling_nan<double>()),
         yielding(n_points, numbers::signaling_nan<double>()),
 		fluid_ratios(n_points, numbers::signaling_nan<double>()),
-		depth_wmd(n_points, numbers::signaling_nan<double>()),
-        depth_womd(n_points, numbers::signaling_nan<double>())
+		depth_wmd(n_points, numbers::signaling_nan<double>())
     {}
 
 
@@ -84,9 +84,6 @@ namespace aspect
 
           case 5:
             return depth_wmd;
-
-          case 6:
-            return depth_womd;
 
           default:
             AssertThrow(false, ExcInternalError());
@@ -826,12 +823,13 @@ namespace aspect
             plastic_out->yield_stresses[i] = 0;
             plastic_out->yielding[i] = plastic_yielding ? 1 : 0;
             plastic_out->fluid_ratios[i] =  0;
+			plastic_out->depth_wmd[i] = this->get_geometry_model().depth_including_mesh_deformation(in.position[i]);
 
             const std::vector<double> friction_angles_RAD = isostrain_viscosities.current_friction_angles;
             const std::vector<double> cohesions = isostrain_viscosities.current_cohesions;
 
             // The max yield stress is the same for each composition, so we give the 0th field value.
-            const double max_yield_stress = drucker_prager_plasticity.compute_drucker_prager_parameters(0).max_yield_stress;
+            const double max_yield_stress = 0;
 
             double pressure_for_plasticity = in.pressure[i];
             if (allow_negative_pressures_in_plasticity == false)
@@ -849,12 +847,7 @@ namespace aspect
                                                   max_yield_stress);
 												  
                 // Calculate the strain weakening factors and weakened values
-                const std::array<double, 3> weakening_factors = strain_rheology.compute_strain_weakening_factors(j, in.composition[i]);
-                double depth = this->get_geometry_model().depth(in.position[i]);
-                const DruckerPragerParameters drucker_prager_parameters = drucker_prager_plasticity.compute_drucker_prager_parameters(j,
-                                                                          depth,
-                                                                          phase_function_values,
-                                                                          n_phases_per_composition);
+                //const std::array<double, 3> weakening_factors = strain_rheology.compute_strain_weakening_factors(j, in.composition[i]);
 
 
 

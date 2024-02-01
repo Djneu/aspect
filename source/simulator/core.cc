@@ -638,12 +638,6 @@ namespace aspect
     if (parameters.mesh_deformation_enabled)
       mesh_deformation->update();
 
-    auto t_start = std::chrono::high_resolution_clock::now();
-    geometry_model->update_surface();
-    auto t_end = std::chrono::high_resolution_clock::now();
-    double r_time = std::chrono::duration<double>(t_end-t_start).count();
-    pcout << "      Update surface runtime... " << round(r_time*1000)/1000 << "s" << std::endl;
-
     if (prescribed_stokes_solution.get())
       prescribed_stokes_solution->update();
 
@@ -1581,11 +1575,15 @@ namespace aspect
     TimerOutput::Scope timer (computing_timer, "Postprocessing");
     pcout << "   Postprocessing:" << std::endl;
 
+    if (Utilities::MPI::this_mpi_process(mpi_communicator)==0)
+         std::cout<<"phere1"<<std::endl;
     // run all the postprocessing routines and then write
     // the current state of the statistics table to a file
     std::list<std::pair<std::string,std::string>>
     output_list = postprocess_manager.execute (statistics);
 
+    if (Utilities::MPI::this_mpi_process(mpi_communicator)==0)
+         std::cout<<"phere2"<<std::endl;
     // if we are on processor zero, print to screen
     // whatever the postprocessors have generated
     if (Utilities::MPI::this_mpi_process(mpi_communicator)==0)
@@ -1609,6 +1607,9 @@ namespace aspect
 
         pcout << std::endl;
       }
+
+     if (Utilities::MPI::this_mpi_process(mpi_communicator)==0)
+         std::cout<<"phere3"<<std::endl;
 
     // finally, write the entire set of current results to disk
     output_statistics();
@@ -1848,6 +1849,15 @@ namespace aspect
         // calculate global volume after deforming mesh
         global_volume = GridTools::volume (triangulation, *mapping);
         signals.post_mesh_deformation(*this);
+
+
+        // We update this after mesh deformation so the most recent surface is kept.
+        // TODO: This doesn't seem to cause issues if called from a non-box geometry
+        // using the empty default geometry update function, but it would be safer
+        // to only call it with a 2d box model. However, the general plugins_type_match
+        // used to check the geometry_model hits an error here.
+        if(dim == 2)
+            geometry_model->update();
       }
 
     // Compute the reactions of compositional fields and temperature in case of operator splitting.

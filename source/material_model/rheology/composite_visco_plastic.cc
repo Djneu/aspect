@@ -167,7 +167,11 @@ namespace aspect
         // Drucker-Prager yield stress. Probably fine for a first guess.
         if (use_drucker_prager)
           {
-            drucker_prager_parameters = drucker_prager->compute_drucker_prager_parameters(composition, depth, phase_function_values, n_phases_per_composition);
+			  
+			 double depth = 0;
+            drucker_prager_parameters = drucker_prager->compute_drucker_prager_parameters(composition, depth, phase_function_values, n_phase_transitions_per_composition);
+			
+			
             const double yield_stress = drucker_prager->compute_yield_stress(drucker_prager_parameters.cohesion,
                                                                              drucker_prager_parameters.angle_internal_friction,
                                                                              pressure,

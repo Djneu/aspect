@@ -98,12 +98,22 @@ namespace aspect
           try
             {
               // first call the update() function.
+              if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                  std::cout<<"pb: "<<typeid(*p).name()<<std::endl;
+
+
               p->update();
+
+              if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                  std::cout<<"pb update: "<<typeid(*p).name()<<std::endl;
 
               // call the execute() function. if it produces any output
               // then add it to the list
               std::pair<std::string,std::string> output
                 = p->execute (statistics);
+
+              if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                  std::cout<<"pb execute: "<<typeid(*p).name()<<std::endl;
 
               if (output.first.size() + output.second.size() > 0)
                 output_list.push_back (output);

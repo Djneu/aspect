@@ -77,7 +77,7 @@ namespace aspect
          * beginning of the program after parse_parameters is run and after
          * the SimulatorAccess (if applicable) is initialized.
          */
-        virtual void update_surface ();
+        virtual void update ();
 
         /**
          * Generate a coarse mesh for the geometry described by this class.

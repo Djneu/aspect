@@ -736,6 +736,8 @@ namespace aspect
       // if this is the first time we get here, set the last output time
       // to the current time - output_interval. this makes sure we
       // always produce data during the first time step
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                  std::cout<<"vis1"<<std::endl;
       if (std::isnan(last_output_time))
         {
           last_output_time = this->get_time() - output_interval;
@@ -786,6 +788,9 @@ namespace aspect
       data_out.add_data_vector (this->get_solution(),
                                 base_variables);
 
+
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                  std::cout<<"vis2"<<std::endl;
       // Also create an object for outputting information that lives on
       // the faces of the mesh. If there are postprocessors derived from
       // the VisualizationPostprocessors::SurfaceOnlyVisualization class, then
@@ -802,6 +807,8 @@ namespace aspect
       })
       != postprocessors.end());
 
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                  std::cout<<"vis3"<<std::endl;
       // If there is a deforming mesh, also attach the mesh velocity object
       if ( this->get_parameters().mesh_deformation_enabled && output_mesh_velocity)
         {
@@ -832,6 +839,8 @@ namespace aspect
                                     *mesh_deformation_displacement);
         }
 
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                  std::cout<<"vis4"<<std::endl;
       // then for each additional selected output variable
       // add the computed quantity as well. keep a list of
       // pointers to data vectors created by cell data visualization
@@ -841,6 +850,8 @@ namespace aspect
         {
           try
             {
+             if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                  std::cout<<"try1: "<<typeid(*p).name()<<std::endl;
               // There are two ways of writing visualization postprocessors:
               // - deriving from DataPostprocessor
               // - deriving from DataVectorCreator
@@ -853,23 +864,50 @@ namespace aspect
               if (const DataPostprocessor<dim> *viz_postprocessor
                   = dynamic_cast<const DataPostprocessor<dim>*>(& *p))
                 {
+				if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                  std::cout<<"try2: "<<typeid(*p).name()<<std::endl;
+			  
                   track_output_field_names_and_units(viz_postprocessor->get_names(),
                                                      p->get_physical_units(),
                                                      visualization_field_names_and_units);
+													 
+				if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                  std::cout<<"try3: "<<typeid(*p).name()<<std::endl;
 
                   if (dynamic_cast<const VisualizationPostprocessors::SurfaceOnlyVisualization<dim>*>
-                      (& *p) == nullptr)
+                      (& *p) == nullptr){
+                    if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                      std::cout<<"tryi1: "<<typeid(*p).name()<<std::endl;
+
                     data_out.add_data_vector (this->get_solution(),
                                               *viz_postprocessor);
-                  else
+
+                    if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                      std::cout<<"tryi2: "<<typeid(*p).name()<<std::endl;
+                  }
+                  else{
+                    if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                      std::cout<<"trye1: "<<typeid(*p).name()<<std::endl;
+
                     data_out_faces.add_data_vector (this->get_solution(),
                                                     *viz_postprocessor);
+
+                    if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                      std::cout<<"trye2: "<<typeid(*p).name()<<std::endl;
+                  }
+													
+			    if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                  std::cout<<"try4: "<<typeid(*p).name()<<std::endl;
+			  
                 }
               else if (const VisualizationPostprocessors::CellDataVectorCreator<dim> *
                        cell_data_creator
                        = dynamic_cast<const VisualizationPostprocessors::CellDataVectorCreator<dim>*>
                          (& *p))
                 {
+			     if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                  std::cout<<"try5: "<<typeid(*p).name()<<std::endl;
+			  
                   // get the data produced here
                   std::pair<std::string, std::unique_ptr<Vector<float>>>
                   cell_data = cell_data_creator->execute();
@@ -878,13 +916,19 @@ namespace aspect
                           ExcMessage ("Cell data visualization postprocessors must generate "
                                       "vectors that have as many entries as there are active cells "
                                       "on the current processor."));
-
+									  
+				 if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                     std::cout<<"try6: "<<typeid(*p).name()<<std::endl;
+			  
                   track_output_field_names_and_units({cell_data.first},
                                                      cell_data_creator->get_physical_units(),
                                                      visualization_field_names_and_units);
 
                   // store the pointer, then attach the vector to the DataOut object
                   cell_data_vectors.push_back (std::move(cell_data.second));
+				  
+				  if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                    std::cout<<"try7: "<<typeid(*p).name()<<std::endl;
 
                   if (dynamic_cast<const VisualizationPostprocessors::SurfaceOnlyVisualization<dim>*>
                       (& *p) == nullptr)
@@ -895,6 +939,10 @@ namespace aspect
                     data_out_faces.add_data_vector (*cell_data_vectors.back(),
                                                     cell_data.first,
                                                     DataOutFaces<dim>::type_cell_data);
+
+													
+				  if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                    std::cout<<"try8: "<<typeid(*p).name()<<std::endl;
                 }
               else
                 // A viz postprocessor not derived from either DataPostprocessor
@@ -907,6 +955,7 @@ namespace aspect
                                    "ASPECT does not know what to do with these kinds of "
                                    "classes."));
             }
+						  
           // viz postprocessors that throw exceptions usually do not result in
           // anything good because they result in an unwinding of the stack
           // and, if only one processor triggers an exception, the
@@ -949,9 +998,13 @@ namespace aspect
               // terminate the program!
               MPI_Abort (MPI_COMM_WORLD, 1);
             }
-
+			
+        if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                std::cout<<"tryend: "<<typeid(*p).name()<<std::endl;
         }
 
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                  std::cout<<"vis5 after loop"<<std::endl;
       // Now build the patches. If selected, increase the output resolution.
       // Giving the mapping ensures that the case with mesh deformation works correctly.
       const unsigned int subdivisions = interpolate_output
@@ -989,6 +1042,8 @@ namespace aspect
                               + solution_file_prefix);
       }
 
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                  std::cout<<"vis6"<<std::endl;
       // Then do the same again for the face data case. We won't print the
       // output file name to screen (too much clutter on the screen already)
       // but still put it into the statistics file
@@ -1018,6 +1073,9 @@ namespace aspect
                              this->get_output_directory()
                              + "solution/"
                              + solution_file_prefix);
+
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+                  std::cout<<"vis7"<<std::endl;
     }
 
 

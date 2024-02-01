@@ -55,7 +55,7 @@ namespace aspect
         /**
          * Function to store data on current surface topography.
          */
-        void update_surface () override;
+        void update () override;
 
         /**
          * Function to store data on current surface topography.
@@ -261,10 +261,9 @@ namespace aspect
         InitialTopographyModel::Interface<dim> *topo_model;
 
       /**
-       * Variables to hold surface topography when checking the depth including mesh deformation.
-       */
-      std::vector<double> surface_xx;
-      std::vector<double> surface_yy;
+        * Function to interpolate surface topography.
+        */
+      Functions::InterpolatedTensorProductGridData<dim-1> *surface_function;
       //std::vector<std::vector<double>> surface_height;
     };
   }

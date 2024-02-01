@@ -38,14 +38,17 @@ namespace aspect
 
     template <int dim>
     void
-    Interface<dim>::update_surface ()
+    Interface<dim>::update ()
     {}
 
     template <int dim>
     double
     Interface<dim>::depth_including_mesh_deformation(const Point<dim> &position) const
     {
-      return depth(position);
+      AssertThrow(false,
+                  ExcMessage("The depth including mesh deformation function only works with a 2D box geometry model."));
+
+      return 0;
     }
 
 

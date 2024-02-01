@@ -548,6 +548,8 @@ namespace aspect
 
       // Make the constraints for the elliptic problem.
       make_constraints();
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+		std::cout<<"hereex2"<<std::endl;
 
       // Assemble and solve the vector Laplace problem which determines
       // the mesh displacements in the interior of the domain
@@ -556,6 +558,8 @@ namespace aspect
       else
         compute_mesh_displacements();
 
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+         std::cout<<"hereex3"<<std::endl;
       // Interpolate the mesh velocity into the same
       // finite element space as used in the Stokes solve, which
       // is needed for the ALE corrections.
@@ -639,10 +643,16 @@ namespace aspect
           for (const auto &model : boundary_id.second)
             {
               AffineConstraints<double> current_plugin_constraints(mesh_vertex_constraints.get_local_lines());
-
+			  if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+				std::cout<<"here1"<<std::endl;
+			
               model->compute_velocity_constraints_on_boundary(mesh_deformation_dof_handler,
                                                               current_plugin_constraints,
                                                               boundary_id_set);
+															  
+	          if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+				std::cout<<"here1"<<std::endl;
+			
               if ((this->is_stokes_matrix_free()))
                 {
                   mg_constrained_dofs.make_zero_boundary_constraints(mesh_deformation_dof_handler,
@@ -676,9 +686,14 @@ namespace aspect
                 }
             }
         }
-
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+		std::cout<<"here3"<<std::endl;
+	
       mesh_velocity_constraints.merge(plugin_constraints,AffineConstraints<double>::left_object_wins);
       mesh_velocity_constraints.close();
+	  
+	  if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+		std::cout<<"here4"<<std::endl;
     }
 
 
@@ -858,6 +873,7 @@ namespace aspect
                                        mesh_velocity_constraints, false,
                                        Utilities::MPI::
                                        this_mpi_process(sim.mpi_communicator));
+
       sp.compress();
       mesh_matrix.reinit (sp);
 
@@ -870,6 +886,7 @@ namespace aspect
 
       typename DoFHandler<dim>::active_cell_iterator cell = mesh_deformation_dof_handler.begin_active(),
                                                      endc= mesh_deformation_dof_handler.end();
+
       for (; cell!=endc; ++cell)
         if (cell->is_locally_owned())
           {
@@ -891,31 +908,60 @@ namespace aspect
                                                                   cell_dof_indices, mesh_matrix, rhs, false);
           }
 
+
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+         std::cout<<"chereex5"<<std::endl;
+
       rhs.compress (VectorOperation::add);
       mesh_matrix.compress (VectorOperation::add);
-
+	  
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+         std::cout<<"chereex6"<<std::endl;
+	 
       // Make the AMG preconditioner
       std::vector<std::vector<bool>> constant_modes;
       DoFTools::extract_constant_modes (mesh_deformation_dof_handler,
                                         ComponentMask(dim, true),
                                         constant_modes);
+										
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+         std::cout<<"chereex7"<<std::endl;
+
+	 
       // TODO: think about keeping object between time steps
       LinearAlgebra::PreconditionAMG preconditioner_stiffness;
       LinearAlgebra::PreconditionAMG::AdditionalData Amg_data;
+
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+         std::cout<<"cchereex7"<<std::endl;
       Amg_data.constant_modes = constant_modes;
       Amg_data.elliptic = true;
       Amg_data.higher_order_elements = false;
       Amg_data.smoother_sweeps = 2;
       Amg_data.aggregation_threshold = 0.02;
+
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+         std::cout<<"cchereex8"<<std::endl;
+
       preconditioner_stiffness.initialize(mesh_matrix);
+	  
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+         std::cout<<"chereex8"<<std::endl;
 
       // we solve with higher accuracy in the initial timestep:
       const double tolerance
         = sim.parameters.linear_stokes_solver_tolerance
           * ((this->simulator_is_past_initialization()) ? 1.0 : 1e-5);
+		  
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+         std::cout<<"chereex9"<<std::endl;		  
 
       SolverControl solver_control(5*rhs.size(), tolerance * rhs.l2_norm());
       SolverCG<LinearAlgebra::Vector> cg(solver_control);
+
+
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+         std::cout<<"chereex10"<<std::endl;
 
       cg.solve (mesh_matrix, solution, rhs, preconditioner_stiffness);
       this->get_pcout() << "   Solving mesh displacement system... " << solver_control.last_step() <<" iterations."<< std::endl;

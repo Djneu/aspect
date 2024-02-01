@@ -580,7 +580,7 @@ namespace aspect
         mesh_deformation->initial_topography = distributed_initial_topography;
       }
 
-    geometry_model->update_surface();
+    geometry_model->update();
 
     signals.post_resume_load_user_data(triangulation);
 
