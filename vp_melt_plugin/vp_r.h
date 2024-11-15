@@ -25,7 +25,7 @@
 #include <aspect/material_model/interface.h>
 #include <aspect/material_model/equation_of_state/multicomponent_incompressible.h>
 #include <aspect/material_model/rheology/visco_plastic.h>
-#include </home/bbpdneu1/software/aspect/simple_melt_plugin/co2_melt.h>
+#include </home/bbpdneu1/software/aspect/aspect/vp_melt_plugin/co2_melt.h>
 
 #include<deal.II/fe/component_mask.h>
 

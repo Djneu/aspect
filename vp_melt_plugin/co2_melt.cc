@@ -19,7 +19,7 @@
 */
 
 
-#include </home/bbpdneu1/software/aspect/simple_melt_plugin/co2_melt.h>
+#include </home/bbpdneu1/software/aspect/aspect/vp_melt_plugin/co2_melt.h>
 #include <aspect/utilities.h>
 #include <aspect/gravity_model/interface.h>
 #include <aspect/adiabatic_conditions/interface.h>
@@ -86,9 +86,9 @@ namespace aspect
                                 std::max(0.0, std::min(in.composition[q][this->introspection().compositional_index_for_name("cmorb_cs")],1.0))
                                 :
                                 (n_components==3 ? 0. : -1); 
-              double F_int = this->introspection().compositional_name_exists("melt_fraction")
+              double F_int = this->introspection().compositional_name_exists("feq")
                                 ?
-                                std::max(0.0, std::min(in.composition[q][this->introspection().compositional_index_for_name("melt_fraction")],1.0))
+                                std::max(0.0, std::min(in.composition[q][this->introspection().compositional_index_for_name("feq")],1.0))
                                 :
                                 0.;                                                                         
 
@@ -211,7 +211,15 @@ namespace aspect
               double cl2 = std::max(0.0, std::min(1.0, C_bar[2] / (feq + (1 - feq) * K[2])));
               double cs2 = std::max(0.0, std::min(1.0, C_bar[2] / (feq / K[2] + (1 - feq))));
 
-              const unsigned int melt_idx = this->introspection().compositional_index_for_name("melt_fraction");
+              /*double P_max = 4.75e9; //160 km depth.
+              if(pressure > P_max)
+              {
+                cl = 0;
+                cl2 = 0;
+                feq = 0;
+              }*/
+
+              const unsigned int melt_idx = this->introspection().compositional_index_for_name("feq");
               const unsigned int cl_idx = this->introspection().compositional_index_for_name("morb_cl");
               const unsigned int cs_idx = this->introspection().compositional_index_for_name("morb_cs");
               const unsigned int cl2_idx = this->introspection().compositional_index_for_name("cmorb_cl");
@@ -221,33 +229,51 @@ namespace aspect
                  // no melting/freezing is used in the model --> set all reactions to zero
                 // because depletion is a volume-based, and not a mass-based property that is advected,
                 // additional scaling factors on the right hand side apply
+                double melting_time_scale = 1;
+                //if (this->convert_output_to_years() == true)
+                //{
+                //  melting_time_scale *= year_in_seconds;
+                //}
+
                 for (unsigned int c=0; c<in.composition[q].size(); ++c)
                   {
-                    if (c == melt_idx)
+                    if(this->get_timestep_number() > 0)
                     {
-                          double rate = (feq - F_int);
-                          out.reaction_terms[q][c] = rate;
+                      if (c == melt_idx)
+                      {
+                            double rate = (feq - F_int);
+                            rate = std::max(rate, -F_int);
+                            out.reaction_terms[q][c] = rate/melting_time_scale;
+                      }
+                      else if (c == cs_idx)
+                      {
+                            double rate = (cs - morb_cs);
+                            rate = std::max(rate, -morb_cs);
+                            out.reaction_terms[q][c] = rate/melting_time_scale;
+                      }
+                      else if (c == cl_idx)
+                      {
+                            double rate = (cl - morb_cl);
+                            rate = std::max(rate, -morb_cl);
+                            out.reaction_terms[q][c] = rate/melting_time_scale;
+                      }
+                      else if (c == cs2_idx)
+                      {
+                            double rate = (cs2 - cmorb_cs);
+                            rate = std::max(rate, -cmorb_cs);
+                            out.reaction_terms[q][c] = rate/melting_time_scale;
+                      }
+                      else if (c == cl2_idx)
+                      {
+                            double rate = (cl2 - cmorb_cl);
+                            rate = std::max(rate, -cmorb_cl);
+                            out.reaction_terms[q][c] = rate/melting_time_scale;
+                      }
+                      else
+                        out.reaction_terms[q][c] = 0.0;
                     }
-                    if (c == cs_idx)
-                    {
-                          double rate = (cs - morb_cs);
-                          out.reaction_terms[q][c] = rate;
-                    }
-                    if (c == cl_idx)
-                    {
-                          double rate = (cl - morb_cl);
-                          out.reaction_terms[q][c] = rate;
-                    }
-                    if (c == cs2_idx)
-                    {
-                          double rate = (cs2 - cmorb_cs);
-                          out.reaction_terms[q][c] = rate;
-                    }
-                    if (c == cl2_idx)
-                    {
-                          double rate = (cl2 - cmorb_cl);
-                          out.reaction_terms[q][c] = rate;
-                    }
+                    else
+                      out.reaction_terms[q][c] = 0.0;
                   }
             }
       }
@@ -323,7 +349,7 @@ namespace aspect
           {
 
                           //computed_quantities[q](0) = feq;
-              const unsigned int melt_idx = this->introspection().compositional_index_for_name("melt_fraction");
+              const unsigned int melt_idx = this->introspection().compositional_index_for_name("feq");
               const unsigned int cl_idx = this->introspection().compositional_index_for_name("morb_cl");
               const unsigned int cs_idx = this->introspection().compositional_index_for_name("morb_cs");
               const unsigned int cl2_idx = this->introspection().compositional_index_for_name("cmorb_cl");

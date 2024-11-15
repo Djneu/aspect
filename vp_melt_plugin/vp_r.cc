@@ -18,14 +18,14 @@
   <http://www.gnu.org/licenses/>.
 */
 
-#include </home/bbpdneu1/software/aspect/simple_melt_plugin/vp_r.h>
+#include </home/bbpdneu1/software/aspect/aspect/vp_melt_plugin/vp_r.h>
 #include <aspect/utilities.h>
 #include <deal.II/fe/fe_values.h>
 #include <deal.II/base/signaling_nan.h>
 #include <aspect/newton.h>
 #include <aspect/adiabatic_conditions/interface.h>
 #include <aspect/gravity_model/interface.h>
-#include </home/bbpdneu1/software/aspect/simple_melt_plugin/co2_melt.h>
+#include </home/bbpdneu1/software/aspect/aspect/vp_melt_plugin/co2_melt.h>
 
 namespace aspect
 {

@@ -19,7 +19,7 @@
 */
 
 
-#include </home/bbpdneu1/software/aspect/melt_post_plugin/melt_components.h>
+#include </home/bbpdneu1/software/aspect/aspect/melt_post_plugin/melt_components.h>
 #include <aspect/melt.h>
 
 #include <deal.II/base/parameter_handler.h>
@@ -82,7 +82,7 @@ namespace aspect
       {
         const unsigned int n_quadrature_points = input_data.solution_values.size();
         Assert (computed_quantities.size() == n_quadrature_points,    ExcInternalError());
-        Assert (computed_quantities[0].size() == 1,                   ExcInternalError());
+        //Assert (computed_quantities[0].size() == 1,                   ExcInternalError());
         Assert (input_data.solution_values[0].size() == this->introspection().n_components,           ExcInternalError());
 
           for (unsigned int q=0; q<n_quadrature_points; ++q)
@@ -119,9 +119,9 @@ namespace aspect
                                 std::max(0.0, std::min(composition[this->introspection().compositional_index_for_name("cmorb_cs")],1.0))
                                 :
                                 (n_components==3 ? 0. : -1); 
-              double F_int = this->introspection().compositional_name_exists("melt_fraction")
+              double F_int = this->introspection().compositional_name_exists("feq")
                                 ?
-                                std::max(0.0, std::min(composition[this->introspection().compositional_index_for_name("melt_fraction")],1.0))
+                                std::max(0.0, std::min(composition[this->introspection().compositional_index_for_name("feq")],1.0))
                                 :
                                 0.;                                                                           
 
@@ -245,7 +245,7 @@ namespace aspect
               double cl2 = std::max(0.0, std::min(1.0, C_bar[2] / (feq + (1 - feq) * K[2])));
               double cs2 = std::max(0.0, std::min(1.0, C_bar[2] / (feq / K[2] + (1 - feq))));
 
-              const unsigned int melt_idx = this->introspection().compositional_index_for_name("melt_fraction");
+              const unsigned int melt_idx = this->introspection().compositional_index_for_name("feq");
               const unsigned int cl_idx = this->introspection().compositional_index_for_name("morb_cl");
               const unsigned int cs_idx = this->introspection().compositional_index_for_name("morb_cs");
               const unsigned int cl2_idx = this->introspection().compositional_index_for_name("cmorb_cl");
