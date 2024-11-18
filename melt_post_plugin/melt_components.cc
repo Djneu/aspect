@@ -161,7 +161,6 @@ namespace aspect
                 // Note: Paper does not have different densities for component,
                 // There is one liquid density and one solid density.
                 //avg_rho[i] = porosity*rho_l[i] + (1 - porosity)*rho_s[i];
-                //F[i] = porosity/(rho_l[i]/avg_rho[i]);
                 C_bar[i] = F_int*c_l[i] + (1-F_int)*c_s[i];
                 order_comp.push_back(C_bar[i]);
               } 
@@ -178,6 +177,7 @@ namespace aspect
               const int its_tol   = 100;
               double feq = 0;
               double r = 1.;
+              double P_max = 4.75e9;
               for (unsigned int i=0; i<n_components; ++i)
               {
                 double r1 = C_bar[i] / (feq + (1-feq)*K[i]);

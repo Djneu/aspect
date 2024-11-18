@@ -51,7 +51,6 @@ namespace aspect
             {
 
               // Define component dependent parameters
-              std::vector<double> avg_rho(n_components);
               std::vector<double> F(n_components);  
               std::vector<double> C_bar(n_components);
 
@@ -120,6 +119,10 @@ namespace aspect
 
               // 0 = dunite, 1 = morb, 2 = cmorb. In celcius, convert.
               // Now that things are ordered, find the bulk composition for each component.
+              // If we track the volume of melt, need to convert back to mass.
+              double avg_rho = F_int*rho_l + (1 - F_int)*rho_s;
+              F_int = F_int*avg_rho/rho_l;
+
               std::vector<double> order_comp;
               for (unsigned int i=0; i<n_components; ++i)
               {
@@ -144,6 +147,7 @@ namespace aspect
               const int its_tol   = 100;
               double feq = 0;
               double r = 1.;
+              double P_max = 4.75e9;
               for (unsigned int i=0; i<n_components; ++i)
               {
                 double r1 = C_bar[i] / (feq + (1-feq)*K[i]);
@@ -154,7 +158,7 @@ namespace aspect
               // Set melt fraction to old melt fraction.
               double f = F_int;
 
-              if(temperature <= T_solidus)
+              if(temperature <= T_solidus || pressure > P_max)
                 feq = 0;
               else if(temperature >= T_liquidus)
                 feq = 1;
@@ -205,19 +209,19 @@ namespace aspect
               }
 
               // Calculate VAR.Cl and VAR.Cs, and limit all between 0 and 1.
+              feq = (rho_l/avg_rho)*feq; // Convert back to volume.
               feq = std::max(0.0, std::min(1.0, feq));
               double cl = std::max(0.0, std::min(1.0, C_bar[1] / (feq + (1 - feq) * K[1])));
               double cs = std::max(0.0, std::min(1.0, C_bar[1] / (feq / K[1] + (1 - feq))));
               double cl2 = std::max(0.0, std::min(1.0, C_bar[2] / (feq + (1 - feq) * K[2])));
               double cs2 = std::max(0.0, std::min(1.0, C_bar[2] / (feq / K[2] + (1 - feq))));
 
-              /*double P_max = 4.75e9; //160 km depth.
               if(pressure > P_max)
               {
-                cl = 0;
-                cl2 = 0;
-                feq = 0;
-              }*/
+                cl = 0.0;
+                cl2 = 0.0;
+                feq = 0.0;
+              }
 
               const unsigned int melt_idx = this->introspection().compositional_index_for_name("feq");
               const unsigned int cl_idx = this->introspection().compositional_index_for_name("morb_cl");
@@ -225,55 +229,49 @@ namespace aspect
               const unsigned int cl2_idx = this->introspection().compositional_index_for_name("cmorb_cl");
               const unsigned int cs2_idx = this->introspection().compositional_index_for_name("cmorb_cs");
 
-              // WHAT TO OUTPUT: convert f back to volume fraction? It is mass fraction at the moment.
-                 // no melting/freezing is used in the model --> set all reactions to zero
+                // WHAT TO OUTPUT: convert f back to volume fraction? It is mass fraction at the moment.
                 // because depletion is a volume-based, and not a mass-based property that is advected,
                 // additional scaling factors on the right hand side apply
-                double melting_time_scale = 1;
-                //if (this->convert_output_to_years() == true)
-                //{
-                //  melting_time_scale *= year_in_seconds;
-                //}
 
+                // We use the fulls compositions here so the rate includes any deviations outside of 0 and 1.
                 for (unsigned int c=0; c<in.composition[q].size(); ++c)
                   {
-                    if(this->get_timestep_number() > 0)
+                    out.reaction_terms[q][c] = 0.0;
+                    if (reaction_rate_out != nullptr && in.requests_property(MaterialProperties::reaction_rates) && this->get_timestep_number() > 0)
                     {
                       if (c == melt_idx)
                       {
-                            double rate = (feq - F_int);
-                            rate = std::max(rate, -F_int);
-                            out.reaction_terms[q][c] = rate/melting_time_scale;
+                            double rate = (feq - in.composition[q][this->introspection().compositional_index_for_name("feq")]);
+                            rate = std::max(rate, -in.composition[q][this->introspection().compositional_index_for_name("feq")]);
+                            reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
                       }
                       else if (c == cs_idx)
                       {
-                            double rate = (cs - morb_cs);
-                            rate = std::max(rate, -morb_cs);
-                            out.reaction_terms[q][c] = rate/melting_time_scale;
+                            double rate = (cs - in.composition[q][this->introspection().compositional_index_for_name("morb_cs")]);
+                            rate = std::max(rate, -in.composition[q][this->introspection().compositional_index_for_name("morb_cs")]);
+                            reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
                       }
                       else if (c == cl_idx)
                       {
-                            double rate = (cl - morb_cl);
-                            rate = std::max(rate, -morb_cl);
-                            out.reaction_terms[q][c] = rate/melting_time_scale;
+                            double rate = (cl - in.composition[q][this->introspection().compositional_index_for_name("morb_cl")]);
+                            rate = std::max(rate, -in.composition[q][this->introspection().compositional_index_for_name("morb_cl")]);
+                            reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
                       }
                       else if (c == cs2_idx)
                       {
-                            double rate = (cs2 - cmorb_cs);
-                            rate = std::max(rate, -cmorb_cs);
-                            out.reaction_terms[q][c] = rate/melting_time_scale;
+                            double rate = (cs2 - in.composition[q][this->introspection().compositional_index_for_name("cmorb_cs")]);
+                            rate = std::max(rate, -in.composition[q][this->introspection().compositional_index_for_name("cmorb_cs")]);
+                            reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
                       }
                       else if (c == cl2_idx)
                       {
-                            double rate = (cl2 - cmorb_cl);
-                            rate = std::max(rate, -cmorb_cl);
-                            out.reaction_terms[q][c] = rate/melting_time_scale;
+                            double rate = (cl2 - in.composition[q][this->introspection().compositional_index_for_name("cmorb_cl")]);
+                            rate = std::max(rate, -in.composition[q][this->introspection().compositional_index_for_name("cmorb_cl")]);
+                            reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
                       }
                       else
-                        out.reaction_terms[q][c] = 0.0;
+                        reaction_rate_out->reaction_rates[q][c] = 0.0;
                     }
-                    else
-                      out.reaction_terms[q][c] = 0.0;
                   }
             }
       }
@@ -480,16 +478,7 @@ namespace aspect
                                  "the  lherzolite liquidus used for "
                                  "calculating the fraction of peridotite-"
                                  "derived melt. "
-                                 "\\si{\\degreeCelsius\\per\\pascal}.");
-
-              prm.declare_entry ("Porosity", "0",
-                    Patterns::Double(0,1),
-                    "Prefactor of the linear pressure term "
-                    "in the quadratic function that approximates "
-                    "the  lherzolite liquidus used for "
-                    "calculating the fraction of peridotite-"
-                    "derived melt. "
-                    "\\si{\\degreeCelsius\\per\\pascal}.");                   
+                                 "\\si{\\degreeCelsius\\per\\pascal}.");            
 
               prm.declare_entry ("Fluid density", "3200",
                     Patterns::List(Patterns::Double (0.)),
@@ -504,6 +493,23 @@ namespace aspect
                     "function that approximates the solidus "
                     "of peridotite. "
                     "Units: \\si{\\degreeCelsius}.");
+              prm.declare_entry ("Melting time scale for operator splitting", "2e2",
+                    Patterns::Double (0.),
+                    "Because the operator splitting scheme is used, the porosity field can not "
+                    "be set to a new equilibrium melt fraction instantly, but the model has to "
+                    "provide a melting time scale instead. This time scale defines how fast melting "
+                    "happens, or more specifically, the parameter defines the time after which "
+                    "the deviation of the porosity from the equilibrium melt fraction will be "
+                    "reduced to a fraction of $1/e$. So if the melting time scale is small compared "
+                    "to the time step size, the reaction will be so fast that the porosity is very "
+                    "close to the equilibrium melt fraction after reactions are computed. Conversely, "
+                    "if the melting time scale is large compared to the time step size, almost no "
+                    "melting and freezing will occur."
+                    "\n\n"
+                    "Also note that the melting time scale has to be larger than or equal to the reaction "
+                    "time step used in the operator splitting scheme, otherwise reactions can not be "
+                    "computed. "
+                    "Units: yr or s, depending on the ``Use years in output instead of seconds'' parameter.");
             }
             prm.leave_subsection();
           }
@@ -522,7 +528,6 @@ namespace aspect
         prm.enter_subsection("Co2 model");
         {
             n_components = prm.get_integer("Number of components");
-            porosity = prm.get_double("Porosity");
             T0 = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("T0"))),
                                                                           n_components,
                                                                           "Thermal diffusivities");
@@ -538,13 +543,12 @@ namespace aspect
             R = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("R"))),
                                                                           n_components,
                                                                           "Thermal diffusivities");
-            rho_l = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Fluid density"))),
-                                                              n_components,
-                                                              "Thermal diffusivities");
+            rho_l         = prm.get_double ("Fluid density");
+            rho_s         = prm.get_double ("Solid density");
+            melting_time_scale         = prm.get_double ("Melting time scale for operator splitting");
 
-            rho_s = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Solid density"))),
-                                                              n_components,
-                                                              "Thermal diffusivities");
+            if (this->convert_output_to_years() == true)
+              melting_time_scale *= year_in_seconds;
             }
             prm.leave_subsection();
         }

@@ -109,9 +109,9 @@ namespace aspect
           std::string K_T_mode;        // Type of parameterization for K^i(T)
           std::vector<double> R;       // Coefficients for T-dependence of distribution coefficients K^i
           unsigned int n_components;       // Coefficients for T-dependence of distribution coefficients K^i
-          double porosity;       // Coefficients for T-dependence of distribution coefficients K^i
-          std::vector<double> rho_l;       // Coefficients for T-dependence of distribution coefficients K^i
-          std::vector<double> rho_s;       // Coefficients for T-dependence of distribution coefficients K^i
+          double rho_l;       // Coefficients for T-dependence of distribution coefficients K^i
+          double  rho_s;       // Coefficients for T-dependence of distribution coefficients K^i
+          double melting_time_scale;
       };
     }
 
