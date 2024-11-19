@@ -49,122 +49,64 @@ namespace aspect
 
           for (unsigned int q=0; q<in.n_evaluation_points(); ++q)
             {
+              // Calculate new melt and compositional values. At the moment this assumes there is always
+              // 3 components.
 
-              // Define component dependent parameters
-              std::vector<double> F(n_components);  
+              // Define component dependent parameters 
               std::vector<double> C_bar(n_components);
-
               std::vector<double> composition(this->n_compositional_fields());
               const double temperature = in.temperature[q];
-              double pressure    = in.pressure[q];
 
               // Set pressure to surface pressure if it is below zero.
-              if(pressure < 0)
-                pressure = 101325;
+              const double pressure    = in.pressure[q] > 0
+                                         ?
+                                         in.pressure[q]
+                                         :
+                                         101325;
 
               // Get the compositional values, and limit between 0 and 1.
-              // If they don't exist, assume it is a 2 component system and
-              // set to -1 so that they are not added to component dependent parameters.
-              double morb_cl =  this->introspection().compositional_name_exists("morb_cl")
-                                ?
-                                std::max(0.0, std::min(in.composition[q][this->introspection().compositional_index_for_name("morb_cl")],1.0))
-                                :
-                                (n_components==3 ? 0. : -1);
-              double morb_cs =  this->introspection().compositional_name_exists("morb_cs")
-                                ?
-                                std::max(0.0, std::min(in.composition[q][this->introspection().compositional_index_for_name("morb_cs")],1.0))
-                                :
-                                (n_components==3 ? 0. : -1);
-              double cmorb_cl = this->introspection().compositional_name_exists("cmorb_cl")
-                                ?
-                                std::max(0.0, std::min(in.composition[q][this->introspection().compositional_index_for_name("cmorb_cl")],1.0))
-                                :
-                                (n_components==3 ? 0. : -1);
-              double cmorb_cs = this->introspection().compositional_name_exists("cmorb_cs")
-                                ?
-                                std::max(0.0, std::min(in.composition[q][this->introspection().compositional_index_for_name("cmorb_cs")],1.0))
-                                :
-                                (n_components==3 ? 0. : -1); 
-              double F_int = this->introspection().compositional_name_exists("feq")
-                                ?
-                                std::max(0.0, std::min(in.composition[q][this->introspection().compositional_index_for_name("feq")],1.0))
-                                :
-                                0.;                                                                         
+              double morb_cl =  std::max(0.0, std::min(in.composition[q][mcl_idx],1.0));
+              double morb_cs =  std::max(0.0, std::min(in.composition[q][mcs_idx],1.0));
+              double cmorb_cl =  std::max(0.0, std::min(in.composition[q][ccl_idx],1.0));
+              double cmorb_cs =  std::max(0.0, std::min(in.composition[q][ccs_idx],1.0));
+              double Fvol_old =  std::max(0.0, std::min(in.composition[q][melt_idx],1.0));                                                              
 
-              // Combine liquid and solid comps, and then calculate l and s dunite.
-              std::vector<double> cl_comp = {morb_cl, cmorb_cl};
-              std::vector<double> cs_comp = {morb_cs, cmorb_cs};
-              double dunite = 1;
-              double dunite_l = 1;
-              for (unsigned int i=0; i<2; ++i)
-              {
-                if(cs_comp[i] != -1)
-                  dunite = dunite - cs_comp[i];
-                if(cl_comp[i] != -1)
-                  dunite_l = dunite_l - cl_comp[i];
-              }
+              // Calculate dunite and order liquid and solid components
+              double dunite = 1 - morb_cs - cmorb_cs;
+              double dunite_l = 1 - morb_cl - cmorb_cl;
+              std::vector<double> c_s = {dunite, morb_cs, cmorb_cs};
+              std::vector<double> c_l = {dunite_l, morb_cl, cmorb_cl};
 
-             // Order fields for finding bulk composition.
-             // Depending on number of components.
-             std::vector<double> c_l = {dunite_l};
-             std::vector<double> c_s = {dunite};
-             for (unsigned int i=0; i<n_components-1; ++i)
-                {
-                  if(cl_comp[i] != -1)
-                    c_l.push_back(cl_comp[i]);
-                  if(cs_comp[i] != -1)
-                    c_s.push_back(cs_comp[i]);
-                }
+              // We track the volume of melt, convert to mass here.
+              double avg_rho = Fvol_old*rho_l + (1 - Fvol_old)*rho_s;
+              double Fmass_old = Fvol_old*avg_rho/rho_l;
 
-
-              // 0 = dunite, 1 = morb, 2 = cmorb. In celcius, convert.
               // Now that things are ordered, find the bulk composition for each component.
-              // If we track the volume of melt, need to convert back to mass.
-              double avg_rho = F_int*rho_l + (1 - F_int)*rho_s;
-              F_int = F_int*avg_rho/rho_l;
-
-              std::vector<double> order_comp;
               for (unsigned int i=0; i<n_components; ++i)
-              {
-                // May use this if convert to volume fraction, but paper uses mass.
-                // Note: Paper does not have different densities for component,
-                // There is one liquid density and one solid density.
-                //avg_rho[i] = porosity*rho_l[i] + (1 - porosity)*rho_s[i];
-                //F[i] = porosity/(rho_l[i]/avg_rho[i]);
-                C_bar[i] = F_int*c_l[i] + (1-F_int)*c_s[i];
-                order_comp.push_back(C_bar[i]);
-              } 
+                C_bar[i] = Fmass_old*c_l[i] + (1-Fmass_old)*c_s[i];
            
-              const double T_solidus = T_solidus_liquidus(pressure, order_comp, true, temperature);
-              const double T_liquidus = T_solidus_liquidus(pressure, order_comp, false,temperature);
+              const double T_solidus = T_solidus_liquidus(pressure, C_bar, true);
+              const double T_liquidus = T_solidus_liquidus(pressure, C_bar, false);
 
               std::vector<double> Tm = melting_temperatures(pressure);
               std::vector<double> K = partition_coefficients(pressure, std::max(T_solidus,std::min(T_liquidus,temperature)));
 
-              // newton solver for feq     
+              // newton solver for calculating new mass fraction of melt.    
+              double Fmass_new = Fmass_old;
               int n      =  0;       
-              const double rnorm_tol = 1e-10;
+              const double r_tol = 1e-10;
               const int its_tol   = 100;
-              double feq = 0;
-              double r = 1.;
-              double P_max = 4.75e9;
+              double residual = 0.;
               for (unsigned int i=0; i<n_components; ++i)
-              {
-                double r1 = C_bar[i] / (feq + (1-feq)*K[i]);
-                double r2 = C_bar[i] / (feq/K[i] + (1-feq));
-                r +=  r1 - r2;
-              }
-        
-              // Set melt fraction to old melt fraction.
-              double f = F_int;
+                residual += C_bar[i]/(Fmass_old + (1-Fmass_old)*K[i]) - C_bar[i]/(Fmass_old/K[i] + (1-Fmass_old));
 
-              if(temperature <= T_solidus || pressure > P_max)
-                feq = 0;
+              if(temperature <= T_solidus)
+                Fmass_new = 0;
               else if(temperature >= T_liquidus)
-                feq = 1;
+                Fmass_new = 1;
               else
               {
-                while (abs(r) > rnorm_tol) 
+                while (abs(residual) > r_tol) 
                 {
                   double dr_df = 0;
                   double term1 = 0;
@@ -172,107 +114,90 @@ namespace aspect
                   for (unsigned int i=0; i<n_components; ++i)
                   {
                     double numerator1 = C_bar[i] * (1.0 - K[i]);
-                    double denominator1 = std::pow((feq + (1.0 - feq) * K[i]), 2);
+                    double denominator1 = std::pow((Fmass_new + (1.0 - Fmass_new) * K[i]), 2);
                     term1 += numerator1 / denominator1;
 
-                    // Second term: sum(VAR.C.*(1./PAR.K - 1)./(ff./PAR.K + (1-ff)).^2, 2)
                     double numerator2 = C_bar[i] * (1.0 / K[i] - 1.0);
-                    double denominator2 = std::pow((feq / K[i] + (1.0 - feq)), 2);
+                    double denominator2 = std::pow((Fmass_new / K[i] + (1.0 - Fmass_new)), 2);
                     term2 += numerator2 / denominator2;
                   }
 
                   dr_df = -term1+term2;
 
-                
-                  //std::cout<<r<<"  "<<f<<std::endl;
                   double a = 1;
-                  while (((f - a*r/dr_df) < -1e-10) || (f - a*r/dr_df > 1-1e-10))
+                  while (((Fmass_new - a*residual/dr_df) < -1e-16) || (Fmass_new - a*residual/dr_df > 1-1e-16))
                   {
                     a = a/2;
-                    //std::cout<<f<<"  "<<a<<"  "<<"  "<<r<<"  "<<"  "<<dr_df<<"  "<<(f - a*r/dr_df)<<std::endl;
                     if (a<1e-6)
                         AssertThrow(false, ExcMessage("a too small."));
                   }
 
-                  f = f - a*r/dr_df;
-                  feq = f;
+                  Fmass_new = Fmass_new - a*residual/dr_df;
 
-                  r = 0;
+                  residual = 0.;
                   for (unsigned int i=0; i<n_components; ++i)
-                    r += C_bar[i]/(feq + (1-feq)*K[i]) - C_bar[i]/(feq/K[i] + (1-feq));
+                    residual += C_bar[i]/(Fmass_new + (1-Fmass_new)*K[i]) - C_bar[i]/(Fmass_new/K[i] + (1-Fmass_new));
 
                   n = n+1;
                   if (n==its_tol)
                     AssertThrow(false, ExcMessage("No convergence"));
-
                 }
               }
 
-              // Calculate VAR.Cl and VAR.Cs, and limit all between 0 and 1.
-              feq = (rho_l/avg_rho)*feq; // Convert back to volume.
-              feq = std::max(0.0, std::min(1.0, feq));
-              double cl = std::max(0.0, std::min(1.0, C_bar[1] / (feq + (1 - feq) * K[1])));
-              double cs = std::max(0.0, std::min(1.0, C_bar[1] / (feq / K[1] + (1 - feq))));
-              double cl2 = std::max(0.0, std::min(1.0, C_bar[2] / (feq + (1 - feq) * K[2])));
-              double cs2 = std::max(0.0, std::min(1.0, C_bar[2] / (feq / K[2] + (1 - feq))));
+              // Calculate new Cl and Cs values, and limit all between 0 and 1.
+              Fmass_new = std::max(0.0, std::min(1.0, Fmass_new));
+              double mcl = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new + (1 - Fmass_new) * K[1])));
+              double mcs = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new / K[1] + (1 - Fmass_new))));
+              double ccl = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new + (1 - Fmass_new) * K[2])));
+              double ccs = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new / K[2] + (1 - Fmass_new))));
 
-              if(pressure > P_max)
-              {
-                cl = 0.0;
-                cl2 = 0.0;
-                feq = 0.0;
-              }
+              // WHAT TO OUTPUT: convert f back to volume fraction? It is mass fraction at the moment.
+              // because depletion is a volume-based, and not a mass-based property that is advected,
+              // additional scaling factors on the right hand side apply
 
-              const unsigned int melt_idx = this->introspection().compositional_index_for_name("feq");
-              const unsigned int cl_idx = this->introspection().compositional_index_for_name("morb_cl");
-              const unsigned int cs_idx = this->introspection().compositional_index_for_name("morb_cs");
-              const unsigned int cl2_idx = this->introspection().compositional_index_for_name("cmorb_cl");
-              const unsigned int cs2_idx = this->introspection().compositional_index_for_name("cmorb_cs");
-
-                // WHAT TO OUTPUT: convert f back to volume fraction? It is mass fraction at the moment.
-                // because depletion is a volume-based, and not a mass-based property that is advected,
-                // additional scaling factors on the right hand side apply
-
-                // We use the fulls compositions here so the rate includes any deviations outside of 0 and 1.
-                for (unsigned int c=0; c<in.composition[q].size(); ++c)
+              // We use the fulls compositions as the old values here
+              // so the rate includes any deviations outside of 0 and 1.
+              for (unsigned int c=0; c<in.composition[q].size(); ++c)
+                {
+                  out.reaction_terms[q][c] = 0.0;
+                  if (reaction_rate_out != nullptr && in.requests_property(MaterialProperties::reaction_rates) && this->get_timestep_number() > 0)
                   {
-                    out.reaction_terms[q][c] = 0.0;
-                    if (reaction_rate_out != nullptr && in.requests_property(MaterialProperties::reaction_rates) && this->get_timestep_number() > 0)
+                    if (c == melt_idx)
                     {
-                      if (c == melt_idx)
-                      {
-                            double rate = (feq - in.composition[q][this->introspection().compositional_index_for_name("feq")]);
-                            rate = std::max(rate, -in.composition[q][this->introspection().compositional_index_for_name("feq")]);
-                            reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
-                      }
-                      else if (c == cs_idx)
-                      {
-                            double rate = (cs - in.composition[q][this->introspection().compositional_index_for_name("morb_cs")]);
-                            rate = std::max(rate, -in.composition[q][this->introspection().compositional_index_for_name("morb_cs")]);
-                            reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
-                      }
-                      else if (c == cl_idx)
-                      {
-                            double rate = (cl - in.composition[q][this->introspection().compositional_index_for_name("morb_cl")]);
-                            rate = std::max(rate, -in.composition[q][this->introspection().compositional_index_for_name("morb_cl")]);
-                            reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
-                      }
-                      else if (c == cs2_idx)
-                      {
-                            double rate = (cs2 - in.composition[q][this->introspection().compositional_index_for_name("cmorb_cs")]);
-                            rate = std::max(rate, -in.composition[q][this->introspection().compositional_index_for_name("cmorb_cs")]);
-                            reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
-                      }
-                      else if (c == cl2_idx)
-                      {
-                            double rate = (cl2 - in.composition[q][this->introspection().compositional_index_for_name("cmorb_cl")]);
-                            rate = std::max(rate, -in.composition[q][this->introspection().compositional_index_for_name("cmorb_cl")]);
-                            reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
-                      }
-                      else
-                        reaction_rate_out->reaction_rates[q][c] = 0.0;
+                          // Convert to volume for field.
+                          double Fvol_new = (rho_l/avg_rho)*Fmass_new; 
+                          double rate = (Fvol_new - in.composition[q][c]);
+                          rate = std::max(rate, -in.composition[q][c]);
+                          reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
                     }
+                    else if (c == mcs_idx)
+                    {
+                          double rate = (mcs - in.composition[q][c]);
+                          rate = std::max(rate, -in.composition[q][c]);
+                          reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
+                    }
+                    else if (c == mcl_idx)
+                    {
+                          double rate = (mcl - in.composition[q][c]);
+                          rate = std::max(rate, -in.composition[q][c]);
+                          reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
+                    }
+                    else if (c == ccs_idx)
+                    {
+                          double rate = (ccs - in.composition[q][c]);
+                          rate = std::max(rate, -in.composition[q][c]);
+                          reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
+                    }
+                    else if (c == ccl_idx)
+                    {
+                          double rate = (ccl - in.composition[q][c]);
+                          rate = std::max(rate, -in.composition[q][c]);
+                          reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
+                    }
+                    else
+                      reaction_rate_out->reaction_rates[q][c] = 0.0;
                   }
+                }
             }
       }
 
@@ -281,8 +206,7 @@ namespace aspect
       Co2Melt<dim>::
       T_solidus_liquidus (const double pressure, 
                           std::vector<double> composition, 
-                          bool compute_solidus,
-                          const double temp) const
+                          bool compute_solidus) const
       {
         // TODO: Exclude invalid compositions (that do not sum up to 1)?
         const std::vector<double> Tm = melting_temperatures(pressure);
@@ -345,18 +269,6 @@ namespace aspect
 
           if (n == max_iterations) 
           {
-
-                          //computed_quantities[q](0) = feq;
-              const unsigned int melt_idx = this->introspection().compositional_index_for_name("feq");
-              const unsigned int cl_idx = this->introspection().compositional_index_for_name("morb_cl");
-              const unsigned int cs_idx = this->introspection().compositional_index_for_name("morb_cs");
-              const unsigned int cl2_idx = this->introspection().compositional_index_for_name("cmorb_cl");
-              const unsigned int cs2_idx = this->introspection().compositional_index_for_name("cmorb_cs");
-              const unsigned int ml_idx = this->introspection().compositional_index_for_name("mantle_lithosphere");
-
-            std::cout<< compute_solidus << " " << composition[cl_idx] << " " << composition[cs_idx] << " "<<composition[cl2_idx] <<" "<<composition[cs2_idx]<<std::endl;
-            std::cout<<pressure<< " "<< temp<<" " << composition[ml_idx] << " "<<T_solidus<<std::endl;
-            std::cout<<dresidualdT<< " "<<residual_minus_eps_T<<" " << residual_plus_eps_T << " "<<T_solidus<<std::endl;
             std::cerr << "!!! Newton solver for solidus/liquidus T has not converged after " << residual << " iterations !!!" << std::endl;
             break;
           }
@@ -549,6 +461,22 @@ namespace aspect
 
             if (this->convert_output_to_years() == true)
               melting_time_scale *= year_in_seconds;
+
+            // Get ID for all fields. Should I do this once here or do it in the main function?
+            AssertThrow(this->introspection().compositional_name_exists("feq"), ExcMessage("A feq field is needed to use the co2 plugin."));
+            melt_idx = this->introspection().compositional_index_for_name("feq");
+
+            AssertThrow(this->introspection().compositional_name_exists("morb_cl"), ExcMessage("A morb_cl field is needed to use the co2 plugin."));
+            mcl_idx = this->introspection().compositional_index_for_name("morb_cl");
+
+            AssertThrow(this->introspection().compositional_name_exists("morb_cs"), ExcMessage("A morb_cs field is needed to use the co2 plugin."));
+            mcs_idx = this->introspection().compositional_index_for_name("morb_cs");
+          
+            AssertThrow(this->introspection().compositional_name_exists("cmorb_cl"), ExcMessage("A cmorb_cl field is needed to use the co2 plugin."));
+            ccl_idx = this->introspection().compositional_index_for_name("cmorb_cl");
+
+            AssertThrow(this->introspection().compositional_name_exists("cmorb_cs"), ExcMessage("A cmorb_cs field is needed to use the co2 plugin."));
+            ccs_idx = this->introspection().compositional_index_for_name("cmorb_cs");
             }
             prm.leave_subsection();
         }

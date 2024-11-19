@@ -84,8 +84,7 @@ namespace aspect
           double
           T_solidus_liquidus (const double pressure, 
                               std::vector<double> composition, 
-                              bool compute_solidus,
-                              const double temp) const;
+                              bool compute_solidus) const;
 
 
           /**
@@ -112,6 +111,11 @@ namespace aspect
           double rho_l;       // Coefficients for T-dependence of distribution coefficients K^i
           double  rho_s;       // Coefficients for T-dependence of distribution coefficients K^i
           double melting_time_scale;
+          unsigned int melt_idx;
+          unsigned int mcl_idx;
+          unsigned int mcs_idx;
+          unsigned int ccl_idx;
+          unsigned int ccs_idx;
       };
     }
 
