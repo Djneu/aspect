@@ -145,11 +145,22 @@ namespace aspect
               }
 
               // Calculate new Cl and Cs values, and limit all between 0 and 1.
+
+              double Pmax = 4.75e9;
               Fmass_new = std::max(0.0, std::min(1.0, Fmass_new));
               double mcl = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new + (1 - Fmass_new) * K[1])));
               double mcs = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new / K[1] + (1 - Fmass_new))));
               double ccl = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new + (1 - Fmass_new) * K[2])));
               double ccs = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new / K[2] + (1 - Fmass_new))));
+
+              if(pressure > Pmax)
+              {
+                Fmass_new = 0.0;
+                mcl = 0.0;
+                ccl = 0.0;
+                mcs = 0.25;
+                ccs = 0.0005;
+              }
 
               // WHAT TO OUTPUT: convert f back to volume fraction? It is mass fraction at the moment.
               // because depletion is a volume-based, and not a mass-based property that is advected,
@@ -199,6 +210,80 @@ namespace aspect
                   }
                 }
             }
+      }
+
+      template <int dim>
+      void
+      Co2Melt<dim>::
+      calculate_fluid_outputs(const typename Interface<dim>::MaterialModelInputs &in,
+                              typename Interface<dim>::MaterialModelOutputs &out,
+                              const double reference_T) const
+      {
+        MeltOutputs<dim> *melt_out = out.template get_additional_output<MeltOutputs<dim>>();
+        const unsigned int porosity_idx = this->introspection().compositional_index_for_name("feq");
+
+       /*if (melt_out != nullptr)
+          {
+
+            for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
+              {
+                double porosity = std::max(in.composition[i][porosity_idx],0.0);
+
+                //melt_out->fluid_viscosities[i] = 10.;
+                melt_out->permeabilities[i] = 1e-6 * Utilities::fixed_power<3>(porosity);
+
+                // first, calculate temperature dependence of density
+                double temperature_dependence = 1.0;
+                if (this->include_adiabatic_heating ())
+                  {
+                    // temperature dependence is 1 - alpha * (T - T(adiabatic))
+                    temperature_dependence -= (in.temperature[i] - this->get_adiabatic_conditions().temperature(in.position[i]))
+                                              * out.thermal_expansion_coefficients[i];
+                  }
+                else
+                  temperature_dependence -= (in.temperature[i] - reference_T) * out.thermal_expansion_coefficients[i];
+
+                melt_out->fluid_densities[i] = (porosity*rho_l + (1-porosity)*rho_s) * temperature_dependence;
+
+                // Density gradient only needed if there is compressibility.
+                melt_out->fluid_density_gradients[i] = 0.0;
+
+                //const double phi_0 = 0.05;
+                //porosity = std::max(std::min(porosity,0.995),1e-4);
+                const double porosity_threshold = 0.01 * std::pow(this->get_melt_handler().melt_parameters.melt_scaling_factor_threshold, 1./3.);
+                melt_out->compaction_viscosities[i] = (1.0 - porosity) * 1e19 / std::max(porosity, porosity_threshold);;
+
+                double visc_temperature_dependence = 1.0;
+                if (this->include_adiabatic_heating ())
+                  {
+                    const double delta_temp = in.temperature[i]-this->get_adiabatic_conditions().temperature(in.position[i]);
+                    visc_temperature_dependence = std::max(std::min(std::exp(-thermal_bulk_viscosity_exponent*delta_temp/this->get_adiabatic_conditions().temperature(in.position[i])),1e4),1e-4);
+                  }
+                else
+                  {
+                    const double delta_temp = in.temperature[i]-reference_T;
+                    const double T_dependence = (thermal_bulk_viscosity_exponent == 0.0
+                                                 ?
+                                                 0.0
+                                                 :
+                                                 thermal_bulk_viscosity_exponent*delta_temp/reference_T);
+                    visc_temperature_dependence = std::max(std::min(std::exp(-T_dependence),1e4),1e-4);
+                  }
+
+                melt_out->compaction_viscosities[i] *= visc_temperature_dependence;
+
+
+              }
+          }
+
+        if (this->include_melt_transport() && in.requests_property(MaterialProperties::viscosity))
+          {
+            for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
+              {
+                const double porosity = std::min(1.0, std::max(in.composition[i][porosity_idx],0.0));
+                out.viscosities[i] *= std::exp(- alpha_phi * porosity);
+              }
+          }*/
       }
 
       template <int dim>
@@ -255,9 +340,7 @@ namespace aspect
           const double dresidualdT  =  (residual_plus_eps_T - residual_minus_eps_T) / (2 * eps_T);
 
           // Apply Newton correction to current guess of Tsol
-          // Note the step size is set to 0.5 whereas the original r_DMC implementation uses 1 
-          for (unsigned int i=0; i<n_components; ++i) 
-            T_solidus = T_solidus - 0.5 * residual/dresidualdT;
+          T_solidus = T_solidus - 0.5 * residual/dresidualdT;
 
           // Compute partition coefficients Ki at Tsol
           K = partition_coefficients(pressure, T_solidus);
@@ -310,17 +393,14 @@ namespace aspect
     {
         std::vector<double> K (n_components);
 
-        // Implementation in r_DMC is the following instead:
-        //std::vector<double> L (n_components);
-        //for (unsigned int i=0; i<n_components; ++i) 
-        //  L[i] = temperature * dS[i];
-        // TODO: ask Tobias Keller which we should use
-
         std::vector<double> Tm = melting_temperatures(pressure);
 
         // Parameterization after Rudge, Bercovici, & Spiegelman (2010)
         for (unsigned int i=0; i<n_components; ++i) 
-            K[i] = std::exp(L[i]/R[i] * (1./temperature - 1./Tm[i]));
+        {
+          double Ls = L[i]/T0[i]*temperature;
+            K[i] = std::exp(Ls/R[i] * (1./temperature - 1./Tm[i]));
+        }
 
         return K;
     }

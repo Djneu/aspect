@@ -96,6 +96,20 @@ namespace aspect
           void calculate_reaction_rate_outputs(const typename Interface<dim>::MaterialModelInputs &in,
                                                typename Interface<dim>::MaterialModelOutputs &out) const;
 
+                              
+
+          /**
+           * Compute all the fluid variables needed for a reactive transport model based on the
+           * Katz 2003 formulation. This function fills melt outputs, the out object should already contain
+           * outputs for the solid and this function uses the inputs @p in and the solid outputs @p out
+           * to fill MeltOutputs. Solid outputs such as out.Thermal_expansion_coefficients are expected
+           * to have already been computed when this function is called. Solid viscosities are also modified
+           * in the out object here because the presence of melt weakens the material.
+           */
+          void calculate_fluid_outputs(const typename Interface<dim>::MaterialModelInputs &in,
+                                       typename Interface<dim>::MaterialModelOutputs &out,
+                                       const double reference_T) const;
+
         private:
           /**
           * Parameters for anhydrous melting of peridotite after Katz, 2003

@@ -26,6 +26,7 @@
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/numerics/fe_field_function.h>
 #include </home/bbpdneu1/software/aspect/aspect/vp_melt_plugin/co2_melt.h>
+//#include </home/bbpdneu1/software/aspect/aspect/vp_melt_plugin/co2_4c.h>
 
 
 namespace aspect
@@ -134,6 +135,8 @@ namespace aspect
         }
 
       katz2003_model.calculate_reaction_rate_outputs(in, out);
+      //katz2003_model.calculate_fluid_outputs(in, out, reference_T);
+
       katz2003_model.calculate_fluid_outputs(in, out, reference_T);
       co_model.calculate_reaction_rate_outputs(in, out);
     }

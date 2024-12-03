@@ -245,12 +245,6 @@ namespace aspect
               double cl2 = std::max(0.0, std::min(1.0, C_bar[2] / (feq + (1 - feq) * K[2])));
               double cs2 = std::max(0.0, std::min(1.0, C_bar[2] / (feq / K[2] + (1 - feq))));
 
-              const unsigned int melt_idx = this->introspection().compositional_index_for_name("feq");
-              const unsigned int cl_idx = this->introspection().compositional_index_for_name("morb_cl");
-              const unsigned int cs_idx = this->introspection().compositional_index_for_name("morb_cs");
-              const unsigned int cl2_idx = this->introspection().compositional_index_for_name("cmorb_cl");
-              const unsigned int cs2_idx = this->introspection().compositional_index_for_name("cmorb_cs");
-
               //std::cout<<C_bar[1]<<" "<<feq<<" "<<K[1]<<" "<<cs<<" "<<cl<<std::endl;
               computed_quantities[q](0) = feq;
               computed_quantities[q](1) = cl;
@@ -313,7 +307,10 @@ namespace aspect
 
         // Parameterization after Rudge, Bercovici, & Spiegelman (2010)
         for (unsigned int i=0; i<n_components; ++i) 
-            K[i] = std::exp(L[i]/R[i] * (1./temperature - 1./Tm[i]));
+        {
+            double Ls = L[i]/T0[i]*temperature;
+            K[i] = std::exp(Ls/R[i] * (1./(temperature) - 1./(Tm[i])));
+        }
 
         return K;
     }
@@ -391,8 +388,7 @@ namespace aspect
 
           // Apply Newton correction to current guess of Tsol
           // Note the step size is set to 0.5 whereas the original r_DMC implementation uses 1 
-          for (unsigned int i=0; i<n_components; ++i) 
-            T_solidus = T_solidus - 0.5 * residual/dresidualdT;
+          T_solidus = T_solidus - 0.5 * residual/dresidualdT;
 
           // Compute partition coefficients Ki at Tsol
           K = partition_coefficients(pressure, T_solidus);
