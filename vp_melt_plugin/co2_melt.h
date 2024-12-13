@@ -88,6 +88,15 @@ namespace aspect
 
 
           /**
+           * Percentage of material that is molten for a given @p temperature and
+           * @p pressure (assuming equilibrium conditions). Melting model after Katz,
+           * 2003, for dry peridotite. double Fmass_new = melt_fractions(Tm, K, C_bar, Fmass_old);
+           */
+          double
+          melt_fraction (std::vector<double> composition) const;
+
+
+          /**
            * Compute all the reaction rate variables needed for a reactive transport model based on the
            * Katz 2003 formulation. Takes the material model inputs @p in to compute the material model outputs @p out.
            * This function mainly fills the reaction_rate_out object but populates out.reaction_terms,
@@ -110,9 +119,11 @@ namespace aspect
                                        typename Interface<dim>::MaterialModelOutputs &out,
                                        const double reference_T) const;
 
+          double reference_darcy_coefficient () const;
+
         private:
           /**
-          * Parameters for anhydrous melting of peridotite after Katz, 2003
+          * Parameters for reaction model
           */
 
           std::vector<double> T0;      // Pure component melting points at P=0
@@ -124,12 +135,21 @@ namespace aspect
           unsigned int n_components;       // Coefficients for T-dependence of distribution coefficients K^i
           double rho_l;       // Coefficients for T-dependence of distribution coefficients K^i
           double  rho_s;       // Coefficients for T-dependence of distribution coefficients K^i
-          double melting_time_scale;
+
           unsigned int melt_idx;
           unsigned int mcl_idx;
           unsigned int mcs_idx;
           unsigned int ccl_idx;
-          unsigned int ccs_idx;
+          unsigned int ccs_idx;  
+
+          double xi_0;                               // rock viscosity constant
+          double viscosity_fluid;                    // melt viscosity constant
+          double thermal_bulk_viscosity_exponent;    // Not in paper
+          double alpha_phi;                          // melt weakening factor
+          double melt_compressibility;               // Not in paper
+          double melting_time_scale;                 // reaction time
+          double melt_bulk_modulus_derivative;       //
+          double reference_permeability;             // permeability constant  
       };
     }
 

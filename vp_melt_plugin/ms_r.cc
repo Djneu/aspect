@@ -21,7 +21,6 @@
 
 #include <aspect/adiabatic_conditions/interface.h>
 #include </home/bbpdneu1/software/aspect/aspect/vp_melt_plugin/ms_r.h>
-#include <aspect/material_model/reaction_model/katz2003_mantle_melting.h>
 #include <aspect/utilities.h>
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/numerics/fe_field_function.h>
@@ -39,7 +38,7 @@ namespace aspect
     reference_darcy_coefficient () const
     {
       // 0.01 = 1% melt
-      return katz2003_model.reference_darcy_coefficient();
+      return co_model.reference_darcy_coefficient();
     }
 
     template <int dim>
@@ -57,8 +56,14 @@ namespace aspect
                     std::vector<double> &melt_fractions) const
     {
       for (unsigned int q=0; q<in.n_evaluation_points(); ++q)
-        melt_fractions[q] = katz2003_model.melt_fraction(in.temperature[q],
-                                                         this->get_adiabatic_conditions().pressure(in.position[q]));
+      {
+        std::vector<double> composition(this->n_compositional_fields());
+
+        for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
+                composition[c] = in.composition[q][c];
+
+        melt_fractions[q] = co_model.melt_fraction(composition);
+      }
     }
 
 
@@ -70,9 +75,6 @@ namespace aspect
         {
           //AssertThrow(this->get_parameters().use_operator_splitting,
           //            ExcMessage("The material model ``Melt simple'' can only be used with operator splitting!"));
-          AssertThrow(this->introspection().compositional_name_exists("peridotite"),
-                      ExcMessage("Material model Melt simple only works if there is a "
-                                 "compositional field called peridotite."));
           AssertThrow(this->introspection().compositional_name_exists("porosity"),
                       ExcMessage("Material model Melt simple with melt transport only "
                                  "works if there is a compositional field called porosity."));
@@ -85,8 +87,12 @@ namespace aspect
     MeltSimpleCo2<dim>::
     evaluate(const typename Interface<dim>::MaterialModelInputs &in, typename Interface<dim>::MaterialModelOutputs &out) const
     {
+      const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
+
       for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
         {
+          
+          double porosity = std::max(0.0, std::min(in.composition[i][porosity_idx],1.0));
           // calculate density first, we need it for the reaction term
           // first, calculate temperature dependence of density
           double temperature_dependence = 1.0;
@@ -100,12 +106,9 @@ namespace aspect
             temperature_dependence -= (in.temperature[i] - reference_T) * thermal_expansivity;
 
           // calculate composition dependence of density
-          const double delta_rho = this->introspection().compositional_name_exists("peridotite")
-                                   ?
-                                   depletion_density_change * in.composition[i][this->introspection().compositional_index_for_name("peridotite")]
-                                   :
-                                   0.0;
-          out.densities[i] = (reference_rho_solid + delta_rho)
+          const double averaged_rho = (porosity*2700 + (1-porosity)*3200);
+                                   
+          out.densities[i] = averaged_rho
                              * temperature_dependence * std::exp(compressibility * (in.pressure[i] - this->get_surface_pressure()));
 
           out.viscosities[i] = eta_0;
@@ -134,11 +137,12 @@ namespace aspect
 
         }
 
-      katz2003_model.calculate_reaction_rate_outputs(in, out);
+      //katz2003_model.calculate_reaction_rate_outputs(in, out);
       //katz2003_model.calculate_fluid_outputs(in, out, reference_T);
 
-      katz2003_model.calculate_fluid_outputs(in, out, reference_T);
       co_model.calculate_reaction_rate_outputs(in, out);
+      co_model.calculate_fluid_outputs(in, out, reference_T);
+      
     }
 
 
@@ -150,9 +154,6 @@ namespace aspect
       {
         prm.enter_subsection("Melt simple co2");
         {
-          // Melt Fraction Parameters
-          ReactionModel::Katz2003MantleMelting<dim>::declare_parameters(prm);
-
           // Melt model
           ReactionModel::Co2Melt<dim>::declare_parameters(prm);
 
@@ -202,7 +203,7 @@ namespace aspect
                              "field with the name peridotite. Not used if this field does not "
                              "exist in the model. "
                              "Units: \\si{\\kilogram\\per\\meter\\cubed}.");
-          prm.declare_entry ("Reference solid density", "3000.",
+          prm.declare_entry ("Reference solid density", "3200.",
                              Patterns::Double (0.),
                              "Reference density of the solid $\\rho_{s,0}$. "
                              "Units: \\si{\\kilogram\\per\\meter\\cubed}.");
@@ -240,10 +241,6 @@ namespace aspect
 
           if (thermal_viscosity_exponent!=0.0 && reference_T == 0.0)
             AssertThrow(false, ExcMessage("Error: Material model Melt simple with Thermal viscosity exponent can not have reference_T=0."));
-
-          // Melt model
-          katz2003_model.initialize_simulator (this->get_simulator());
-          katz2003_model.parse_parameters(prm);
 
         }
         prm.leave_subsection();

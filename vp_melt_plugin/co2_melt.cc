@@ -40,6 +40,15 @@ namespace aspect
 
 
       template <int dim>
+      double
+      Co2Melt<dim>::
+      reference_darcy_coefficient () const
+      {
+        // 0.01 = 1% melt
+        return reference_permeability * Utilities::fixed_power<3>(0.01) / viscosity_fluid;
+      }
+
+      template <int dim>
       void
       Co2Melt<dim>::
       calculate_reaction_rate_outputs(const typename Interface<dim>::MaterialModelInputs &in,
@@ -53,7 +62,7 @@ namespace aspect
               // 3 components.
 
               // Define component dependent parameters 
-              std::vector<double> C_bar(n_components);
+              std::vector<double> C_bar (n_components);
               std::vector<double> composition(this->n_compositional_fields());
               const double temperature = in.temperature[q];
 
@@ -84,15 +93,28 @@ namespace aspect
               // Now that things are ordered, find the bulk composition for each component.
               for (unsigned int i=0; i<n_components; ++i)
                 C_bar[i] = Fmass_old*c_l[i] + (1-Fmass_old)*c_s[i];
-           
+
               const double T_solidus = T_solidus_liquidus(pressure, C_bar, true);
               const double T_liquidus = T_solidus_liquidus(pressure, C_bar, false);
 
               std::vector<double> Tm = melting_temperatures(pressure);
               std::vector<double> K = partition_coefficients(pressure, std::max(T_solidus,std::min(T_liquidus,temperature)));
+           
+              double Pmax = 4.75e9;
+              double Fmass_new = 0.0;
+              double mcl = 0.0;
+              double ccl = 0.0;
+              double mcs = 0.0;
+              double ccs = 0.0;
+              if(pressure < Pmax)
+              {
+              // Calculate equilibrium melt fraction.
+              //double Fvol_new = melt_fractions(Tm, K, C_bar, Fmass_old);
+              //double Fvol_new = (rho_l/avg_rho)*Fmass_new; 
+              //double Fmass_new = Fvol_new*(avg_rho/rho_l);
 
               // newton solver for calculating new mass fraction of melt.    
-              double Fmass_new = Fmass_old;
+              Fmass_new = Fmass_old;
               int n      =  0;       
               const double r_tol = 1e-10;
               const int its_tol   = 100;
@@ -146,27 +168,71 @@ namespace aspect
 
               // Calculate new Cl and Cs values, and limit all between 0 and 1.
 
-              double Pmax = 4.75e9;
+              
               Fmass_new = std::max(0.0, std::min(1.0, Fmass_new));
-              double mcl = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new + (1 - Fmass_new) * K[1])));
-              double mcs = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new / K[1] + (1 - Fmass_new))));
-              double ccl = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new + (1 - Fmass_new) * K[2])));
-              double ccs = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new / K[2] + (1 - Fmass_new))));
-
-              if(pressure > Pmax)
-              {
-                Fmass_new = 0.0;
-                mcl = 0.0;
-                ccl = 0.0;
-                mcs = 0.25;
-                ccs = 0.0005;
+              mcl = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new + (1 - Fmass_new) * K[1])));
+              mcs = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new / K[1] + (1 - Fmass_new))));
+              ccl = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new + (1 - Fmass_new) * K[2])));
+              ccs = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new / K[2] + (1 - Fmass_new))));
               }
+              else
+              {
+                  Fmass_new = 0.0;
+                  mcl = 0.0;
+                  ccl = 0.0;
+                  mcs = 0.25;
+                  ccs = 0.0005;
+              }
+
+              // Calculate the reaction rates. I think this should be abs so its always positive?
+              double Fvol_new = (rho_l/avg_rho)*Fmass_new;
+
+              std::vector<double> Csf (n_components);
+              std::vector<double> Clf (n_components);
+              std::vector<double> CGamma (n_components);
+              std::vector<double> Delta (n_components);
+              std::vector<double> Gamma (n_components);
+              std::vector<double> dcs (n_components);
+              std::vector<double> dcl (n_components);
+
+              // Calculate reaction rates ////////
+              double R  =  rho_s/melting_time_scale;
+
+              double GammaNet  =  R * (Fmass_new - Fmass_old);
+ 
+              // Setup new compositions in order.
+              std::vector<double> c_se = {(1 - mcs - ccs), mcs, ccs};
+              std::vector<double> c_le = {(1 - mcl - ccl), mcl, ccl};
+              for (unsigned int i=0; i<n_components; ++i)
+              {
+                Csf[i] = c_l[i]*K[i];
+                Clf[i] = c_s[i]/K[i];
+
+              if(GammaNet < 0)
+                CGamma[i] = Csf[i];
+              else if(GammaNet >= 0)
+                CGamma[i] = Clf[i];
+
+              Delta[i] = R*(Fmass_new*(c_le[i] - CGamma[i]) - Fmass_old*(c_l[i] - CGamma[i]));
+              Gamma[i] = CGamma[i]*GammaNet + Delta[i];
+              }
+
+              double G2 = Gamma[0]+Gamma[1]+Gamma[2];
+
+            for (unsigned int i=0; i<n_components; ++i)
+            {
+              dcs[i] = -(Gamma[i] - c_s[i]*G2)/(std::max(1e-6,(1 - Fmass_old))*rho_s);
+              dcl[i] = (Gamma[i] - c_l[i]*G2)/(std::max(1e-6,(Fmass_old))*rho_s);
+            }
+
+              // Melt reaction rate using mass fraction
+              double df = G2/rho_s;
 
               // WHAT TO OUTPUT: convert f back to volume fraction? It is mass fraction at the moment.
               // because depletion is a volume-based, and not a mass-based property that is advected,
               // additional scaling factors on the right hand side apply
 
-              // We use the fulls compositions as the old values here
+              // We use the full compositions as the old values here.
               // so the rate includes any deviations outside of 0 and 1.
               for (unsigned int c=0; c<in.composition[q].size(); ++c)
                 {
@@ -175,40 +241,44 @@ namespace aspect
                   {
                     if (c == melt_idx)
                     {
-                          // Convert to volume for field.
-                          double Fvol_new = (rho_l/avg_rho)*Fmass_new; 
-                          double rate = (Fvol_new - in.composition[q][c]);
-                          rate = std::max(rate, -in.composition[q][c]);
+                          // Melt reaction rate. Convert to volume for field. 
+                          double rate = df*(rho_l/avg_rho); 
+                          rate = std::max(rate*melting_time_scale, -in.composition[q][c]);
+
                           reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
+
                     }
                     else if (c == mcs_idx)
                     {
-                          double rate = (mcs - in.composition[q][c]);
-                          rate = std::max(rate, -in.composition[q][c]);
+                          // solid morb reaction rate.
+                          double rate = std::max(dcs[1]*melting_time_scale, -in.composition[q][c]);
                           reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
                     }
                     else if (c == mcl_idx)
                     {
-                          double rate = (mcl - in.composition[q][c]);
-                          rate = std::max(rate, -in.composition[q][c]);
+                          // liquid morb reaction rate.
+                          double rate = std::max(dcl[1]*melting_time_scale, -in.composition[q][c]);
                           reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
                     }
                     else if (c == ccs_idx)
                     {
-                          double rate = (ccs - in.composition[q][c]);
-                          rate = std::max(rate, -in.composition[q][c]);
+                          // solid cmorb reaction rate.
+                          double rate = std::max(dcs[2]*melting_time_scale, -in.composition[q][c]);
                           reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
                     }
                     else if (c == ccl_idx)
                     {
-                          double rate = (ccl - in.composition[q][c]);
-                          rate = std::max(rate, -in.composition[q][c]);
+                          // liquid cmorb reaction rate.
+                          double rate = std::max(dcl[2]*melting_time_scale, -in.composition[q][c]);
                           reaction_rate_out->reaction_rates[q][c] = rate/melting_time_scale;
                     }
                     else
                       reaction_rate_out->reaction_rates[q][c] = 0.0;
                   }
                 }
+
+                out.entropy_derivative_pressure[q]    = 0.0;
+                out.entropy_derivative_temperature[q] = 0.0;
             }
       }
 
@@ -220,38 +290,35 @@ namespace aspect
                               const double reference_T) const
       {
         MeltOutputs<dim> *melt_out = out.template get_additional_output<MeltOutputs<dim>>();
-        const unsigned int porosity_idx = this->introspection().compositional_index_for_name("feq");
+        const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
 
-       /*if (melt_out != nullptr)
+       if (melt_out != nullptr)
           {
-
             for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
               {
-                double porosity = std::max(in.composition[i][porosity_idx],0.0);
+                double porosity = std::max(0.0, std::min(in.composition[i][porosity_idx],1.0));
 
-                //melt_out->fluid_viscosities[i] = 10.;
-                melt_out->permeabilities[i] = 1e-6 * Utilities::fixed_power<3>(porosity);
+                melt_out->fluid_viscosities[i] = viscosity_fluid;
+                melt_out->permeabilities[i] = reference_permeability * Utilities::fixed_power<3>(porosity);
 
                 // first, calculate temperature dependence of density
                 double temperature_dependence = 1.0;
                 if (this->include_adiabatic_heating ())
                   {
-                    // temperature dependence is 1 - alpha * (T - T(adiabatic))
                     temperature_dependence -= (in.temperature[i] - this->get_adiabatic_conditions().temperature(in.position[i]))
                                               * out.thermal_expansion_coefficients[i];
                   }
                 else
                   temperature_dependence -= (in.temperature[i] - reference_T) * out.thermal_expansion_coefficients[i];
 
-                melt_out->fluid_densities[i] = (porosity*rho_l + (1-porosity)*rho_s) * temperature_dependence;
+                melt_out->fluid_densities[i] = rho_l * temperature_dependence;
 
                 // Density gradient only needed if there is compressibility.
                 melt_out->fluid_density_gradients[i] = 0.0;
 
-                //const double phi_0 = 0.05;
-                //porosity = std::max(std::min(porosity,0.995),1e-4);
-                const double porosity_threshold = 0.01 * std::pow(this->get_melt_handler().melt_parameters.melt_scaling_factor_threshold, 1./3.);
-                melt_out->compaction_viscosities[i] = (1.0 - porosity) * 1e19 / std::max(porosity, porosity_threshold);;
+                const double phi_0 = 0.05;
+                porosity = std::max(std::min(porosity,0.995),1e-4);
+                melt_out->compaction_viscosities[i] = xi_0 * phi_0 / porosity;
 
                 double visc_temperature_dependence = 1.0;
                 if (this->include_adiabatic_heating ())
@@ -272,7 +339,6 @@ namespace aspect
 
                 melt_out->compaction_viscosities[i] *= visc_temperature_dependence;
 
-
               }
           }
 
@@ -283,7 +349,19 @@ namespace aspect
                 const double porosity = std::min(1.0, std::max(in.composition[i][porosity_idx],0.0));
                 out.viscosities[i] *= std::exp(- alpha_phi * porosity);
               }
-          }*/
+          }
+
+      }
+
+      template <int dim>
+      double
+      Co2Melt<dim>::
+      melt_fraction (std::vector<double> composition) const
+      {
+        // Here we return the current field.
+        // TODO: should this call calculate_reaction_rates and return new field?
+        double Fvol_old = std::max(0.0, std::min(composition[melt_idx],1.0));  
+        return Fvol_old;
       }
 
       template <int dim>
@@ -472,7 +550,7 @@ namespace aspect
                                  "derived melt. "
                                  "\\si{\\degreeCelsius\\per\\pascal}.");            
 
-              prm.declare_entry ("Fluid density", "3200",
+              prm.declare_entry ("Fluid density", "2700",
                     Patterns::List(Patterns::Double (0.)),
                     "Constant parameter in the quadratic "
                     "function that approximates the solidus "
@@ -485,7 +563,7 @@ namespace aspect
                     "function that approximates the solidus "
                     "of peridotite. "
                     "Units: \\si{\\degreeCelsius}.");
-              prm.declare_entry ("Melting time scale for operator splitting", "2e2",
+              prm.declare_entry ("Melting time scale for operator splitting", "1e2",
                     Patterns::Double (0.),
                     "Because the operator splitting scheme is used, the porosity field can not "
                     "be set to a new equilibrium melt fraction instantly, but the model has to "
@@ -502,6 +580,36 @@ namespace aspect
                     "time step used in the operator splitting scheme, otherwise reactions can not be "
                     "computed. "
                     "Units: yr or s, depending on the ``Use years in output instead of seconds'' parameter.");
+              prm.declare_entry ("Reference bulk viscosity", "1e22",
+                                Patterns::Double (0.),
+                                "The value of the constant bulk viscosity $\\xi_0$ of the solid matrix. "
+                                "This viscosity may be modified by both temperature and porosity "
+                                "dependencies. Units: \\si{\\pascal\\second}.");
+              prm.declare_entry ("Reference melt viscosity", "10.",
+                                Patterns::Double (0.),
+                                "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
+              prm.declare_entry ("Exponential melt weakening factor", "27.",
+                                Patterns::Double (0.),
+                                "The porosity dependence of the viscosity. Units: dimensionless.");
+              prm.declare_entry ("Thermal bulk viscosity exponent", "0.0",
+                                Patterns::Double (0.),
+                                "The temperature dependence of the bulk viscosity. Dimensionless exponent. "
+                                "See the general documentation "
+                                "of this model for a formula that states the dependence of the "
+                                "viscosity on this factor, which is called $\\beta$ there.");
+              prm.declare_entry ("Melt compressibility", "0.0",
+                                Patterns::Double (0.),
+                                "The value of the compressibility of the melt. "
+                                "Units: \\si{\\per\\pascal}.");
+              prm.declare_entry ("Melt bulk modulus derivative", "0.0",
+                                Patterns::Double (0.),
+                                "The value of the pressure derivative of the melt bulk "
+                                "modulus. "
+                                "Units: None.");
+              prm.declare_entry ("Reference permeability", "1e-6",
+                                Patterns::Double(),
+                                "Reference permeability of the solid host rock."
+                                "Units: \\si{\\meter\\squared}.");
             }
             prm.leave_subsection();
           }
@@ -543,8 +651,8 @@ namespace aspect
               melting_time_scale *= year_in_seconds;
 
             // Get ID for all fields. Should I do this once here or do it in the main function?
-            AssertThrow(this->introspection().compositional_name_exists("feq"), ExcMessage("A feq field is needed to use the co2 plugin."));
-            melt_idx = this->introspection().compositional_index_for_name("feq");
+            AssertThrow(this->introspection().compositional_name_exists("porosity"), ExcMessage("A porosity field is needed to use the co2 plugin."));
+            melt_idx = this->introspection().compositional_index_for_name("porosity");
 
             AssertThrow(this->introspection().compositional_name_exists("morb_cl"), ExcMessage("A morb_cl field is needed to use the co2 plugin."));
             mcl_idx = this->introspection().compositional_index_for_name("morb_cl");
@@ -557,6 +665,14 @@ namespace aspect
 
             AssertThrow(this->introspection().compositional_name_exists("cmorb_cs"), ExcMessage("A cmorb_cs field is needed to use the co2 plugin."));
             ccs_idx = this->introspection().compositional_index_for_name("cmorb_cs");
+
+            xi_0                       = prm.get_double ("Reference bulk viscosity");
+            viscosity_fluid            = prm.get_double ("Reference melt viscosity");
+            thermal_bulk_viscosity_exponent = prm.get_double ("Thermal bulk viscosity exponent");
+            alpha_phi                  = prm.get_double ("Exponential melt weakening factor");
+            melt_compressibility       = prm.get_double ("Melt compressibility");
+            melt_bulk_modulus_derivative = prm.get_double ("Melt bulk modulus derivative");
+            reference_permeability     = prm.get_double ("Reference permeability");
             }
             prm.leave_subsection();
         }
