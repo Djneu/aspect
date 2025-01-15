@@ -59,10 +59,24 @@ namespace aspect
       {
         std::vector<double> composition(this->n_compositional_fields());
 
+
+        double pressure = in.pressure[q] > 0
+                      ? 
+                      in.pressure[q]
+                      :
+                      101325;
+        
+        pressure = std::max(pressure, this->get_adiabatic_conditions().pressure(in.position[q])*0.5);
+
         for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
                 composition[c] = in.composition[q][c];
 
-        melt_fractions[q] = co_model.melt_fraction(composition);
+        //double mf = std::get<0>(co_model.equilibrium(composition, in.temperature[q], this->get_adiabatic_conditions().pressure(in.position[q]), this->get_adiabatic_conditions().pressure(in.position[q])));
+        double mf = std::get<0>(co_model.equilibrium(composition, in.temperature[q], pressure, this->get_adiabatic_conditions().pressure(in.position[q])));
+        //if (this->get_geometry_model().depth(in.position[q]) < 10e3)
+        //  mf = 0.0;
+
+        melt_fractions[q] = mf;  
       }
     }
 
@@ -105,11 +119,9 @@ namespace aspect
           else
             temperature_dependence -= (in.temperature[i] - reference_T) * thermal_expansivity;
 
-          // calculate composition dependence of density
-          const double averaged_rho = (porosity*2700 + (1-porosity)*3200);
-                                   
-          out.densities[i] = averaged_rho
-                             * temperature_dependence * std::exp(compressibility * (in.pressure[i] - this->get_surface_pressure()));
+          // calculate composition dependence of density CHANGED
+          const double averaged_rho = (porosity*2700 + (1-porosity)*3200);                        
+          out.densities[i] = averaged_rho * temperature_dependence; // * std::exp(compressibility * (in.pressure[i] - this->get_surface_pressure()));
 
           out.viscosities[i] = eta_0;
           out.thermal_expansion_coefficients[i] = thermal_expansivity;
@@ -135,12 +147,15 @@ namespace aspect
             }
           out.viscosities[i] *= visc_temperature_dependence;
 
+
+        //out.viscosities[i] = std::max(out.viscosities[i],5e15);
         }
 
       //katz2003_model.calculate_reaction_rate_outputs(in, out);
-      //katz2003_model.calculate_fluid_outputs(in, out, reference_T);
+      
 
       co_model.calculate_reaction_rate_outputs(in, out);
+      //katz2003_model.calculate_fluid_outputs(in, out, reference_T);
       co_model.calculate_fluid_outputs(in, out, reference_T);
       
     }
@@ -156,6 +171,8 @@ namespace aspect
         {
           // Melt model
           ReactionModel::Co2Melt<dim>::declare_parameters(prm);
+
+          ReactionModel::Katz2003MantleMelting<dim>::declare_parameters(prm);
 
 
           prm.declare_entry ("Use full compressibility", "false",
@@ -241,7 +258,10 @@ namespace aspect
 
           if (thermal_viscosity_exponent!=0.0 && reference_T == 0.0)
             AssertThrow(false, ExcMessage("Error: Material model Melt simple with Thermal viscosity exponent can not have reference_T=0."));
-
+          
+          // Melt model
+          katz2003_model.initialize_simulator (this->get_simulator());
+          katz2003_model.parse_parameters(prm);
         }
         prm.leave_subsection();
       }

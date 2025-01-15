@@ -119,6 +119,12 @@ namespace aspect
                                        typename Interface<dim>::MaterialModelOutputs &out,
                                        const double reference_T) const;
 
+        std::tuple<double, double, std::vector<double>, std::vector<double>>
+        equilibrium (std::vector<double> composition, 
+                     const double temperature, 
+                     const double pressure,
+                     const double p2) const;
+
           double reference_darcy_coefficient () const;
 
         private:
