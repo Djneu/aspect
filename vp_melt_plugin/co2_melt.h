@@ -88,15 +88,6 @@ namespace aspect
 
 
           /**
-           * Percentage of material that is molten for a given @p temperature and
-           * @p pressure (assuming equilibrium conditions). Melting model after Katz,
-           * 2003, for dry peridotite. double Fmass_new = melt_fractions(Tm, K, C_bar, Fmass_old);
-           */
-          double
-          melt_fraction (std::vector<double> composition) const;
-
-
-          /**
            * Compute all the reaction rate variables needed for a reactive transport model based on the
            * Katz 2003 formulation. Takes the material model inputs @p in to compute the material model outputs @p out.
            * This function mainly fills the reaction_rate_out object but populates out.reaction_terms,
@@ -119,11 +110,17 @@ namespace aspect
                                        typename Interface<dim>::MaterialModelOutputs &out,
                                        const double reference_T) const;
 
+
+        /**
+         * Function that follows Keller and Katz, 2016, to calculate equilibrium
+         * solid and liquid components, and melt fraction for a multi-component system.
+         * This function returns the volume melt fraction, melt reaction rate,
+         * and solid and liquid reaction rates for each component.
+         */
         std::tuple<double, double, std::vector<double>, std::vector<double>>
         equilibrium (std::vector<double> composition, 
                      const double temperature, 
-                     const double pressure,
-                     const double p2) const;
+                     const double pressure) const;
 
           double reference_darcy_coefficient () const;
 
@@ -141,6 +138,7 @@ namespace aspect
           unsigned int n_components;       // Coefficients for T-dependence of distribution coefficients K^i
           double rho_l;       // Coefficients for T-dependence of distribution coefficients K^i
           double  rho_s;       // Coefficients for T-dependence of distribution coefficients K^i
+          double pressure_max;
 
           unsigned int melt_idx;
           unsigned int mcl_idx;

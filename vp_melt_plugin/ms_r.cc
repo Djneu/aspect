@@ -60,23 +60,18 @@ namespace aspect
         std::vector<double> composition(this->n_compositional_fields());
 
 
-        double pressure = in.pressure[q] > 0
+        double pressure = this->get_adiabatic_conditions().pressure(in.position[q]) > 101325.
                       ? 
-                      in.pressure[q]
+                      this->get_adiabatic_conditions().pressure(in.position[q])
                       :
-                      101325;
-        
-        pressure = std::max(pressure, this->get_adiabatic_conditions().pressure(in.position[q])*0.5);
+                      101325.;
 
         for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
                 composition[c] = in.composition[q][c];
 
-        //double mf = std::get<0>(co_model.equilibrium(composition, in.temperature[q], this->get_adiabatic_conditions().pressure(in.position[q]), this->get_adiabatic_conditions().pressure(in.position[q])));
-        double mf = std::get<0>(co_model.equilibrium(composition, in.temperature[q], pressure, this->get_adiabatic_conditions().pressure(in.position[q])));
-        //if (this->get_geometry_model().depth(in.position[q]) < 10e3)
-        //  mf = 0.0;
+        double volume_fraction = std::get<0>(co_model.equilibrium(composition, in.temperature[q], pressure));
 
-        melt_fractions[q] = mf;  
+        melt_fractions[q] = volume_fraction;  
       }
     }
 
