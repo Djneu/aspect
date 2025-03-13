@@ -26,8 +26,13 @@
 #include <aspect/material_model/equation_of_state/multicomponent_incompressible.h>
 #include <aspect/material_model/rheology/visco_plastic.h>
 #include </home/bbpdneu1/software/aspect/aspect/vp_melt_plugin/co2_melt.h>
-
+#include <aspect/melt.h>
 #include<deal.II/fe/component_mask.h>
+
+#include <aspect/material_model/interface.h>
+#include <aspect/simulator_access.h>
+#include <aspect/postprocess/melt_statistics.h>
+#include <aspect/material_model/reaction_model/katz2003_mantle_melting.h>
 
 namespace aspect
 {
@@ -179,12 +184,17 @@ namespace aspect
      * @ingroup MaterialModels
      */
     template <int dim>
-    class ViscoPlasticReact : public MaterialModel::Interface<dim>, public ::aspect::SimulatorAccess<dim>
+    class ViscoPlasticReact : public MaterialModel::MeltInterface<dim>,
+      public MaterialModel::MeltFractionModel<dim>,
+      public ::aspect::SimulatorAccess<dim>
     {
       public:
 
         void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
                       MaterialModel::MaterialModelOutputs<dim> &out) const override;
+
+        void melt_fractions (const MaterialModel::MaterialModelInputs<dim> &in,
+                             std::vector<double> &melt_fractions) const override;
 
         /**
          * Return whether the model is compressible or not.  Incompressibility
@@ -197,6 +207,12 @@ namespace aspect
          * This material model is incompressible.
          */
         bool is_compressible () const override;
+
+        /**
+         * @name Reference quantities
+         * @{
+         */
+        double reference_darcy_coefficient () const override;
 
         static
         void
@@ -280,6 +296,13 @@ namespace aspect
         * Object for computing the melt parameters
         */
         ReactionModel::Co2Melt<dim> co_model;
+
+
+        /*
+        * Object for computing the melt parameters
+        */
+        ReactionModel::Katz2003MantleMelting<dim> katz_model;
+
 
     };
 

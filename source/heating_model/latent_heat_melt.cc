@@ -97,6 +97,8 @@ namespace aspect
                   heating_model_outputs.rates_of_temperature_change[q] = enthalpy_change
                                                                          * melting_rate
                                                                          / material_model_outputs.specific_heat[q];
+
+                  //std::cout<<enthalpy_change<<" "<<melting_rate<<" "<<" "<<heating_model_outputs.rates_of_temperature_change[q]<<std::endl;                                                  
                 }
               else if (use_operator_split && reaction_rate_out == nullptr)
                 {

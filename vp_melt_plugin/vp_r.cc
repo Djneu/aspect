@@ -27,10 +27,51 @@
 #include <aspect/gravity_model/interface.h>
 #include </home/bbpdneu1/software/aspect/aspect/vp_melt_plugin/co2_melt.h>
 
+#include <aspect/adiabatic_conditions/interface.h>
+#include <deal.II/base/parameter_handler.h>
+#include <deal.II/numerics/fe_field_function.h>
+
+
+
 namespace aspect
 {
   namespace MaterialModel
   {
+    template <int dim>
+    double
+    ViscoPlasticReact<dim>::
+    reference_darcy_coefficient () const
+    {
+      // 0.01 = 1% melt
+      return co_model.reference_darcy_coefficient();
+    }
+
+    template <int dim>
+    void
+    ViscoPlasticReact<dim>::
+    melt_fractions (const MaterialModel::MaterialModelInputs<dim> &in,
+                    std::vector<double> &melt_fractions) const
+    {
+      for (unsigned int q=0; q<in.n_evaluation_points(); ++q)
+      {
+        std::vector<double> composition(this->n_compositional_fields());
+
+
+        double pressure = this->get_adiabatic_conditions().pressure(in.position[q]) > 101325.
+                      ? 
+                      this->get_adiabatic_conditions().pressure(in.position[q])
+                      :
+                      101325.;
+
+        for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
+                composition[c] = in.composition[q][c];
+
+        const double depth = this->get_geometry_model().depth(in.position[q]);
+        double volume_fraction = std::get<0>(co_model.equilibrium(composition, in.temperature[q], pressure, depth));
+
+        melt_fractions[q] = volume_fraction;  
+      }
+    }
 
     template <int dim>
     bool
@@ -219,9 +260,10 @@ namespace aspect
           // Compute the effective viscosity if requested and retrieve whether the material is plastically yielding.
           // Also always compute the viscosity if additional outputs are requested, because the viscosity is needed
           // to compute the elastic force term.
+
           bool plastic_yielding = false;
           IsostrainViscosities isostrain_viscosities;
-          if (in.requests_property(MaterialProperties::viscosity) || in.requests_property(MaterialProperties::additional_outputs))
+          if (in.requests_property(MaterialProperties::viscosity) && this->simulator_is_past_initialization() || in.requests_property(MaterialProperties::additional_outputs) && this->simulator_is_past_initialization())
             {
               // Currently, the viscosities for each of the compositional fields are calculated assuming
               // isostrain amongst all compositions, allowing calculation of the viscosity ratio.
@@ -298,7 +340,14 @@ namespace aspect
                   elastic_out->elastic_shear_moduli[i] = average_elastic_shear_moduli[i];
                 }
             }
+
+
         }
+
+      // Lets do this before all the others are filled out.
+      double reference_T = 273.;
+      co_model.calculate_reaction_rate_outputs(in, out);
+      co_model.calculate_fluid_outputs(in, out, reference_T);
 
       // If we use the full strain tensor, compute the change in the individual tensor components.
       rheology->strain_rheology.compute_finite_strain_reaction_terms(in, out);
@@ -308,9 +357,6 @@ namespace aspect
           rheology->elastic_rheology.fill_elastic_outputs(in, average_elastic_shear_moduli, out);
           rheology->elastic_rheology.fill_reaction_outputs(in, average_elastic_shear_moduli, out);
         }
-
-      co_model.calculate_reaction_rate_outputs(in, out);
-
     }
 
 
@@ -463,6 +509,13 @@ namespace aspect
 
       if (this->get_parameters().enable_elasticity)
         rheology->elastic_rheology.create_elastic_outputs(out);
+
+      if (this->get_parameters().use_operator_splitting && out.template get_additional_output<ReactionRateOutputs<dim>>() == nullptr)
+        {
+          const unsigned int n_points = out.n_evaluation_points();
+          out.additional_outputs.push_back(
+            std::make_unique<MaterialModel::ReactionRateOutputs<dim>> (n_points, this->n_compositional_fields()));
+        }
     }
 
   }

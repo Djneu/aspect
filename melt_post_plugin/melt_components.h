@@ -117,8 +117,18 @@ namespace aspect
           std::vector<double> R;       // Coefficients for T-dependence of distribution coefficients K^i
           unsigned int n_components;       // Coefficients for T-dependence of distribution coefficients K^i
           double porosity;       // Coefficients for T-dependence of distribution coefficients K^i
-          std::vector<double> rho_l;       // Coefficients for T-dependence of distribution coefficients K^i
-          std::vector<double> rho_s;       // Coefficients for T-dependence of distribution coefficients K^i
+          double reference_darcy_coefficient () const;
+          double rho_l;       // Coefficients for T-dependence of distribution coefficients K^i
+          double  rho_s;       // Coefficients for T-dependence of distribution coefficients K^i
+
+          unsigned int melt_idx;
+          unsigned int mcl_idx;
+          unsigned int mcs_idx;
+          unsigned int ccl_idx;
+          unsigned int ccs_idx;  
+          unsigned int hcl_idx;
+          unsigned int hcs_idx;  
+          double pressure_max;
       };
     }
   }

@@ -25,6 +25,7 @@
 #include <aspect/adiabatic_conditions/interface.h>
 #include <deal.II/base/parameter_handler.h>
 
+#include <aspect/simulator.h>
 
 namespace aspect
 {
@@ -38,13 +39,13 @@ namespace aspect
       Co2Melt<dim>::Co2Melt()
         = default;
 
-
       template <int dim>
       double
       Co2Melt<dim>::
       reference_darcy_coefficient () const
       {
         // 0.01 = 1% melt
+        // Darcy coefficient should vary with melt viscosity.
         return reference_permeability * Utilities::fixed_power<3>(0.01) / viscosity_fluid;
       }
 
@@ -54,11 +55,15 @@ namespace aspect
       calculate_reaction_rate_outputs(const typename Interface<dim>::MaterialModelInputs &in,
                                       typename Interface<dim>::MaterialModelOutputs &out) const
       {
+          // Reaction rates needed for operator splitting. This model doesn't consider a case
+          // where there is no operator splitting that uses reaction terms instead.
           ReactionRateOutputs<dim> *reaction_rate_out = out.template get_additional_output<ReactionRateOutputs<dim>>();
+
+          // Enthalpy outputs for the latent heat mel plugin.
+          EnthalpyOutputs<dim> *enthalpy_out = out.template get_additional_output<EnthalpyOutputs<dim>>();
 
           for (unsigned int q=0; q<in.n_evaluation_points(); ++q)
             {
-              // Get equilibrium reaction rates and apply them to the compositional fields.
               const double temperature = in.temperature[q];
               const double pressure = this->get_adiabatic_conditions().pressure(in.position[q]) > 101325.
               ? 
@@ -70,9 +75,11 @@ namespace aspect
               for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
                       composition[c] = in.composition[q][c];
 
+              const double depth = this->get_geometry_model().depth(in.position[q]);
               // Ignore melt fraction, get melt reaction rate (volume)
-              // and solid and liquid reaction rates, ordered as dunite (background field), morb, cmorb
-              auto [_, melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates] = equilibrium(composition, temperature, pressure);
+              // and solid and liquid reaction rates, ordered as dunite (background field), morb, cmorb, hmorb.
+              // Note: At the moment compositions are hardcoded in assuming there is always 4 components.
+              auto [_, melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates, enthalpy] = equilibrium(composition, temperature, pressure, depth);
 
               for (unsigned int c=0; c<in.composition[q].size(); ++c)
                 {
@@ -84,35 +91,75 @@ namespace aspect
                           //melt reaction rate in volume.
                           melt_reaction_rate = std::max(melt_reaction_rate*melting_time_scale, -in.composition[q][c]);
                           reaction_rate_out->reaction_rates[q][c] = melt_reaction_rate/melting_time_scale;
+
+                          // Force any area above maximun pressure to zero.
+                          if(pressure > pressure_max)
+                            reaction_rate_out->reaction_rates[q][c] = -in.composition[q][c]/melting_time_scale;
+                          else if(this->get_geometry_model().depth(in.position[q]) <  extraction_depth)
+                            reaction_rate_out->reaction_rates[q][c] = 0.0; //-in.composition[q][c]/melting_time_scale*(in.position[q](1) - (this->get_geometry_model().maximal_depth() - extraction_depth))/extraction_depth;
                     }
                     else if (c == mcs_idx)
                     {
                           // solid morb reaction rate.
                           solid_reaction_rates[1] = std::max(solid_reaction_rates[1]*melting_time_scale, -in.composition[q][c]);
                           reaction_rate_out->reaction_rates[q][c] = solid_reaction_rates[1]/melting_time_scale;
+
+                          // Force any area above maximun pressure to zero.
+                          if(pressure > pressure_max)
+                            reaction_rate_out->reaction_rates[q][c] = 0.0;
                     }
                     else if (c == mcl_idx)
                     {
                           // liquid morb reaction rate.
                           liquid_reaction_rates[1] = std::max(liquid_reaction_rates[1]*melting_time_scale, -in.composition[q][c]);
                           reaction_rate_out->reaction_rates[q][c] = liquid_reaction_rates[1]/melting_time_scale;
+
+                          if(pressure > pressure_max)
+                            reaction_rate_out->reaction_rates[q][c] = 0.0;
                     }
                     else if (c == ccs_idx)
                     {
                           // solid cmorb reaction rate.
                           solid_reaction_rates[2] = std::max(solid_reaction_rates[2]*melting_time_scale, -in.composition[q][c]);
                           reaction_rate_out->reaction_rates[q][c] = solid_reaction_rates[2]/melting_time_scale;
+
+                          if(pressure > pressure_max)
+                            reaction_rate_out->reaction_rates[q][c] = 0.0;
                     }
                     else if (c == ccl_idx)
                     {
                           // liquid cmorb reaction rate.
                           liquid_reaction_rates[2] = std::max(liquid_reaction_rates[2]*melting_time_scale, -in.composition[q][c]);
                           reaction_rate_out->reaction_rates[q][c] = liquid_reaction_rates[2]/melting_time_scale;
+
+                          if(pressure > pressure_max)
+                            reaction_rate_out->reaction_rates[q][c] = 0.0;
+                    }
+                    else if (c == hcs_idx)
+                    {
+                          // solid cmorb reaction rate.
+                          solid_reaction_rates[3] = std::max(solid_reaction_rates[3]*melting_time_scale, -in.composition[q][c]);
+                          reaction_rate_out->reaction_rates[q][c] = solid_reaction_rates[3]/melting_time_scale;
+
+                          if(pressure > pressure_max)
+                            reaction_rate_out->reaction_rates[q][c] = 0.0;
+                    }
+                    else if (c == hcl_idx)
+                    {
+                          // liquid cmorb reaction rate.
+                          liquid_reaction_rates[3] = std::max(liquid_reaction_rates[3]*melting_time_scale, -in.composition[q][c]);
+                          reaction_rate_out->reaction_rates[q][c] = liquid_reaction_rates[3]/melting_time_scale;
+
+                      if(pressure > pressure_max)
+                            reaction_rate_out->reaction_rates[q][c] = 0.0;
                     }
                     else
                       reaction_rate_out->reaction_rates[q][c] = 0.0;
                   }
                 }
+
+              if (enthalpy_out != nullptr)
+                  enthalpy_out->enthalpies_of_fusion[q] = enthalpy;    
 
                 out.entropy_derivative_pressure[q]    = 0.0;
                 out.entropy_derivative_temperature[q] = 0.0;
@@ -127,40 +174,73 @@ template <int dim>
                               const double reference_T) const
       {
         MeltOutputs<dim> *melt_out = out.template get_additional_output<MeltOutputs<dim>>();
+          // First find new viscosity.
+          if (this->include_melt_transport() && in.requests_property(MaterialProperties::viscosity))
+          {
+            for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
+              {
+                //double porosity = std::min(1.0, std::max(in.composition[i][melt_idx],0.0));
+                // limit porosity to disaggregation threshold
+                //porosity = std::min(0.3, porosity);
+                
+                //double viscosity  = out.viscosities[i]*std::exp(- alpha_phi * porosity);
+                //out.viscosities[i] = std::max(viscosity,5e15);
+                
+              // cutoff for viscosity at 30%
+              const double porosity = std::min(0.3, std::max(in.composition[i][melt_idx],0.0));
+              out.viscosities[i] = std::max(out.viscosities[i] * std::exp(- alpha_phi * porosity),1e15);
+              }
+          }
 
+        // Next, find fluid outputs.
         if (melt_out != nullptr)
           {
-
             for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
               {
                 double porosity = std::max(0.0, std::min(in.composition[i][melt_idx],1.0));
                 double morb_cl =  std::max(0.0, std::min(in.composition[i][mcl_idx],1.0));
                 double cmorb_cl =  std::max(0.0, std::min(in.composition[i][ccl_idx],1.0));
-                double dunite_cl = 1 - morb_cl - cmorb_cl;
-
-                melt_out->fluid_viscosities[i] = viscosity_fluid*((pow(1.0,morb_cl))*(pow(10.0,dunite_cl))*(pow(0.01,cmorb_cl)));
+                double hmorb_cl =  std::max(0.0, std::min(in.composition[i][hcl_idx],1.0));
+                double dunite_cl = 1 - morb_cl - cmorb_cl - hmorb_cl;
+                
+                melt_out->fluid_viscosities[i] = viscosity_fluid*((pow(1.0, morb_cl))*(pow(10.0, dunite_cl))*(pow(0.1, hmorb_cl))*(pow(0.01, cmorb_cl)));
                 melt_out->permeabilities[i] = reference_permeability * Utilities::fixed_power<3>(porosity) * Utilities::fixed_power<2>(1.0-porosity);
 
+
                 // First, calculate temperature dependence of density
+                // outlthermal expansion coefficients is crashing if used in timestep 0 with visco plastic?
                 double temperature_dependence = 1.0;
-                if (this->include_adiabatic_heating ())
-                  {
-                    // temperature dependence is 1 - alpha * (T - T(adiabatic))
-                    temperature_dependence -= (in.temperature[i] - this->get_adiabatic_conditions().temperature(in.position[i]))
-                                              * out.thermal_expansion_coefficients[i];
-                  }
-                else
-                  temperature_dependence -= (in.temperature[i] - reference_T) * out.thermal_expansion_coefficients[i];
+                  if (this->include_adiabatic_heating ())
+                    {
+                      // temperature dependence is 1 - alpha * (T - T(adiabatic))
+                      temperature_dependence -= (in.temperature[i] - this->get_adiabatic_conditions().temperature(in.position[i]))
+                                                * out.thermal_expansion_coefficients[i];
+                    }
+                  else
+                    temperature_dependence -= (in.temperature[i] - reference_T) * out.thermal_expansion_coefficients[i];
 
                 // At the moment we don't include compressibility.
-                melt_out->fluid_densities[i] = rho_l * temperature_dependence;
+                melt_out->fluid_densities[i] = out.densities[i] - 500; //rho_l * temperature_dependence;
                 melt_out->fluid_density_gradients[i] = 0.;
 
-                const double phi_0 = 0.05;
-                porosity = std::max(std::min(porosity,0.995),1e-4);
-                melt_out->compaction_viscosities[i] = xi_0 * phi_0 / porosity;
+                //const double phi_0 = 0.05; 
+                //porosity = std::max(std::min(porosity,0.995),1e-4);
+                //melt_out->compaction_viscosities[i] = xi_0 * phi_0 / porosity;
 
-                double visc_temperature_dependence = 1.0;
+                // limit porosity to disaggregation threshold
+                porosity = std::min(0.3, porosity);
+                //const double porosity_threshold = 0.01 * std::pow(this->get_melt_handler().melt_parameters.melt_scaling_factor_threshold, 1./3.);
+                //melt_out->compaction_viscosities[i] = (1.0 - porosity) * xi_0 / std::max(porosity, porosity_threshold);
+
+                //melt_out->compaction_viscosities[i] = 5.0 * ((1.0 - porosity) * viscosity * std::exp(- alpha_phi * porosity)) / std::max(porosity, 1e-4);
+                //std::cout<<out.viscosities[i]<<std::endl;
+                double viscosity = xi_0;
+                if(this->get_timestep_number() > 0)  
+                  viscosity = out.viscosities[i];
+
+                melt_out->compaction_viscosities[i] = 5.0 * viscosity / std::max(porosity, 1e-4);
+
+                /*double visc_temperature_dependence = 1.0;
                 if (this->include_adiabatic_heating ())
                   {
                     const double delta_temp = in.temperature[i]-this->get_adiabatic_conditions().temperature(in.position[i]);
@@ -176,30 +256,19 @@ template <int dim>
                                                  thermal_bulk_viscosity_exponent*delta_temp/reference_T);
                     visc_temperature_dependence = std::max(std::min(std::exp(-T_dependence),1e4),1e-4);
                   }
-                melt_out->compaction_viscosities[i] *= visc_temperature_dependence;
-
-
-              }
-          }
-
-        if (this->include_melt_transport() && in.requests_property(MaterialProperties::viscosity))
-          {
-            for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
-              {
-                const double porosity = std::min(1.0, std::max(in.composition[i][melt_idx],0.0));
-                double viscosity  = out.viscosities[i]*std::exp(- alpha_phi * porosity);
-                out.viscosities[i] = std::max(viscosity,5e15);
+                melt_out->compaction_viscosities[i] *= visc_temperature_dependence;*/
               }
           }
       }
 
 
       template <int dim>
-      std::tuple<double, double, std::vector<double>, std::vector<double>>
+      std::tuple<double, double, std::vector<double>, std::vector<double>, double>
       Co2Melt<dim>::
       equilibrium (std::vector<double> composition, 
                      const double temperature, 
-                     const double pressure) const
+                     const double pressure,
+                     const double depth) const
       {
         // Define component dependent parameters 
         std::vector<double> C_bar (n_components);
@@ -209,13 +278,15 @@ template <int dim>
         double morb_cs =  std::max(0.0, std::min(composition[mcs_idx],1.0));
         double cmorb_cl =  std::max(0.0, std::min(composition[ccl_idx],1.0));
         double cmorb_cs =  std::max(0.0, std::min(composition[ccs_idx],1.0));
+        double hmorb_cl =  std::max(0.0, std::min(composition[hcl_idx],1.0));
+        double hmorb_cs =  std::max(0.0, std::min(composition[hcs_idx],1.0));
         double Fvol_old =  std::max(0.0, std::min(composition[melt_idx],1.0));       
 
         // Calculate dunite and order liquid and solid components
-        double dunite = 1 - morb_cs - cmorb_cs;
-        double dunite_l = 1 - morb_cl - cmorb_cl;
-        std::vector<double> c_s = {dunite, morb_cs, cmorb_cs};
-        std::vector<double> c_l = {dunite_l, morb_cl, cmorb_cl};
+        double dunite = 1 - morb_cs - cmorb_cs - hmorb_cs;
+        double dunite_l = 1 - morb_cl - cmorb_cl - hmorb_cl;
+        std::vector<double> c_s = {dunite, morb_cs, cmorb_cs, hmorb_cs};
+        std::vector<double> c_l = {dunite_l, morb_cl, cmorb_cl, hmorb_cl};
 
         // We track the volume of melt, convert to mass here.
         double avg_rho = Fvol_old*rho_l + (1 - Fvol_old)*rho_s;
@@ -225,11 +296,16 @@ template <int dim>
         for (unsigned int i=0; i<n_components; ++i)
           C_bar[i] = Fmass_old*c_l[i] + (1-Fmass_old)*c_s[i];
       
+        // Define parameters that will be returned.
         double Fmass_new = 0.0;
         std::vector<double> solid_reaction_rates (n_components, 0.0);
         std::vector<double> liquid_reaction_rates (n_components, 0.0);
         double melt_reaction_rate = 0.0;
-        if(pressure < pressure_max)
+        double enthalpy = 0.0;
+
+        // Calculate the equilibrium values and reaction rates
+        // if we are below the maximum solidus pressure.
+        if(pressure < pressure_max && depth > extraction_depth) //  && depth > 4000
         {
           const double T_solidus = T_solidus_liquidus(pressure, C_bar, true);
           const double T_liquidus = T_solidus_liquidus(pressure, C_bar, false);
@@ -292,10 +368,18 @@ template <int dim>
 
           // Calculate new Cl and Cs values, and limit all between 0 and 1.
           Fmass_new = std::max(0.0, std::min(1.0, Fmass_new));
+
+          if(Fmass_new > 0.3)
+            Fmass_new = 0.3;
+
           double mcl = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new + (1 - Fmass_new) * K[1])));
-          double mcs = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new / K[1] + (1 - Fmass_new))));
-          double ccl = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new + (1 - Fmass_new) * K[2])));
-          double ccs = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new / K[2] + (1 - Fmass_new))));
+          double ccl = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new + (1 - Fmass_new) * K[2])));     
+          double hcl = std::max(0.0, std::min(1.0, C_bar[3] / (Fmass_new + (1 - Fmass_new) * K[3])));
+          
+          // Solid values, these aren't actually used for the reaction rates so can likely remove.
+          //double mcs = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new / K[1] + (1 - Fmass_new))));
+          //double ccs = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new / K[2] + (1 - Fmass_new))));
+          //double hcs = std::max(0.0, std::min(1.0, C_bar[3] / (Fmass_new / K[3] + (1 - Fmass_new))));
         
           // Define reaction rate parameters and calculate rates for each component.
           std::vector<double> Csf (n_components);
@@ -303,13 +387,13 @@ template <int dim>
           std::vector<double> CGamma (n_components);
           std::vector<double> Delta (n_components);
           std::vector<double> Gamma (n_components);
-
+          double G2 = 0.0;
           double R  =  rho_s/melting_time_scale;
           double GammaNet  =  R * (Fmass_new - Fmass_old);
 
-          // Setup new compositions in order.
-          std::vector<double> c_se = {(1 - mcs - ccs), mcs, ccs};
-          std::vector<double> c_le = {(1 - mcl - ccl), mcl, ccl};
+          // Setup new equilibirum liquid in order, and calculate reaction rates.
+          std::vector<double> c_leq = {(1 - mcl - ccl - hcl), mcl, ccl, hcl};
+          double gsum = 0;
           for (unsigned int i=0; i<n_components; ++i)
           {
             Csf[i] = c_l[i]*K[i];
@@ -319,25 +403,50 @@ template <int dim>
               CGamma[i] = Csf[i];
             else if(GammaNet >= 0)
               CGamma[i] = Clf[i];
-
-            Delta[i] = R*(Fmass_new*(c_le[i] - CGamma[i]) - Fmass_old*(c_l[i] - CGamma[i]));
-            Gamma[i] = CGamma[i]*GammaNet + Delta[i];
           }
 
-          double G2 = Gamma[0]+Gamma[1]+Gamma[2];
+          // Sum CGamma's to make unity continuing.
+          gsum = CGamma[0]+CGamma[1]+CGamma[2]+CGamma[3];
+          for (unsigned int i=0; i<n_components; ++i)
+          {
+            CGamma[i] = CGamma[i]/gsum;
+            Delta[i] = R*(Fmass_new*(c_leq[i] - CGamma[i]) - Fmass_old*(c_l[i] - CGamma[i]));
+            Gamma[i] = CGamma[i]*GammaNet + Delta[i];
 
+            // Uncomment if using batch melting instead of fractional.
+            // Gamma[i] = R*(Fmass_new*c_leq[i] - Fmass_old*c_l[i]);
+
+            double Ls = L[i]/T0[i]*temperature;
+            enthalpy += (Gamma[i]*Ls);
+
+            // In matlab code, they also include a pressure and temperature change, must these be added
+            // somewhere? One componenet of temperature change is in the latent heat/enthalpy and is included,
+            // others I am not sure about.
+            G2 += Gamma[i];
+          }
+
+          // Now that we have the sum of Gammas G2, find the solid and liquid reaction rates.
           for (unsigned int i=0; i<n_components; ++i)
           {
             solid_reaction_rates[i] = -(Gamma[i] - c_s[i]*G2)/(std::max(1e-6,(1 - Fmass_old))*rho_s);
-            liquid_reaction_rates[i] = (Gamma[i] - c_l[i]*G2)/(std::max(1e-6,(Fmass_old))*rho_s);
+            liquid_reaction_rates[i] = (Gamma[i] - c_l[i]*G2)/(std::max(1e-6,Fmass_old)*rho_s);
           }
 
           // Melt reaction rate using mass fraction
           melt_reaction_rate = G2/rho_s; 
+
+          // Enthalpy from Keller and Katz 2013 should be the summation of reaction rates multiplied
+          // by the latent heat of the component. Latent heat melt plugin multiplies the enthalpy
+          // by the melt reaction rate again, so here we divide it out. This gives us an average
+          // latent heat value.
+          if(G2 != 0)
+            enthalpy = enthalpy/G2;
+
+         //std::cout<<"Enthalpy "<<enthalpy<<" "<<G2<<std::endl;
       }                                                  
 
-      // Return values, with melt_fractions converted from mass to volume.
-      return {Fmass_new*(rho_l/avg_rho), melt_reaction_rate*(rho_l/avg_rho), solid_reaction_rates, liquid_reaction_rates};
+      // Return values, with melt_fractions converted from mass to volume. 
+      return {Fmass_new*(rho_l/avg_rho), melt_reaction_rate*(rho_l/avg_rho), solid_reaction_rates, liquid_reaction_rates, enthalpy};
       }
 
       template <int dim>
@@ -451,7 +560,8 @@ template <int dim>
         // Parameterization after Rudge, Bercovici, & Spiegelman (2010)
         for (unsigned int i=0; i<n_components; ++i) 
         {
-          double Ls = L[i]/T0[i]*temperature;
+            // L/T gives the change in entropy.
+            double Ls = L[i]/T0[i]*temperature;
             K[i] = std::exp(Ls/R[i] * (1./temperature - 1./Tm[i]));
         }
 
@@ -588,6 +698,9 @@ template <int dim>
               prm.declare_entry ("Maximum pressure for melt", "4.75e9",
                                 Patterns::Double (0.),
                                 "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
+              prm.declare_entry ("Extraction depth", "4000",
+                                Patterns::Double (0.),
+                                "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
             }
             prm.leave_subsection();
           }
@@ -623,6 +736,7 @@ template <int dim>
                                                                           "Thermal diffusivities");
             rho_l         = prm.get_double ("Fluid density");
             rho_s         = prm.get_double ("Solid density");
+            extraction_depth        = prm.get_double ("Extraction depth");
             pressure_max         = prm.get_double ("Maximum pressure for melt");
             melting_time_scale         = prm.get_double ("Melting time scale for operator splitting");
 
@@ -644,6 +758,12 @@ template <int dim>
 
             AssertThrow(this->introspection().compositional_name_exists("cmorb_cs"), ExcMessage("A cmorb_cs field is needed to use the co2 plugin."));
             ccs_idx = this->introspection().compositional_index_for_name("cmorb_cs");
+
+            AssertThrow(this->introspection().compositional_name_exists("hmorb_cl"), ExcMessage("A hmorb_cl field is needed to use the co2 plugin."));
+            hcl_idx = this->introspection().compositional_index_for_name("hmorb_cl");
+
+            AssertThrow(this->introspection().compositional_name_exists("hmorb_cs"), ExcMessage("A hmorb_cs field is needed to use the co2 plugin."));
+            hcs_idx = this->introspection().compositional_index_for_name("hmorb_cs");
 
             xi_0                       = prm.get_double ("Reference bulk viscosity");
             viscosity_fluid            = prm.get_double ("Reference melt viscosity");

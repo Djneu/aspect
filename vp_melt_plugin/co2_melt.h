@@ -117,12 +117,15 @@ namespace aspect
          * This function returns the volume melt fraction, melt reaction rate,
          * and solid and liquid reaction rates for each component.
          */
-        std::tuple<double, double, std::vector<double>, std::vector<double>>
+        std::tuple<double, double, std::vector<double>, std::vector<double>, double>
         equilibrium (std::vector<double> composition, 
                      const double temperature, 
-                     const double pressure) const;
+                     const double pressure,
+                     const double depth) const;
 
           double reference_darcy_coefficient () const;
+          double rho_l;       // Coefficients for T-dependence of distribution coefficients K^i
+          double  rho_s;       // Coefficients for T-dependence of distribution coefficients K^i
 
         private:
           /**
@@ -136,8 +139,6 @@ namespace aspect
           std::string K_T_mode;        // Type of parameterization for K^i(T)
           std::vector<double> R;       // Coefficients for T-dependence of distribution coefficients K^i
           unsigned int n_components;       // Coefficients for T-dependence of distribution coefficients K^i
-          double rho_l;       // Coefficients for T-dependence of distribution coefficients K^i
-          double  rho_s;       // Coefficients for T-dependence of distribution coefficients K^i
           double pressure_max;
 
           unsigned int melt_idx;
@@ -145,6 +146,8 @@ namespace aspect
           unsigned int mcs_idx;
           unsigned int ccl_idx;
           unsigned int ccs_idx;  
+          unsigned int hcl_idx;
+          unsigned int hcs_idx;  
 
           double xi_0;                               // rock viscosity constant
           double viscosity_fluid;                    // melt viscosity constant
@@ -154,6 +157,7 @@ namespace aspect
           double melting_time_scale;                 // reaction time
           double melt_bulk_modulus_derivative;       //
           double reference_permeability;             // permeability constant  
+          double extraction_depth;
       };
     }
 

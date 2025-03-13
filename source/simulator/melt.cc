@@ -347,7 +347,7 @@ namespace aspect
         if (simulator_access->get_parameters().use_operator_splitting)
           melting_rate = (simulator_access->get_timestep() > 0
                           ?
-                          operator_split_reaction * solid_density / simulator_access->get_timestep()
+                          operator_split_reaction * (3200/2700) / simulator_access->get_timestep()
                           :
                           0.0);
 
@@ -1524,10 +1524,10 @@ namespace aspect
                                                 material_model_outputs);
 
             const double p_c_scale = Plugins::get_plugin_as_type<const MaterialModel::MeltInterface<dim>>(
-                                       this->get_material_model()).p_c_scale(material_model_inputs,
-                                                                             material_model_outputs,
-                                                                             this->get_melt_handler(),
-                                                                             false /*=consider_is_melt_cell*/);
+                                      this->get_material_model()).p_c_scale(material_model_inputs,
+                                                                            material_model_outputs,
+                                                                            this->get_melt_handler(),
+                                                                            false /*=consider_is_melt_cell*/);
             const bool is_melt_cell = (p_c_scale > 0.0);
             is_melt_cell_vector[cell->active_cell_index()] = is_melt_cell;
           }

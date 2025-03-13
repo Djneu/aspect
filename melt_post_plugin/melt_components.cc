@@ -50,6 +50,8 @@ namespace aspect
         solution_names.emplace_back("mCs");
         solution_names.emplace_back("cCl");
         solution_names.emplace_back("cCs");
+        solution_names.emplace_back("hCl");
+        solution_names.emplace_back("hCs");
         return solution_names;
       }
 
@@ -59,7 +61,7 @@ namespace aspect
       MeltComponents<dim>::
       get_data_component_interpretation () const
       {
-        std::vector<DataComponentInterpretation::DataComponentInterpretation> interpretation(5,
+        std::vector<DataComponentInterpretation::DataComponentInterpretation> interpretation(7,
             DataComponentInterpretation::component_is_scalar);
 
         return interpretation;
@@ -90,177 +92,125 @@ namespace aspect
               const double pressure    = input_data.solution_values[q][this->introspection().component_indices.pressure];
               const double temperature = input_data.solution_values[q][this->introspection().component_indices.temperature];
               std::vector<double> composition(this->n_compositional_fields());
-              std::vector<double> avg_rho(n_components);
-              std::vector<double> F(n_components);
               std::vector<double> C_bar(n_components);
 
               for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
                 composition[c] = input_data.solution_values[q][this->introspection().component_indices.compositional_fields[c]];
 
-              //std::max(0.0, std::min(1.0, C_bar[1] / (feq + (1 - feq) * K[1])));
-              // Get the compositional values, and set to zero if they don't exist.
-              double morb_cl =  this->introspection().compositional_name_exists("morb_cl")
-                                ?
-                                std::max(0.0, std::min(composition[this->introspection().compositional_index_for_name("morb_cl")],1.0))
-                                :
-                                (n_components==3 ? 0. : -1);
-              double morb_cs =  this->introspection().compositional_name_exists("morb_cs")
-                                ?
-                                std::max(0.0, std::min(composition[this->introspection().compositional_index_for_name("morb_cs")],1.0))
-                                :
-                                (n_components==3 ? 0. : -1);
-              double cmorb_cl = this->introspection().compositional_name_exists("cmorb_cl")
-                                ?
-                                std::max(0.0, std::min(composition[this->introspection().compositional_index_for_name("cmorb_cl")],1.0))
-                                :
-                                (n_components==3 ? 0. : -1);
-              double cmorb_cs = this->introspection().compositional_name_exists("cmorb_cs")
-                                ?
-                                std::max(0.0, std::min(composition[this->introspection().compositional_index_for_name("cmorb_cs")],1.0))
-                                :
-                                (n_components==3 ? 0. : -1); 
-              double F_int = this->introspection().compositional_name_exists("feq")
-                                ?
-                                std::max(0.0, std::min(composition[this->introspection().compositional_index_for_name("feq")],1.0))
-                                :
-                                0.;                                                                           
 
-              // Combine liquid and solid comps, and then calculate l and s dunite.
-              std::vector<double> cl_comp = {morb_cl, cmorb_cl};
-              std::vector<double> cs_comp = {morb_cs, cmorb_cs};
-              double dunite = 1;
-              double dunite_l = 1;
-              for (unsigned int i=0; i<2; ++i)
-              {
-                if(cs_comp[i] != -1)
-                  dunite = dunite - cs_comp[i];
-                
-                if(cl_comp[i] != -1)
-                  dunite_l = dunite_l - cl_comp[i];
-              }
+              // Get the compositional values, and limit between 0 and 1.
+              double morb_cl =  std::max(0.0, std::min(composition[mcl_idx],1.0));
+              double morb_cs =  std::max(0.0, std::min(composition[mcs_idx],1.0));
+              double cmorb_cl =  std::max(0.0, std::min(composition[ccl_idx],1.0));
+              double cmorb_cs =  std::max(0.0, std::min(composition[ccs_idx],1.0));
+              double hmorb_cl =  std::max(0.0, std::min(composition[hcl_idx],1.0));
+              double hmorb_cs =  std::max(0.0, std::min(composition[hcs_idx],1.0));
+              double Fvol_old =  std::max(0.0, std::min(composition[melt_idx],1.0));                                                                           
 
-             // Order fields for finding bulk composition.
-             // Depending on number of components.
-             std::vector<double> c_l = {dunite_l};
-             std::vector<double> c_s = {dunite};
-             for (unsigned int i=0; i<n_components-1; ++i)
-                {
-                  if(cl_comp[i] != -1)
-                    c_l.push_back(cl_comp[i]);
-                  if(cs_comp[i] != -1)
-                    c_s.push_back(cs_comp[i]);
-                }
+              // Calculate dunite and order liquid and solid components
+              double dunite = 1 - morb_cs - cmorb_cs - hmorb_cs;
+              double dunite_l = 1 - morb_cl - cmorb_cl - hmorb_cl;
+              std::vector<double> c_s = {dunite, morb_cs, cmorb_cs, hmorb_cs};
+              std::vector<double> c_l = {dunite_l, morb_cl, cmorb_cl, hmorb_cl};
 
+              // We track the volume of melt, convert to mass here.
+              double avg_rho = Fvol_old*rho_l + (1 - Fvol_old)*rho_s;
+              double Fmass_old = Fvol_old; //*avg_rho/rho_l;
 
-              // 0 = dunite, 1 = morb, 2 = cmorb. In celcius, convert.
               // Now that things are ordered, find the bulk composition for each component.
-              std::vector<double> order_comp;
               for (unsigned int i=0; i<n_components; ++i)
-              {
-                // May use this if convert to volume fraction, but paper uses mass.
-                // Note: Paper does not have different densities for component,
-                // There is one liquid density and one solid density.
-                //avg_rho[i] = porosity*rho_l[i] + (1 - porosity)*rho_s[i];
-                C_bar[i] = F_int*c_l[i] + (1-F_int)*c_s[i];
-                order_comp.push_back(C_bar[i]);
-              } 
+                C_bar[i] = Fmass_old*c_l[i] + (1-Fmass_old)*c_s[i];
+            
+              // Define parameters that will be returned.
+              double Fmass_new = 0.0;
            
-              const double T_solidus = T_solidus_liquidus(pressure, order_comp, true);
-              const double T_liquidus = T_solidus_liquidus(pressure, order_comp, false);
+      // Calculate the equilibrium values and reaction rates
+      // if we are below the maximum solidus pressure.
+         double mcl = 0.0;
+        double ccl = 0.0;    
+        double hcl = 0.0;
+        double mcs = 0.0;
+        double ccs = 0.0;
+        double hcs = 0.0;
+          const double T_solidus = T_solidus_liquidus(pressure, C_bar, true);
+          const double T_liquidus = T_solidus_liquidus(pressure, C_bar, false);
 
-              std::vector<double> Tm = melting_temperatures(pressure);
-              std::vector<double> K = partition_coefficients(pressure, std::max(T_solidus,std::min(T_liquidus,temperature)));
+          std::vector<double> Tm = melting_temperatures(pressure);
+          std::vector<double> K = partition_coefficients(pressure, std::max(T_solidus,std::min(T_liquidus,temperature)));
+          
+          // Calculate equilibrium melt fraction.
+          Fmass_new = Fmass_old;
+          int n      =  0;       
+          const double r_tol = 1e-5;
+          const int its_tol   = 10000;
+          double residual = 0.;
+          for (unsigned int i=0; i<n_components; ++i)
+            residual += C_bar[i]/(Fmass_old + (1-Fmass_old)*K[i]) - C_bar[i]/(Fmass_old/K[i] + (1-Fmass_old));
 
-              // newton solver for feq     
-              int n      =  0;       
-              const double rnorm_tol = 1e-10;
-              const int its_tol   = 100;
-              double feq = 0;
-              double r = 1.;
-              double P_max = 4.75e9;
+          if(temperature <= T_solidus)
+            Fmass_new = 0;
+          else if(temperature >= T_liquidus)
+            Fmass_new = 1;
+          else
+          {
+            while (abs(residual) > r_tol) 
+            {
+              double dr_df = 0;
+              double term1 = 0;
+              double term2 = 0;
               for (unsigned int i=0; i<n_components; ++i)
               {
-                double r1 = C_bar[i] / (feq + (1-feq)*K[i]);
-                double r2 = C_bar[i] / (feq/K[i] + (1-feq));
-                r +=  r1 - r2;
-              }
-        
-              // Set melt fraction to old melt fraction.
-              double f = F_int;
+                double numerator1 = C_bar[i] * (1.0 - K[i]);
+                double denominator1 = std::pow((Fmass_new + (1.0 - Fmass_new) * K[i]), 2);
+                term1 += numerator1 / denominator1;
 
-              if(temperature <= T_solidus)
-                feq = 0;
-              else if(temperature >= T_liquidus)
-                feq = 1;
-              else
+                double numerator2 = C_bar[i] * (1.0 / K[i] - 1.0);
+                double denominator2 = std::pow((Fmass_new / K[i] + (1.0 - Fmass_new)), 2);
+                term2 += numerator2 / denominator2;
+              }
+
+              dr_df = -term1+term2;
+
+              double a = 1;
+              while (((Fmass_new - a*residual/dr_df) < -1e-16) || (Fmass_new - a*residual/dr_df > 1-1e-16))
               {
-                while (abs(r) > rnorm_tol) 
-                {
-                  double dr_df = 0;
-                  double term1 = 0;
-                  double term2 = 0;
-                  for (unsigned int i=0; i<n_components; ++i)
-                  {
-                    double numerator1 = C_bar[i] * (1.0 - K[i]);
-                    double denominator1 = std::pow((feq + (1.0 - feq) * K[i]), 2);
-                    term1 += numerator1 / denominator1;
-
-                    // Second term: sum(VAR.C.*(1./PAR.K - 1)./(ff./PAR.K + (1-ff)).^2, 2)
-                    double numerator2 = C_bar[i] * (1.0 / K[i] - 1.0);
-                    double denominator2 = std::pow((feq / K[i] + (1.0 - feq)), 2);
-                    term2 += numerator2 / denominator2;
-                  }
-
-                  dr_df = -term1+term2;
-
-                
-                  //std::cout<<r<<"  "<<f<<std::endl;
-                  double a = 1;
-                  while (((f - a*r/dr_df) < -1e-10) || (f - a*r/dr_df > 1-1e-10))
-                  {
-                    a = a/2;
-                    //std::cout<<f<<"  "<<a<<"  "<<"  "<<r<<"  "<<"  "<<dr_df<<"  "<<(f - a*r/dr_df)<<std::endl;
-                    if (a<1e-6)
-                        AssertThrow(false, ExcMessage("a too small."));
-                  }
-
-                  f = f - a*r/dr_df;
-                  feq = f;
-
-                  r = 0;
-                  for (unsigned int i=0; i<n_components; ++i)
-                    r += C_bar[i]/(feq + (1-feq)*K[i]) - C_bar[i]/(feq/K[i] + (1-feq));
-
-                  n = n+1;
-                  if (n==its_tol)
-                    AssertThrow(false, ExcMessage("No convergence"));
-
-                }
+                a = a/2;
+                if (a<1e-6)
+                    AssertThrow(false, ExcMessage("a too small."));
               }
 
-              // Calculate VAR.Cl and VAR.Cs, and limit all between 0 and 1.
-              feq = std::max(0.0, std::min(1.0, feq));
-              double cl = std::max(0.0, std::min(1.0, C_bar[1] / (feq + (1 - feq) * K[1])));
-              double cs = std::max(0.0, std::min(1.0, C_bar[1] / (feq / K[1] + (1 - feq))));
-              double cl2 = std::max(0.0, std::min(1.0, C_bar[2] / (feq + (1 - feq) * K[2])));
-              double cs2 = std::max(0.0, std::min(1.0, C_bar[2] / (feq / K[2] + (1 - feq))));
+              Fmass_new = Fmass_new - a*residual/dr_df;
 
-              //std::cout<<C_bar[1]<<" "<<feq<<" "<<K[1]<<" "<<cs<<" "<<cl<<std::endl;
-              computed_quantities[q](0) = feq;
-              computed_quantities[q](1) = cl;
-              computed_quantities[q](2) = cs;
-              computed_quantities[q](3) = cl2;
-              computed_quantities[q](4) = cs2;
-              
-              // WHAT TO OUTPUT: convert f back to volume fraction
+              residual = 0.;
+              for (unsigned int i=0; i<n_components; ++i)
+                residual += C_bar[i]/(Fmass_new + (1-Fmass_new)*K[i]) - C_bar[i]/(Fmass_new/K[i] + (1-Fmass_new));
 
+              n = n+1;
+              if (n==its_tol)
+                AssertThrow(false, ExcMessage("No convergence"));
             }
-        //double T = Tm;
+          }
 
-        //double r = ((C*K)^2)^-1;
+          // Calculate new Cl and Cs values, and limit all between 0 and 1.
+          Fmass_new = std::max(0.0, std::min(1.0, Fmass_new));
 
-        //return 0.0;
+          mcl = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new + (1 - Fmass_new) * K[1])));
+          ccl = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new + (1 - Fmass_new) * K[2])));     
+          hcl = std::max(0.0, std::min(1.0, C_bar[3] / (Fmass_new + (1 - Fmass_new) * K[3])));
+          
+          // Solid values, these aren't actually used for the reaction rates so can likely remove.
+          mcs = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new / K[1] + (1 - Fmass_new))));
+          ccs = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new / K[2] + (1 - Fmass_new))));
+          hcs = std::max(0.0, std::min(1.0, C_bar[3] / (Fmass_new / K[3] + (1 - Fmass_new))));
 
+          computed_quantities[q](0) = Fmass_new; //*(rho_l/avg_rho);
+          computed_quantities[q](1) = mcl;
+          computed_quantities[q](2) = mcs;
+          computed_quantities[q](3) = ccl;
+          computed_quantities[q](4) = ccs;
+          computed_quantities[q](5) = hcl;
+          computed_quantities[q](6) = hcs;   
+        }
       }
 
     template <int dim>
@@ -466,9 +416,9 @@ namespace aspect
                     "the  lherzolite liquidus used for "
                     "calculating the fraction of peridotite-"
                     "derived melt. "
-                    "\\si{\\degreeCelsius\\per\\pascal}.");                   
+                    "\\si{\\degreeCelsius\\per\\pascal}.");     
 
-              prm.declare_entry ("Fluid density", "3200",
+              prm.declare_entry ("Fluid density", "2700",
                     Patterns::List(Patterns::Double (0.)),
                     "Constant parameter in the quadratic "
                     "function that approximates the solidus "
@@ -480,7 +430,12 @@ namespace aspect
                     "Constant parameter in the quadratic "
                     "function that approximates the solidus "
                     "of peridotite. "
-                    "Units: \\si{\\degreeCelsius}.");
+                    "Units: \\si{\\degreeCelsius}.");              
+
+              prm.declare_entry ("Maximum pressure for melt", "4.75e9",
+                                Patterns::Double (0.),
+                                "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
+
             }
             prm.leave_subsection();
           }
@@ -517,13 +472,32 @@ namespace aspect
             R = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("R"))),
                                                                           n_components,
                                                                           "Thermal diffusivities");
-            rho_l = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Fluid density"))),
-                                                              n_components,
-                                                              "Thermal diffusivities");
+            rho_l         = prm.get_double ("Fluid density");
+            rho_s         = prm.get_double ("Solid density");
+            pressure_max         = prm.get_double ("Maximum pressure for melt");
 
-            rho_s = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Solid density"))),
-                                                              n_components,
-                                                              "Thermal diffusivities");
+            // Get ID for all fields. Should I do this once here or do it in the main function?
+            AssertThrow(this->introspection().compositional_name_exists("porosity"), ExcMessage("A porosity field is needed to use the co2 plugin."));
+            melt_idx = this->introspection().compositional_index_for_name("porosity");
+
+            AssertThrow(this->introspection().compositional_name_exists("morb_cl"), ExcMessage("A morb_cl field is needed to use the co2 plugin."));
+            mcl_idx = this->introspection().compositional_index_for_name("morb_cl");
+
+            AssertThrow(this->introspection().compositional_name_exists("morb_cs"), ExcMessage("A morb_cs field is needed to use the co2 plugin."));
+            mcs_idx = this->introspection().compositional_index_for_name("morb_cs");
+          
+            AssertThrow(this->introspection().compositional_name_exists("cmorb_cl"), ExcMessage("A cmorb_cl field is needed to use the co2 plugin."));
+            ccl_idx = this->introspection().compositional_index_for_name("cmorb_cl");
+
+            AssertThrow(this->introspection().compositional_name_exists("cmorb_cs"), ExcMessage("A cmorb_cs field is needed to use the co2 plugin."));
+            ccs_idx = this->introspection().compositional_index_for_name("cmorb_cs");
+
+            AssertThrow(this->introspection().compositional_name_exists("hmorb_cl"), ExcMessage("A hmorb_cl field is needed to use the co2 plugin."));
+            hcl_idx = this->introspection().compositional_index_for_name("hmorb_cl");
+
+            AssertThrow(this->introspection().compositional_name_exists("hmorb_cs"), ExcMessage("A hmorb_cs field is needed to use the co2 plugin."));
+            hcs_idx = this->introspection().compositional_index_for_name("hmorb_cs");
+
             }
             prm.leave_subsection();
           }

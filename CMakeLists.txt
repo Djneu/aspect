@@ -29,6 +29,8 @@ message(STATUS "===== Configuring ASPECT ${ASPECT_PACKAGE_VERSION}")
 message(STATUS "====================================================")
 message(STATUS "")
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=gold")
+
 
 
 # ####################################################################

@@ -45,6 +45,7 @@ namespace aspect
       const MaterialModel::MeltInputs<dim> *melt_in = material_model_inputs.template get_additional_input<MaterialModel::MeltInputs<dim>>();
       AssertThrow(melt_in != nullptr,
                   ExcMessage ("Need MeltInputs from the material model for adiabatic heating with melt!"));
+      
 
       for (unsigned int q=0; q<heating_model_outputs.heating_source_terms.size(); ++q)
         {
@@ -132,8 +133,10 @@ namespace aspect
     {
       // we need the melt inputs for this adiabatic heating of melt
       if (inputs.template get_additional_input<MaterialModel::MeltInputs<dim>>() == nullptr)
+      {
         inputs.additional_inputs.emplace_back(
           std::make_unique<MaterialModel::MeltInputs<dim>> (inputs.n_evaluation_points()));
+      }
     }
   }
 }

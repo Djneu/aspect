@@ -158,9 +158,11 @@ namespace aspect
              heating_model != heating_model_objects.end(); ++heating_model, ++index)
           {
             (*heating_model)->evaluate(in, out, heating_model_outputs);
-
+            //std::cout<<(*heating_model)<<std::endl;
             for (unsigned int q=0; q<n_quadrature_points; ++q)
+            {
               computed_quantities[q][index] = heating_model_outputs.heating_source_terms[q];
+            }
           }
 
       }
