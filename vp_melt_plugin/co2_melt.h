@@ -121,11 +121,12 @@ namespace aspect
         equilibrium (std::vector<double> composition, 
                      const double temperature, 
                      const double pressure,
-                     const double depth) const;
+                     const double depth,
+                     const double rho_ss) const;
 
           double reference_darcy_coefficient () const;
-          double rho_l;       // Coefficients for T-dependence of distribution coefficients K^i
-          double  rho_s;       // Coefficients for T-dependence of distribution coefficients K^i
+
+          
 
         private:
           /**
@@ -140,24 +141,26 @@ namespace aspect
           std::vector<double> R;       // Coefficients for T-dependence of distribution coefficients K^i
           unsigned int n_components;       // Coefficients for T-dependence of distribution coefficients K^i
           double pressure_max;
+          double fluid_density_difference;       // Coefficients for T-dependence of distribution coefficients K^i
 
-          unsigned int melt_idx;
-          unsigned int mcl_idx;
-          unsigned int mcs_idx;
-          unsigned int ccl_idx;
-          unsigned int ccs_idx;  
-          unsigned int hcl_idx;
-          unsigned int hcs_idx;  
+          unsigned int porosity_idx;  // porosity index
+          unsigned int mcl_idx;       // liquid morb index
+          unsigned int mcs_idx;       // solid morb index
+          unsigned int ccl_idx;       // liquid carbonated morb
+          unsigned int ccs_idx;       // solid carbonated morb
+          unsigned int hcl_idx;       // liquid hydrated morb
+          unsigned int hcs_idx;       // solid hydrated morb
 
           double xi_0;                               // rock viscosity constant
           double viscosity_fluid;                    // melt viscosity constant
-          double thermal_bulk_viscosity_exponent;    // Not in paper
+          double thermal_bulk_viscosity_exponent;    
           double alpha_phi;                          // melt weakening factor
-          double melt_compressibility;               // Not in paper
+          double melt_compressibility;               
           double melting_time_scale;                 // reaction time
           double melt_bulk_modulus_derivative;       //
           double reference_permeability;             // permeability constant  
           double extraction_depth;
+          bool use_fractional_melting;
       };
     }
 

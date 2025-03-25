@@ -347,10 +347,11 @@ namespace aspect
         if (simulator_access->get_parameters().use_operator_splitting)
           melting_rate = (simulator_access->get_timestep() > 0
                           ?
-                          operator_split_reaction * (3200/2700) / simulator_access->get_timestep()
+                          operator_split_reaction * solid_density / simulator_access->get_timestep()
                           :
                           0.0);
 
+        //(3200/2700)
         const double solid_compressibility = scratch.material_model_outputs.compressibilities[q_point];
         const Tensor<1,dim> fluid_density_gradient = melt_out->fluid_density_gradients[q_point];
         const Tensor<1,dim> current_u = scratch.velocity_values[q_point];

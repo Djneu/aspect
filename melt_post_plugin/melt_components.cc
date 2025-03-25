@@ -115,7 +115,7 @@ namespace aspect
 
               // We track the volume of melt, convert to mass here.
               double avg_rho = Fvol_old*rho_l + (1 - Fvol_old)*rho_s;
-              double Fmass_old = Fvol_old; //*avg_rho/rho_l;
+              double Fmass_old = Fvol_old*avg_rho/rho_l;
 
               // Now that things are ordered, find the bulk composition for each component.
               for (unsigned int i=0; i<n_components; ++i)
@@ -194,16 +194,17 @@ namespace aspect
           // Calculate new Cl and Cs values, and limit all between 0 and 1.
           Fmass_new = std::max(0.0, std::min(1.0, Fmass_new));
 
+          // Liquid values
           mcl = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new + (1 - Fmass_new) * K[1])));
           ccl = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new + (1 - Fmass_new) * K[2])));     
           hcl = std::max(0.0, std::min(1.0, C_bar[3] / (Fmass_new + (1 - Fmass_new) * K[3])));
           
-          // Solid values, these aren't actually used for the reaction rates so can likely remove.
+          // Solid values
           mcs = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new / K[1] + (1 - Fmass_new))));
           ccs = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new / K[2] + (1 - Fmass_new))));
           hcs = std::max(0.0, std::min(1.0, C_bar[3] / (Fmass_new / K[3] + (1 - Fmass_new))));
 
-          computed_quantities[q](0) = Fmass_new; //*(rho_l/avg_rho);
+          computed_quantities[q](0) = Fmass_new*(rho_l/avg_rho);
           computed_quantities[q](1) = mcl;
           computed_quantities[q](2) = mcs;
           computed_quantities[q](3) = ccl;

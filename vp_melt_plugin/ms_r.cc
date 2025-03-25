@@ -67,8 +67,23 @@ namespace aspect
         for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
                 composition[c] = in.composition[q][c];
 
-        const double depth = this->get_geometry_model().depth(in.position[q]);
-        double volume_fraction = std::get<0>(co_model.equilibrium(composition, in.temperature[q], pressure, depth));
+
+          // calculate density first, we need it for the reaction term
+          // first, calculate temperature dependence of density
+          double temperature_dependence = 1.0;
+          if (this->include_adiabatic_heating ())
+            {
+              // temperature dependence is 1 - alpha * (T - T(adiabatic))
+              temperature_dependence -= (in.temperature[q] - this->get_adiabatic_conditions().temperature(in.position[q]))
+                                        * thermal_expansivity;
+            }
+          else
+            temperature_dependence -= (in.temperature[q] - reference_T) * thermal_expansivity;
+
+        const double rho_s = reference_rho_solid * temperature_dependence;
+
+        const double depth = in.position[q](1); //this->get_geometry_model().depth(in.position[q]);
+        double volume_fraction = std::get<0>(co_model.equilibrium(composition, in.temperature[q], pressure, depth, rho_s));
 
         melt_fractions[q] = volume_fraction;  
       }
@@ -111,7 +126,7 @@ namespace aspect
 
           // calculate composition dependence of density CHANGED
           //const double averaged_rho = (porosity*co_model.rho_l + (1-porosity)*co_model.rho_s);                        
-          out.densities[i] = co_model.rho_s * temperature_dependence; // * std::exp(compressibility * (in.pressure[i] - this->get_surface_pressure()));
+          out.densities[i] = reference_rho_solid * temperature_dependence; // * std::exp(compressibility * (in.pressure[i] - this->get_surface_pressure()));
 
           out.viscosities[i] = eta_0;
           out.thermal_expansion_coefficients[i] = thermal_expansivity;

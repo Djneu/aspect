@@ -67,7 +67,7 @@ namespace aspect
                 composition[c] = in.composition[q][c];
 
         const double depth = this->get_geometry_model().depth(in.position[q]);
-        double volume_fraction = std::get<0>(co_model.equilibrium(composition, in.temperature[q], pressure, depth));
+        double volume_fraction = std::get<0>(co_model.equilibrium(composition, in.temperature[q], pressure, depth, 3200));
 
         melt_fractions[q] = volume_fraction;  
       }
