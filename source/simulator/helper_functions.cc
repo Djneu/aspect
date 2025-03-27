@@ -1820,10 +1820,10 @@ namespace aspect
 
     // Both tolerances are added, but the composition might become 0.
     // We therefore set the absolute tolerance to a very small value.
-    data.relative_tolerance = 1e-6;  //default 1e-6
+    data.relative_tolerance = 1e-4;  //default 1e-6
     data.absolute_tolerance = 1e-10;  //default 1e-10
     data.maximum_order = 3;
-    data.maximum_non_linear_iterations = 100;
+    data.maximum_non_linear_iterations = 30;
     //data.implicit_function_is_linear = true;
 
     SUNDIALS::ARKode<VectorType> ode(data);

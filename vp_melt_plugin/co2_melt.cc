@@ -91,8 +91,8 @@ namespace aspect
                     {
                           // melt reaction rate in volume. First we multiply by the melting_time_scale and compare
                           // to the current composition to avoid negative values.
-                          melt_reaction_rate = std::max(melt_reaction_rate*melting_time_scale, -in.composition[q][c]);
-                          reaction_rate_out->reaction_rates[q][c] = melt_reaction_rate/melting_time_scale;
+                          //melt_reaction_rate = std::max(melt_reaction_rate*melting_time_scale, -in.composition[q][c]);
+                          reaction_rate_out->reaction_rates[q][c] = melt_reaction_rate; //melting_time_scale;
 
                           // Force any area above maximun pressure to zero.
                           if(pressure > pressure_max)
@@ -103,8 +103,8 @@ namespace aspect
                     else if (c == mcs_idx)
                     {
                           // solid morb reaction rate
-                          solid_reaction_rates[1] = std::max(solid_reaction_rates[1]*melting_time_scale, -in.composition[q][c]);
-                          reaction_rate_out->reaction_rates[q][c] = solid_reaction_rates[1]/melting_time_scale;
+                          //solid_reaction_rates[1] = std::max(solid_reaction_rates[1]*melting_time_scale, -in.composition[q][c]);
+                          reaction_rate_out->reaction_rates[q][c] = solid_reaction_rates[1]; //melting_time_scale;
 
                           // Force any area above maximun pressure to zero.
                           if(pressure > pressure_max)
@@ -115,8 +115,8 @@ namespace aspect
                     else if (c == mcl_idx)
                     {
                           // liquid morb reaction rate.
-                          liquid_reaction_rates[1] = std::max(liquid_reaction_rates[1]*melting_time_scale, -in.composition[q][c]);
-                          reaction_rate_out->reaction_rates[q][c] = liquid_reaction_rates[1]/melting_time_scale;
+                          //liquid_reaction_rates[1] = std::max(liquid_reaction_rates[1]*melting_time_scale, -in.composition[q][c]);
+                          reaction_rate_out->reaction_rates[q][c] = liquid_reaction_rates[1]; //melting_time_scale;
 
                           if(pressure > pressure_max)
                             reaction_rate_out->reaction_rates[q][c] = 0.0;
@@ -126,8 +126,8 @@ namespace aspect
                     else if (c == ccs_idx)
                     {
                           // solid cmorb reaction rate.
-                          solid_reaction_rates[2] = std::max(solid_reaction_rates[2]*melting_time_scale, -in.composition[q][c]);
-                          reaction_rate_out->reaction_rates[q][c] = solid_reaction_rates[2]/melting_time_scale;
+                          //solid_reaction_rates[2] = std::max(solid_reaction_rates[2]*melting_time_scale, -in.composition[q][c]);
+                          reaction_rate_out->reaction_rates[q][c] = solid_reaction_rates[2]; //melting_time_scale;
 
                           if(pressure > pressure_max)
                             reaction_rate_out->reaction_rates[q][c] = 0.0;
@@ -137,8 +137,8 @@ namespace aspect
                     else if (c == ccl_idx)
                     {
                           // liquid cmorb reaction rate.
-                          liquid_reaction_rates[2] = std::max(liquid_reaction_rates[2]*melting_time_scale, -in.composition[q][c]);
-                          reaction_rate_out->reaction_rates[q][c] = liquid_reaction_rates[2]/melting_time_scale;
+                          //liquid_reaction_rates[2] = std::max(liquid_reaction_rates[2]*melting_time_scale, -in.composition[q][c]);
+                          reaction_rate_out->reaction_rates[q][c] = liquid_reaction_rates[2]; //melting_time_scale;
 
                           if(pressure > pressure_max)
                             reaction_rate_out->reaction_rates[q][c] = 0.0;
@@ -148,8 +148,8 @@ namespace aspect
                     else if (c == hcs_idx)
                     {
                           // solid cmorb reaction rate.
-                          solid_reaction_rates[3] = std::max(solid_reaction_rates[3]*melting_time_scale, -in.composition[q][c]);
-                          reaction_rate_out->reaction_rates[q][c] = solid_reaction_rates[3]/melting_time_scale;
+                          //solid_reaction_rates[3] = std::max(solid_reaction_rates[3]*melting_time_scale, -in.composition[q][c]);
+                          reaction_rate_out->reaction_rates[q][c] = solid_reaction_rates[3]; //melting_time_scale;
 
                           if(pressure > pressure_max)
                             reaction_rate_out->reaction_rates[q][c] = 0.0;
@@ -159,8 +159,8 @@ namespace aspect
                     else if (c == hcl_idx)
                     {
                           // liquid cmorb reaction rate.
-                          liquid_reaction_rates[3] = std::max(liquid_reaction_rates[3]*melting_time_scale, -in.composition[q][c]);
-                          reaction_rate_out->reaction_rates[q][c] = liquid_reaction_rates[3]/melting_time_scale;
+                          //liquid_reaction_rates[3] = std::max(liquid_reaction_rates[3]*melting_time_scale, -in.composition[q][c]);
+                          reaction_rate_out->reaction_rates[q][c] = liquid_reaction_rates[3]; //melting_time_scale;
 
                       if(pressure > pressure_max)
                             reaction_rate_out->reaction_rates[q][c] = 0.0;
@@ -210,7 +210,18 @@ template <int dim>
                 double morb_cl =  std::max(0.0, std::min(in.composition[i][mcl_idx],1.0));
                 double cmorb_cl =  std::max(0.0, std::min(in.composition[i][ccl_idx],1.0));
                 double hmorb_cl =  std::max(0.0, std::min(in.composition[i][hcl_idx],1.0));
-                double dunite_cl = 1 - morb_cl - cmorb_cl - hmorb_cl;
+
+                // Near the surface we sometimes get liquid values above one.
+                // here we force them to 1 and assume there is no dunite.
+                double comp_sum = morb_cl + cmorb_cl + hmorb_cl;
+                if(comp_sum > 1)
+                {
+                  morb_cl = morb_cl/comp_sum;
+                  cmorb_cl = cmorb_cl/comp_sum;
+                  hmorb_cl = hmorb_cl/comp_sum;
+                }
+
+                double dunite_cl = std::max(0. ,(1 - morb_cl - cmorb_cl - hmorb_cl));
                 
                 // We should maybe double check that the liquid components sum to unity.
                 melt_out->fluid_viscosities[i] = viscosity_fluid*((pow(1.0, morb_cl))*(pow(10.0, dunite_cl))*(pow(0.1, hmorb_cl))*(pow(0.01, cmorb_cl)));
@@ -271,12 +282,35 @@ template <int dim>
         double hmorb_cl =  std::max(0.0, std::min(composition[hcl_idx],1.0));
         double hmorb_cs =  std::max(0.0, std::min(composition[hcs_idx],1.0));
         double Fvol_old =  std::max(0.0, std::min(composition[porosity_idx],1.0));
-        const double rho_l = rho_s - fluid_density_difference;       
+        const double rho_l = rho_s - fluid_density_difference;
+
+        // Near the surface we sometimes get liquid values above one.
+        // here we force them to 1 and assume there is no dunite.
+        // Would there be a better way to do this?
+        double comp_sum = morb_cl + cmorb_cl + hmorb_cl;
+        if(comp_sum > 1)
+        {
+          morb_cl = morb_cl/comp_sum;
+          cmorb_cl = cmorb_cl/comp_sum;
+          hmorb_cl = hmorb_cl/comp_sum;
+        }
+
+        comp_sum = morb_cs + cmorb_cs + hmorb_cs;
+        if(comp_sum > 1)
+        {
+          morb_cs = morb_cs/comp_sum;
+          cmorb_cs = cmorb_cs/comp_sum;
+          hmorb_cs = hmorb_cs/comp_sum;
+        }
+
+        // Find dunite and make sure it isn't below zero.
+        double dunite = std::max(0. ,(1 - morb_cs - cmorb_cs - hmorb_cs)); 
+        double dunite_l = std::max(0. ,(1 - morb_cl - cmorb_cl - hmorb_cl));      
 
         // Calculate dunite and order liquid and solid components
         // Should we check that these sum to unity?
-        double dunite = 1 - morb_cs - cmorb_cs - hmorb_cs;
-        double dunite_l = 1 - morb_cl - cmorb_cl - hmorb_cl;
+        //double dunite = 1 - morb_cs - cmorb_cs - hmorb_cs;
+        //double dunite_l = 1 - morb_cl - cmorb_cl - hmorb_cl;
         std::vector<double> c_s = {dunite, morb_cs, cmorb_cs, hmorb_cs};
         std::vector<double> c_l = {dunite_l, morb_cl, cmorb_cl, hmorb_cl};
 
@@ -365,6 +399,7 @@ template <int dim>
           // Calculate new Cl and Cs values, and limit all between 0 and 1.
           Fmass_new = std::max(0.0, std::min(1.0, Fmass_new));
 
+          double dcl = std::max(0.0, std::min(1.0, C_bar[0] / (Fmass_new + (1 - Fmass_new) * K[0])));
           double mcl = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new + (1 - Fmass_new) * K[1])));
           double ccl = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new + (1 - Fmass_new) * K[2])));     
           double hcl = std::max(0.0, std::min(1.0, C_bar[3] / (Fmass_new + (1 - Fmass_new) * K[3])));
@@ -384,8 +419,14 @@ template <int dim>
           // model density as it will take into consideration other materials.
           double R  =  rho_s/melting_time_scale;
 
-          // Setup new equilibirum liquid in order, and calculate reaction rates.
-          std::vector<double> c_leq = {(1 - mcl - ccl - hcl), mcl, ccl, hcl};
+          // Check unity, setup new equilibirum liquid in order, and calculate reaction rates.
+          comp_sum = dcl + ccl + mcl + hcl;
+          dcl = dcl/comp_sum;
+          mcl = mcl/comp_sum;
+          ccl = ccl/comp_sum;
+          hcl = hcl/comp_sum;
+
+          std::vector<double> c_leq = {dcl, mcl, ccl, hcl};
           if(use_fractional_melting)
           {
             std::vector<double> Csf (n_components);
@@ -437,7 +478,7 @@ template <int dim>
             }
           }
 
-          // Now that we have the sum of Gammas G2, find the solid and liquid reaction rates.
+          // Now that we have GammaSum, find the solid and liquid reaction rates.
           for (unsigned int i=0; i<n_components; ++i)
           {
             solid_reaction_rates[i] = -(Gamma[i] - c_s[i]*GammaSum)/(std::max(1e-6,(1 - Fmass_old))*rho_s);
