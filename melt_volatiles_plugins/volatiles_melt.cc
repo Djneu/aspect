@@ -189,17 +189,6 @@ template <int dim>
       {
         MeltOutputs<dim> *melt_out = out.template get_additional_output<MeltOutputs<dim>>();
 
-        // Find new viscosity.
-        if (this->include_melt_transport() && in.requests_property(MaterialProperties::viscosity))
-        {
-          for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
-            {
-            // cutoff for viscosity at 30%
-            const double porosity = std::min(0.3, std::max(in.composition[i][porosity_idx],0.0));
-            out.viscosities[i] = std::max(out.viscosities[i] * std::exp(- alpha_phi * porosity),1e15);
-            }
-        }
-
         // Next, find fluid outputs.
         if (melt_out != nullptr)
           {
@@ -259,6 +248,17 @@ template <int dim>
                 melt_out->compaction_viscosities[i] *= visc_temperature_dependence;
               }
           }
+
+        // Find new viscosity.
+        if (this->include_melt_transport() && in.requests_property(MaterialProperties::viscosity))
+        {
+          for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
+            {
+            // cutoff for viscosity at 30%
+            const double porosity = std::min(0.3, std::max(in.composition[i][porosity_idx],0.0));
+            out.viscosities[i] = std::max(out.viscosities[i] * std::exp(- alpha_phi * porosity),1e15);
+            }
+        }
       }
 
 
