@@ -1688,15 +1688,16 @@ namespace aspect
     SUNDIALS::ARKode<VectorType>::AdditionalData data;
     data.initial_time = time;
     data.final_time = time + time_step;
-    data.initial_step_size = 0.001 * time_step;
+    data.initial_step_size = 1.e-3 * time_step; //0.001
     data.output_period = time_step;
-    data.minimum_step_size = 1.e-6 * time_step;
+    data.minimum_step_size = 1.e-6 * time_step; //1e-6
 
     // Both tolerances are added, but the composition might become 0.
     // We therefore set the absolute tolerance to a very small value.
-    data.relative_tolerance = 1e-4;  //1e-6
-    data.absolute_tolerance = 1e-10;
-    data.maximum_non_linear_iterations = 30;
+    data.relative_tolerance = 1e-4;
+    data.absolute_tolerance = 1e-10;  //1e-10
+    data.maximum_non_linear_iterations = 300;
+    data.maximum_order = 5;
 
     SUNDIALS::ARKode<VectorType> ode(data);
 
