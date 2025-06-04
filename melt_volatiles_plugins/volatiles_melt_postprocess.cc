@@ -19,7 +19,7 @@
 */
 
 
-#include </home/bbpdneu1/software/co2/aspect/melt_volatiles_plugins/volatiles_melt_postprocess.h>
+#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/volatiles_melt_postprocess.h>
 #include <aspect/melt.h>
 #include <deal.II/base/parameter_handler.h>
 
@@ -51,6 +51,8 @@ namespace aspect
         solution_names.emplace_back("cCs");
         solution_names.emplace_back("hCl");
         solution_names.emplace_back("hCs");
+        solution_names.emplace_back("cppm");
+        solution_names.emplace_back("hppm");
         return solution_names;
       }
 
@@ -60,7 +62,7 @@ namespace aspect
       VolatilesMeltPost<dim>::
       get_data_component_interpretation () const
       {
-        std::vector<DataComponentInterpretation::DataComponentInterpretation> interpretation(7,
+        std::vector<DataComponentInterpretation::DataComponentInterpretation> interpretation(9,
             DataComponentInterpretation::component_is_scalar);
 
         return interpretation;
@@ -203,13 +205,15 @@ namespace aspect
           ccs = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new / K[2] + (1 - Fmass_new))));
           hcs = std::max(0.0, std::min(1.0, C_bar[3] / (Fmass_new / K[3] + (1 - Fmass_new))));
 
-          computed_quantities[q](0) = Fmass_new*(rho_l/avg_rho);
+          computed_quantities[q](0) = Fmass_new; //Fmass_new*(rho_l/avg_rho);
           computed_quantities[q](1) = mcl;
           computed_quantities[q](2) = mcs;
           computed_quantities[q](3) = ccl;
           computed_quantities[q](4) = ccs;
           computed_quantities[q](5) = hcl;
           computed_quantities[q](6) = hcs;   
+          computed_quantities[q](7) = (Fmass_new * ccl + (1 - Fmass_new)*ccs) * 20/100 * 1e6;
+          computed_quantities[q](8) = (Fmass_new * hcl + (1 - Fmass_new)*hcs) * 5/100 * 1e6;;
         }
       }
 

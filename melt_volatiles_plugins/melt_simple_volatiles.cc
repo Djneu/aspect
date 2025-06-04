@@ -20,11 +20,11 @@
 
 
 #include <aspect/adiabatic_conditions/interface.h>
-#include </home/bbpdneu1/software/co2/aspect/melt_volatiles_plugins/melt_simple_volatiles.h>
+#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/melt_simple_volatiles.h>
 #include <aspect/utilities.h>
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/numerics/fe_field_function.h>
-#include </home/bbpdneu1/software/co2/aspect/melt_volatiles_plugins/volatiles_melt.h>
+#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/volatiles_melt.h>
 
 namespace aspect
 {
@@ -80,12 +80,12 @@ namespace aspect
           else
             temperature_dependence -= (in.temperature[q] - reference_T) * thermal_expansivity;
 
-        const double rho_s = reference_rho_solid * temperature_dependence;
+        const double rho_s = 3200; //reference_rho_solid * temperature_dependence;
 
         const double depth = in.position[q](1); //this->get_geometry_model().depth(in.position[q]);
-        double volume_fraction = std::get<0>(volatile_model.equilibrium(composition, in.temperature[q], pressure, depth, rho_s));
+        //double volume_fraction = std::get<0>(volatile_model.equilibrium(composition, in.temperature[q], pressure, depth, rho_s));
 
-        melt_fractions[q] = volume_fraction;  
+        melt_fractions[q] = 0.0; //volume_fraction;  
       }
     }
 

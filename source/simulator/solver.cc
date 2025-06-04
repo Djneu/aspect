@@ -357,7 +357,7 @@ namespace aspect
       // convergence without iterating. We simply skip solving in this case.
       if (src.l2_norm() > 1e-50)
         {
-          SolverControl solver_control(1000, src.l2_norm() * solver_tolerance);
+          SolverControl solver_control(5000, src.l2_norm() * solver_tolerance);
           PrimitiveVectorMemory<LinearAlgebra::Vector> mem;
           SolverCG<LinearAlgebra::Vector> solver(solver_control, mem);
           try
