@@ -19,7 +19,7 @@
 */
 
 
-#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/volatiles_melt.h>
+#include </Users/djneuh/software/local_code/aspect/melt_volatiles_plugins/volatiles_melt.h>
 #include <aspect/utilities.h>
 #include <aspect/gravity_model/interface.h>
 #include <aspect/adiabatic_conditions/interface.h>
@@ -273,6 +273,16 @@ template <int dim>
         double Fvol_old =  std::max(0.0, std::min(composition[porosity_idx],1.0));
         const double rho_l = rho_s - fluid_density_difference;
 
+        double reaction_time_step_size = 1.0;
+        double reaction_fraction = 1.0;
+        if (this->simulator_is_past_initialization())
+        {
+          const unsigned int number_of_reaction_steps = std::max(static_cast<unsigned int>(this->get_timestep() / this->get_parameters().reaction_time_step),
+                                                                 std::max(this->get_parameters().reaction_steps_per_advection_step,1U));
+          reaction_time_step_size = this->get_timestep() / static_cast<double>(number_of_reaction_steps);
+          reaction_fraction = reaction_time_step_size / melting_time_scale;
+        }
+
         // Near the surface we sometimes get liquid values above one.
         // here we force them to 1 and assume there is no dunite.
         // Would there be a better way to do this?
@@ -505,26 +515,53 @@ template <int dim>
           melt_reaction_rate = GammaSum/avg_rho;
 
           // Now to modify the reaction rates so that we preserve bulk composition. 
-          double melt_final = Fmass_old + melt_reaction_rate*melting_time_scale;
-          double cs_final = (1-melt_final)*(c_s[2] + solid_reaction_rates[2]*melting_time_scale);
-          double cl_final = melt_final*(c_l[2] + liquid_reaction_rates[2]*melting_time_scale);
+          double dt = reaction_time_step_size;
+          double melt_final = Fmass_old + melt_reaction_rate * dt;
+          double cs_weight = 1 - melt_final;
+          double cl_weight = melt_final;
 
+          for (unsigned int i=0; i<n_components; ++i)
+          {
+          // Uncorrected final Cbar
+          double cl_final = cl_weight * (c_l[i] + liquid_reaction_rates[i] * dt);
+          double cs_final = cs_weight * (c_s[i] + solid_reaction_rates[i] * dt);
           double Cbar_f = cl_final + cs_final;
-          double C_diff = Cbar_f - C_bar[2];
-          double rate_diff = C_diff/melting_time_scale;
-          double cs_final2 = (1-melt_final)*(c_s[2] + (solid_reaction_rates[2] - rate_diff)*melting_time_scale);
-          double Cnew = cl_final + cs_final2;
 
-          //solid_reaction_rates[2] = solid_reaction_rates[2] - rate_diff;
+          // Compute needed correction
+          double C_diff = Cbar_f - C_bar[i];
+          double rate_diff = C_diff / (dt * cl_weight);
+          //std::cout<<rate_diff<<std::endl;
 
-        double reaction_fraction = 0.0;
-        if (this->simulator_is_past_initialization())
-        {
-          const unsigned int number_of_reaction_steps = std::max(static_cast<unsigned int>(this->get_timestep() / this->get_parameters().reaction_time_step),
-                                                                 std::max(this->get_parameters().reaction_steps_per_advection_step,1U));
-          reaction_time_step_size = this->get_timestep() / static_cast<double>(number_of_reaction_steps);
-          reaction_fraction = reaction_time_step_size;
-        }
+          liquid_reaction_rates[i] -= rate_diff;
+
+          }
+
+          double cl_final = cl_weight * (c_l[2] + liquid_reaction_rates[2] * dt);
+          double cs_final = cs_weight * (c_s[2] + solid_reaction_rates[2] * dt);
+          std::cout<<"co: "<<cl_final+cs_final<<" "<<cs_final<<" "<<cl_final<<std::endl;
+
+          cl_final = cl_weight * (c_l[1] + liquid_reaction_rates[1] * dt);
+          cs_final = cs_weight * (c_s[1] + solid_reaction_rates[1] * dt);
+          std::cout<<"morb: "<<cl_final+cs_final<<" "<<cs_final<<" "<<cl_final<<std::endl;          
+
+          // Uncorrected final Cbar
+          //double cl_final = cl_weight * (c_l[2] + liquid_reaction_rates[2] * dt);
+          //double cs_final = cs_weight * (c_s[2] + solid_reaction_rates[2] * dt);
+          //double Cbar_f = cl_final + cs_final;
+
+          // Compute needed correction
+          //double C_diff = Cbar_f - C_bar[2];
+          //double rate_diff = C_diff / (dt * cl_weight);
+
+          //std::cout<<"cold: "<<C_bar[2]<<" "<<Cbar_f<<std::endl;
+          // Distribute correction
+          //liquid_reaction_rates[2] -= rate_diff;
+          //solid_reaction_rates[2] -= rate_diff;
+
+          //cl_final = cl_weight * (c_l[2] + liquid_reaction_rates[2] * dt);
+          //cs_final = cs_weight * (c_s[2] + solid_reaction_rates[2] * dt);
+
+         //std::cout<<"cnew: "<<cl_final+cs_final<<std::endl;
           
           // Enthalpy from Keller and Katz 2016 should be the summation of Gamma multiplied
           // by the latent heat of the component. Latent heat melt plugin multiplies the enthalpy
@@ -537,7 +574,7 @@ template <int dim>
           double Fvol = Fmass_new*(rho_l/avg_rho);
           if(x == 1000 && ycord ==0)
           {
-            std::cout<<"TEST: "<<melt_final<<" "<<Cbar_f<<" "<<Cnew<<std::endl;
+            //std::cout<<"TEST: "<<melt_final<<" "<<Cbar_f<<" "<<rate_diff<<std::endl;
             std::cout<<"Fold | Fnew | ppmold | ppmnew "<<std::endl;
             std::cout<<Fmass_old<<" | "<<Fmass_new<<" | "<<cppm2<<" | "<<cppm<<" | "<<melt_reaction_rate<<std::endl;
             std::cout<<"old cl values"<<std::endl;
