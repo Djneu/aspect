@@ -84,18 +84,6 @@ namespace aspect
               const double rho_s = 3200; //out.densities[q];
               auto [vfrac, melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates, enthalpy] = equilibrium(composition, temperature, pressure, ycord, rho_s, q, xcord);
 
-              double reaction_time_step_size = 1.0;
-              if (this->simulator_is_past_initialization())
-              {
-                const unsigned int number_of_reaction_steps = std::max(static_cast<unsigned int>(this->get_timestep() / this->get_parameters().reaction_time_step),
-                                                                      std::max(this->get_parameters().reaction_steps_per_advection_step,1U));
-                reaction_time_step_size = this->get_timestep() / static_cast<double>(number_of_reaction_steps);
-              }
-
-              if(xcord == 1000 && ycord ==0)
-                std::cout<<melt_reaction_rate<<" "<<porosity<<" "<<porosity + melt_reaction_rate*reaction_time_step_size<<" "<<std::endl;
-              
-
               for (unsigned int c=0; c<in.composition[q].size(); ++c)
                 {
                 
@@ -327,8 +315,6 @@ template <int dim>
         // Now that things are ordered, find the bulk composition for each component.
         for (unsigned int i=0; i<n_components; ++i)
             C_bar[i] = Fmass_old*c_l[i] + (1-Fmass_old)*c_s[i];
-
-        double cppm3 = C_bar[2] * 20/100 * 1e6;
       
         timestep_it = this->get_timestep_number();
         // Define parameters that will be returned.
@@ -516,7 +502,7 @@ template <int dim>
            // and adjust the liquid component so the bulk composition is convserved.
           for (unsigned int i=0; i<n_components; ++i)
           {
-          // Find the equilibrium bulk composition
+          // Find the equilibrium bulk composition, defined as cl + cs at the end of rhe reaction time step.
           double cl_reaction_step = melt_reaction_step * (c_l[i] + liquid_reaction_rates[i] * reaction_time_step_size);
           double cs_reaction_step = (1 - melt_reaction_step) * (c_s[i] + solid_reaction_rates[i] * reaction_time_step_size);
           double Cbar_reaction_step = cl_reaction_step + cs_reaction_step;
@@ -546,7 +532,7 @@ template <int dim>
 
           melt_reaction_rate += Fvol_old * (avg_rho - avg_rho_new) / (rho_l * reaction_time_step_size);
 
-          double cl_final = melt_reaction_step * (c_l[2] + liquid_reaction_rates[2] * reaction_time_step_size);
+          /*double cl_final = melt_reaction_step * (c_l[2] + liquid_reaction_rates[2] * reaction_time_step_size);
           double cs_final = (1 - melt_reaction_step) * (c_s[2] + solid_reaction_rates[2] * reaction_time_step_size);
           double cl = c_l[2] + liquid_reaction_rates[2] * reaction_time_step_size;
           double cs = c_s[2] + solid_reaction_rates[2] * reaction_time_step_size;
@@ -557,7 +543,7 @@ template <int dim>
             std::cout<<"Fvol | Fmass | cl | cs | avg_rho | ppm"<<std::endl;
             std::cout<<"end: "<<melt_reaction_step*(rho_l/avg_rho_new)<<" | "<<melt_reaction_step<<" | "<<cl<<" | "<<cs<<" | "<<avg_rho<<" | "<<cppm<<" | "<<melt_reaction_rate*(rho_l/avg_rho)<<std::endl;
             std::cout<<"end2: "<<Fvol_old + melt_reaction_rate*(rho_l/avg_rho_new)*reaction_time_step_size<<" "<<Fmass_old<<" "<<melt_reaction_rate<<" "<<reaction_time_step_size<<std::endl;
-          }
+          }*/
           
           // Enthalpy from Keller and Katz 2016 should be the summation of Gamma multiplied
           // by the latent heat of the component. Latent heat melt plugin multiplies the enthalpy
