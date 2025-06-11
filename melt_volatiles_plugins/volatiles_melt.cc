@@ -323,7 +323,7 @@ template <int dim>
         double avg_rho = Fvol_old*rho_l + (1. - Fvol_old)*rho_s;
         double avg_rho_new = avg_rho; // Will be updated later.
         double Fmass_old = Fvol_old*avg_rho/rho_l;
-
+   
         // Now that things are ordered, find the bulk composition for each component.
         for (unsigned int i=0; i<n_components; ++i)
             C_bar[i] = Fmass_old*c_l[i] + (1-Fmass_old)*c_s[i];
@@ -503,7 +503,7 @@ template <int dim>
           // Melt reaction rate using mass fraction
           melt_reaction_rate = GammaSum/rho_s;
 
-          // Now to modify the reaction rates so that we preserve bulk composition. 
+          // Find the mass fraction of melt we will have at the end of the reaction step. 
           double melt_reaction_step = Fmass_old + melt_reaction_rate * reaction_time_step_size;
 
           // Find the updated average density.
@@ -512,24 +512,23 @@ template <int dim>
           double C = melt_reaction_step * rho_l * (rho_s - rho_l);
           avg_rho_new = ( -B + sqrt(B*B - 4*A*C) ) / (2*A);
 
-          // Here we find what melt value we will reach by the end of the reaction timestep,
-          // and adjust the liquid component so the bulk composition is convserved.
+           // Here we find what melt value we will reach by the end of the reaction timestep,
+           // and adjust the liquid component so the bulk composition is convserved.
           for (unsigned int i=0; i<n_components; ++i)
           {
-          // Find the equilibrium bulk composition, defined as cl + cs at the end of rhe reaction time step.
+          // Find the equilibrium bulk composition
           double cl_reaction_step = melt_reaction_step * (c_l[i] + liquid_reaction_rates[i] * reaction_time_step_size);
           double cs_reaction_step = (1 - melt_reaction_step) * (c_s[i] + solid_reaction_rates[i] * reaction_time_step_size);
           double Cbar_reaction_step = cl_reaction_step + cs_reaction_step;
 
-          // Find the difference between equilibrium bulk composition and 
-          // and the bulk composition at the end of the reaction step.
-          double bulk_composition_difference = Cbar_reaction_step - C_bar[i];
-          double rate_correction = bulk_composition_difference / reaction_time_step_size;
+          // Find the difference in bulk composition between the equilibrium
+          // value and where we will be at the end of the reaction step.
+          double bulk_composition_change = Cbar_reaction_step - C_bar[i];
 
-          // Adjust the liquid component to conserve bulk composition (volatile content).
+          // Adjust the liquid component to conserve volatiles.
           double liquid_rate_correction = 0;
-          if(melt_reaction_rate > 0)
-            liquid_rate_correction = (bulk_composition_difference)/(reaction_time_step_size*melt_reaction_step);
+          if(melt_reaction_step > 0)
+            liquid_rate_correction = (bulk_composition_change)/(reaction_time_step_size*melt_reaction_step);
 
           // Change reaction rate so it is between 0 and 1.
           double update_liquid = liquid_reaction_rates[i]-liquid_rate_correction;
@@ -541,21 +540,24 @@ template <int dim>
             liquid_reaction_rates[i] = update_liquid;       
           }
 
-          // Account for the change in avg_rho from the initial to current state for volatile conservation.
+          // Account for the change in avg_rho from the initial to curre
+          //double melt_rate_change = ((Fvol_old*(avg_rho/rho_l)) - (Fvol_old*(avg_rho_new/rho_l)))/reaction_time_step_size;
+          //melt_reaction_rate += melt_rate_change;
+
           melt_reaction_rate += Fvol_old * (avg_rho - avg_rho_new) / (rho_l * reaction_time_step_size);
 
-          //double cl_final = melt_reaction_step * (c_l[2] + liquid_reaction_rates[2] * reaction_time_step_size);
-          //double cs_final = (1 - melt_reaction_step) * (c_s[2] + solid_reaction_rates[2] * reaction_time_step_size);
-          //double cl = c_l[2] + liquid_reaction_rates[2] * reaction_time_step_size;
-          //double cs = c_s[2] + solid_reaction_rates[2] * reaction_time_step_size;
+          double cl_final = melt_reaction_step * (c_l[2] + liquid_reaction_rates[2] * reaction_time_step_size);
+          double cs_final = (1 - melt_reaction_step) * (c_s[2] + solid_reaction_rates[2] * reaction_time_step_size);
+          double cl = c_l[2] + liquid_reaction_rates[2] * reaction_time_step_size;
+          double cs = c_s[2] + solid_reaction_rates[2] * reaction_time_step_size;
 
-          //double cppm = (cl_final + cs_final) * 20/100 * 1e6;
-          //if(x == 1000 && ycord ==0)
-          //{
-          //  std::cout<<"Fvol | Fmass | cl | cs | avg_rho | ppm"<<std::endl;
-          //  std::cout<<"end: "<<melt_reaction_step*(rho_l/avg_rho_new)<<" | "<<melt_reaction_step<<" | "<<cl<<" | "<<cs<<" | "<<avg_rho<<" | "<<cppm<<" | "<<melt_reaction_rate*(rho_l/avg_rho)<<std::endl;
-          //  std::cout<<"end2: "<<Fvol_old + melt_reaction_rate*(rho_l/avg_rho_new)*reaction_time_step_size<<" "<<Fmass_old<<" "<<melt_reaction_rate<<" "<<reaction_time_step_size<<std::endl;
-          //}
+          double cppm = (cl_final + cs_final) * 20/100 * 1e6;
+          if(x == 1000 && ycord ==0)
+          {
+            std::cout<<"Fvol | Fmass | cl | cs | avg_rho | ppm"<<std::endl;
+            std::cout<<"end: "<<melt_reaction_step*(rho_l/avg_rho_new)<<" | "<<melt_reaction_step<<" | "<<cl<<" | "<<cs<<" | "<<avg_rho<<" | "<<cppm<<" | "<<melt_reaction_rate*(rho_l/avg_rho)<<std::endl;
+            std::cout<<"end2: "<<Fvol_old + melt_reaction_rate*(rho_l/avg_rho_new)*reaction_time_step_size<<" "<<Fmass_old<<" "<<melt_reaction_rate<<" "<<reaction_time_step_size<<std::endl;
+          }
           
           // Enthalpy from Keller and Katz 2016 should be the summation of Gamma multiplied
           // by the latent heat of the component. Latent heat melt plugin multiplies the enthalpy
