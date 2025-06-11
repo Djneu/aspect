@@ -19,7 +19,7 @@
 */
 
 
-#include </Users/djneuh/software/local_code/aspect/melt_volatiles_plugins/volatiles_melt.h>
+#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/volatiles_melt.h>
 #include <aspect/utilities.h>
 #include <aspect/gravity_model/interface.h>
 #include <aspect/adiabatic_conditions/interface.h>
@@ -310,7 +310,7 @@ template <int dim>
 
         double avg_rho = Fvol_old*rho_l + (1. - Fvol_old)*rho_s;
         double avg_rho_new = avg_rho; // Will be updated later.
-        double Fmass_old = Fvol_old*avg_rho/rho_l;
+        double Fmass_old = Fvol_old*rho_l/avg_rho;
    
         // Now that things are ordered, find the bulk composition for each component.
         for (unsigned int i=0; i<n_components; ++i)
@@ -493,10 +493,7 @@ template <int dim>
           double melt_reaction_step = Fmass_old + melt_reaction_rate * reaction_time_step_size;
 
           // Find the updated average density.
-          double A = 1;
-          double B = -rho_s;
-          double C = melt_reaction_step * rho_l * (rho_s - rho_l);
-          avg_rho_new = ( -B + sqrt(B*B - 4*A*C) ) / (2*A);
+          avg_rho_new = rho_s / (1 - melt_reaction_step * (1 - rho_s / rho_l));
 
            // Here we find what melt value we will reach by the end of the reaction timestep,
            // and adjust the liquid component so the bulk composition is convserved.
@@ -527,10 +524,10 @@ template <int dim>
           }
 
           // Account for the change in avg_rho from the initial to curre
-          //double melt_rate_change = ((Fvol_old*(avg_rho/rho_l)) - (Fvol_old*(avg_rho_new/rho_l)))/reaction_time_step_size;
+          //double melt_rate_change = ((Fvol_old*(rho_l/avg_rho)) - (Fvol_old*(rho_l/avg_rho_new)))/reaction_time_step_size;
           //melt_reaction_rate += melt_rate_change;
 
-          melt_reaction_rate += Fvol_old * (avg_rho - avg_rho_new) / (rho_l * reaction_time_step_size);
+          melt_reaction_rate += Fvol_old * rho_l * (1.0 / avg_rho - 1.0 / avg_rho_new) / reaction_time_step_size;
 
           /*double cl_final = melt_reaction_step * (c_l[2] + liquid_reaction_rates[2] * reaction_time_step_size);
           double cs_final = (1 - melt_reaction_step) * (c_s[2] + solid_reaction_rates[2] * reaction_time_step_size);
@@ -541,8 +538,8 @@ template <int dim>
           if(x == 1000 && ycord ==0)
           {
             std::cout<<"Fvol | Fmass | cl | cs | avg_rho | ppm"<<std::endl;
-            std::cout<<"end: "<<melt_reaction_step*(rho_l/avg_rho_new)<<" | "<<melt_reaction_step<<" | "<<cl<<" | "<<cs<<" | "<<avg_rho<<" | "<<cppm<<" | "<<melt_reaction_rate*(rho_l/avg_rho)<<std::endl;
-            std::cout<<"end2: "<<Fvol_old + melt_reaction_rate*(rho_l/avg_rho_new)*reaction_time_step_size<<" "<<Fmass_old<<" "<<melt_reaction_rate<<" "<<reaction_time_step_size<<std::endl;
+            std::cout<<"end: "<<melt_reaction_step*(avg_rho_new/rho_l)<<" | "<<melt_reaction_step<<" | "<<cl<<" | "<<cs<<" | "<<avg_rho<<" | "<<cppm<<" | "<<melt_reaction_rate*(avg_rho/rho_l)<<std::endl;
+            std::cout<<"end2: "<<Fvol_old + melt_reaction_rate*(avg_rho_new/rho_l)*reaction_time_step_size<<" "<<Fmass_old<<" "<<melt_reaction_rate<<" "<<reaction_time_step_size<<std::endl;
           }*/
           
           // Enthalpy from Keller and Katz 2016 should be the summation of Gamma multiplied
@@ -554,7 +551,7 @@ template <int dim>
       }   
 
       // Return values, with melt_fractions converted from mass fraction to volume fraction.
-      return {Fmass_new*(rho_l/avg_rho), melt_reaction_rate*(rho_l/avg_rho_new), solid_reaction_rates, liquid_reaction_rates, enthalpy};
+      return {Fmass_new*(avg_rho/rho_l), melt_reaction_rate*(avg_rho_new/rho_l), solid_reaction_rates, liquid_reaction_rates, enthalpy};
       }
 
       template <int dim>
