@@ -153,7 +153,7 @@ namespace aspect
           unsigned int hcl_idx;       // liquid hydrated morb
           unsigned int hcs_idx;       // solid hydrated morb
           mutable int timestep_it; 
-          mutable double Cbc;
+          //mutable double avg_rho;
           mutable double Cbm;
           mutable double Cbd;
           mutable double Cbh;
