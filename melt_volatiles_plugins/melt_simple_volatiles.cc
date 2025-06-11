@@ -20,11 +20,11 @@
 
 
 #include <aspect/adiabatic_conditions/interface.h>
-#include </Users/djneuh/software/local_code/aspect/melt_volatiles_plugins/melt_simple_volatiles.h>
+#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/melt_simple_volatiles.h>
 #include <aspect/utilities.h>
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/numerics/fe_field_function.h>
-#include </Users/djneuh/software/local_code/aspect/melt_volatiles_plugins/volatiles_melt.h>
+#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/volatiles_melt.h>
 
 namespace aspect
 {
