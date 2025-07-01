@@ -19,7 +19,7 @@
 */
 
 
-#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/volatiles_melt.h>
+#include </Users/djneuh/software/local_code/aspect/melt_volatiles_plugins/volatiles_melt.h>
 #include <aspect/utilities.h>
 #include <aspect/gravity_model/interface.h>
 #include <aspect/adiabatic_conditions/interface.h>
@@ -71,13 +71,21 @@ namespace aspect
               :
               101325.;
 
+              double reaction_time_step_size = 1.0;
+              if (this->simulator_is_past_initialization())
+              {
+                const unsigned int number_of_reaction_steps = std::max(static_cast<unsigned int>(this->get_timestep() / this->get_parameters().reaction_time_step),
+                                                                      std::max(this->get_parameters().reaction_steps_per_advection_step,1U));
+                reaction_time_step_size = this->get_timestep() / static_cast<double>(number_of_reaction_steps);
+              }
+
               std::vector<double> composition(this->n_compositional_fields());
               for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
                       composition[c] = in.composition[q][c];
 
               const double ycord = in.position[q](1);
               const double xcord = in.position[q](0);
-              double porosity = std::max(0.0, std::min(in.composition[q][porosity_idx],1.0));
+              double porosity = in.composition[q][porosity_idx];
               // Ignore melt fraction, get melt reaction rate (volume)
               // and solid and liquid reaction rates, ordered as dunite (background field), morb, cmorb, hmorb.
               // Note: At the moment compositions are hardcoded in assuming there is always 4 components.
@@ -95,6 +103,11 @@ namespace aspect
                           // to the current composition to avoid negative values.
                           //melt_reaction_rate = std::max(melt_reaction_rate*melting_time_scale, -in.composition[q][c]);
                           reaction_rate_out->reaction_rates[q][c] = melt_reaction_rate; //melting_time_scale;
+
+                          if(porosity>1.0)
+                            reaction_rate_out->reaction_rates[q][c] = -(porosity - 1)/reaction_time_step_size;
+                          if(porosity<0.0)
+                            reaction_rate_out->reaction_rates[q][c] = -(porosity)/reaction_time_step_size;
 
                           // Force any area above maximun pressure to zero.
                           //if(pressure > pressure_max)
@@ -228,12 +241,36 @@ template <int dim>
 
                 // At the moment we use a defined reference solid viscosity. At some point should we use the model viscosity?
                 // In this case, it probably shouldn't include changes related to the porosity. Move viscosity calculation below this?
-                double viscosity = xi_0;
+                /*double viscosity = xi_0;
                 if(this->get_timestep_number() > 0)
                   viscosity = out.viscosities[i];
 
                 //melt_out->compaction_viscosities[i] = (1.0 - porosity) * xi_0 / std::max(porosity, porosity_threshold);
-                melt_out->compaction_viscosities[i] = 5*viscosity / std::max(porosity, porosity_threshold);
+                melt_out->compaction_viscosities[i] = 5*viscosity / std::max(porosity, porosity_threshold);*/
+
+                const double phi_0 = 0.05;
+                porosity = std::max(std::min(porosity,0.995),1e-4);
+                melt_out->compaction_viscosities[i] = xi_0 * phi_0 / porosity;
+
+                double visc_temperature_dependence = 1.0;
+                if (this->include_adiabatic_heating ())
+                  {
+                    const double delta_temp = in.temperature[i]-this->get_adiabatic_conditions().temperature(in.position[i]);
+                    visc_temperature_dependence = std::max(std::min(std::exp(-thermal_bulk_viscosity_exponent*delta_temp/this->get_adiabatic_conditions().temperature(in.position[i])),1e4),1e-4);
+                  }
+                else
+                  {
+                    const double delta_temp = in.temperature[i]-reference_T;
+                    const double T_dependence = (thermal_bulk_viscosity_exponent == 0.0
+                                                 ?
+                                                 0.0
+                                                 :
+                                                 thermal_bulk_viscosity_exponent*delta_temp/reference_T);
+                    visc_temperature_dependence = std::max(std::min(std::exp(-T_dependence),1e4),1e-4);
+                  }
+                melt_out->compaction_viscosities[i] *= visc_temperature_dependence;
+
+
               }
           }
 
@@ -315,6 +352,20 @@ template <int dim>
         // Now that things are ordered, find the bulk composition for each component.
         for (unsigned int i=0; i<n_components; ++i)
             C_bar[i] = Fmass_old*c_l[i] + (1-Fmass_old)*c_s[i];
+
+          double cppm2 = (Fmass_old * cmorb_cl + (1 - Fmass_old)*cmorb_cs) * 20/100 * 1e6;
+          //if(x == 106250 && ycord == 200000)
+          /*if(x == 1500 && ycord == 500)
+          {
+            std::cout<<"STR 1500: Fvol | Fmass | cl | cs | avg_rho | ppm"<<std::endl;
+            std::cout<<"str: "<<Fvol_old<<" | "<<Fmass_old<<" | "<<c_l[2]<<" | "<<c_s[2]<<" | "<<avg_rho<<" | "<<cppm2<<" | "<<C_bar[2]<<std::endl;
+          }*/
+          //if(x == 106250 && ycord == 187500)
+          /*if(x == 1437.5 && ycord == 500)
+          {
+            std::cout<<"STR 1437.5: Fvol | Fmass | cl | cs | avg_rho | ppm"<<std::endl;
+            std::cout<<"str: "<<Fvol_old<<" | "<<Fmass_old<<" | "<<c_l[2]<<" | "<<c_s[2]<<" | "<<avg_rho<<" | "<<cppm2<<" | "<<C_bar[2]<<std::endl;
+          }*/
       
         timestep_it = this->get_timestep_number();
         // Define parameters that will be returned.
@@ -480,7 +531,7 @@ template <int dim>
 
           // Now that we have GammaSum, find the solid and liquid reaction rates.
           // From eq. 17b and 17c in Keller and Katz, 2016
-          for (unsigned int i=0; i<n_components; ++i)
+          for (unsigned int i=0; i<n_components; ++i) 
           {
             solid_reaction_rates[i] = -(Gamma[i] - c_s[i]*GammaSum) / (std::max(1e-6,(1 - Fmass_new))*rho_s);
             liquid_reaction_rates[i] = (Gamma[i] - c_l[i]*GammaSum) / (std::max(1e-6,Fmass_new)*rho_s);
@@ -529,17 +580,26 @@ template <int dim>
 
           melt_reaction_rate += Fvol_old * rho_l * (1.0 / avg_rho - 1.0 / avg_rho_new) / reaction_time_step_size;
 
-          /*double cl_final = melt_reaction_step * (c_l[2] + liquid_reaction_rates[2] * reaction_time_step_size);
+          double cl_final = melt_reaction_step * (c_l[2] + liquid_reaction_rates[2] * reaction_time_step_size);
           double cs_final = (1 - melt_reaction_step) * (c_s[2] + solid_reaction_rates[2] * reaction_time_step_size);
           double cl = c_l[2] + liquid_reaction_rates[2] * reaction_time_step_size;
           double cs = c_s[2] + solid_reaction_rates[2] * reaction_time_step_size;
 
           double cppm = (cl_final + cs_final) * 20/100 * 1e6;
-          if(x == 1000 && ycord ==0)
+          //if(x == 106250 && ycord == 200000)
+          /*if(x == 1500 && ycord == 500)
           {
-            std::cout<<"Fvol | Fmass | cl | cs | avg_rho | ppm"<<std::endl;
-            std::cout<<"end: "<<melt_reaction_step*(avg_rho_new/rho_l)<<" | "<<melt_reaction_step<<" | "<<cl<<" | "<<cs<<" | "<<avg_rho<<" | "<<cppm<<" | "<<melt_reaction_rate*(avg_rho/rho_l)<<std::endl;
-            std::cout<<"end2: "<<Fvol_old + melt_reaction_rate*(avg_rho_new/rho_l)*reaction_time_step_size<<" "<<Fmass_old<<" "<<melt_reaction_rate<<" "<<reaction_time_step_size<<std::endl;
+            std::cout<<"END 1500: Fvol_new | Fmass_new | cl | cs | avg_rho | ppm"<<std::endl;
+            std::cout<<"end: "<<melt_reaction_step*(avg_rho_new/rho_l)<<" | "<<melt_reaction_step<<" | "<<cl<<" | "<<cs<<" | "<<avg_rho<<" | "<<cppm<<" | "<<cl_final+cs_final<<std::endl;
+            //std::cout<<"Fvol react | pressure | temperature"<<std::endl;
+            //std::cout<<"end2: "<<Fvol_old + melt_reaction_rate*(avg_rho_new/rho_l)*reaction_time_step_size<<" "<<pressure<<" "<<temperature<<std::endl;
+          }*/
+          //if(x == 106250 && ycord == 187500)
+          /*if(x == 1437.5 && ycord == 500)
+          {
+            std::cout<<"END 1437: Fvol | Fmass | cl | cs | avg_rho | ppm"<<std::endl;
+            std::cout<<"end: "<<melt_reaction_step*(avg_rho_new/rho_l)<<" | "<<melt_reaction_step<<" | "<<cl<<" | "<<cs<<" | "<<avg_rho<<" | "<<cppm<<" | "<<cl_final+cs_final<<std::endl;
+            //std::cout<<"end2: "<<Fvol_old + melt_reaction_rate*(avg_rho_new/rho_l)*reaction_time_step_size<<" "<<Fmass_old<<" "<<pressure<<" "<<temperature<<std::endl;
           }*/
           
           // Enthalpy from Keller and Katz 2016 should be the summation of Gamma multiplied
@@ -551,7 +611,7 @@ template <int dim>
       }   
 
       // Return values, with melt_fractions converted from mass fraction to volume fraction.
-      return {Fmass_new*(avg_rho/rho_l), melt_reaction_rate*(avg_rho_new/rho_l), solid_reaction_rates, liquid_reaction_rates, enthalpy};
+      return {Fmass_new*(avg_rho_new/rho_l), melt_reaction_rate*(avg_rho_new/rho_l), solid_reaction_rates, liquid_reaction_rates, enthalpy};
       }
 
       template <int dim>

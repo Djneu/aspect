@@ -60,8 +60,9 @@ namespace aspect
       for (unsigned int q=0; q<heating_model_outputs.heating_source_terms.size(); ++q)
         {
           const double porosity = material_model_inputs.composition[q][this->introspection().compositional_index_for_name("porosity")];
+          const double depth = material_model_inputs.position[q](1);
 
-          if (is_melt_cell)
+          if (is_melt_cell && depth < 10000e3)
             heating_model_outputs.heating_source_terms[q] = melt_outputs->compaction_viscosities[q]
                                                             * std::pow(trace(material_model_inputs.strain_rate[q]),2)
                                                             +
