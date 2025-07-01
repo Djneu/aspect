@@ -46,15 +46,19 @@ namespace aspect
                               :
                               1.0;
 
+      // Get the compositional values, and limit between 0 and 1.
+      const double rho_s = 3200;
+      const double rho_l = 2700;
+
       // Get ID for all fields. Should I do this once here or do it in the main function?
       AssertThrow(this->introspection().compositional_name_exists("porosity"), ExcMessage("A porosity field is needed to use the co2 plugin."));
-      porosity_idx = this->introspection().compositional_index_for_name("porosity");
+      const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
     
       AssertThrow(this->introspection().compositional_name_exists("cmorb_cl"), ExcMessage("A cmorb_cl field is needed to use the co2 plugin."));
-      ccl_idx = this->introspection().compositional_index_for_name("cmorb_cl");
+      const unsigned int ccl_idx = this->introspection().compositional_index_for_name("cmorb_cl");
 
       AssertThrow(this->introspection().compositional_name_exists("cmorb_cs"), ExcMessage("A cmorb_cs field is needed to use the co2 plugin."));
-      ccs_idx = this->introspection().compositional_index_for_name("cmorb_cs");
+      const unsigned int ccs_idx = this->introspection().compositional_index_for_name("cmorb_cs");
 
       // create a quadrature formula based on the temperature element alone.
       const Quadrature<dim-1> &quadrature_formula = this->introspection().face_quadratures.velocities;
@@ -90,20 +94,16 @@ namespace aspect
 
                 this->get_material_model().evaluate(in, out);
 
-                // Get the compositional values, and limit between 0 and 1.
-                const double rho_s = 3200;
-                const double rho_l = 2700;
-
                 double local_normal_flux = 0;
                 for (unsigned int q=0; q<fe_face_values.n_quadrature_points; ++q)
                   {
-                  const double cmorb_cl =  std::max(0.0, std::min(in.composition[q][ccl_idx],1.0));
-                  const double cmorb_cs =  std::max(0.0, std::min(in.composition[q][ccs_idx],1.0));
-                  const double Fvol =  std::max(0.0, std::min(in.composition[q][porosity_idx],1.0));
+                  double cmorb_cl =  std::max(0.0, std::min(in.composition[q][ccl_idx],1.0));
+                  double cmorb_cs =  std::max(0.0, std::min(in.composition[q][ccs_idx],1.0));
+                  double Fvol =  std::max(0.0, std::min(in.composition[q][porosity_idx],1.0));
 
                     local_normal_flux
                     +=
-                      out.densities[q]
+                      (Fvol*cmorb_cl*rho_l + (1-Fvol)*cmorb_cs*rho_s) * 20/100 * 1e6
                       * (in.velocity[q] * fe_face_values.normal_vector(q))
                       * fe_face_values.JxW(q);
                   }
@@ -153,6 +153,8 @@ namespace aspect
                                    + " (" + unit + ")";
           statistics.add_value (name, p->second);
 
+          time_integrated_mass_flux += p->second * this->get_timestep() / year_in_seconds;
+
           // also make sure that the other columns filled by this object
           // all show up with sufficient accuracy and in scientific notation
           statistics.set_precision (name, 8);
@@ -164,8 +166,73 @@ namespace aspect
                       << (index == global_boundary_fluxes.size()-1 ? "" : ", ");
         }
 
+      // Now we find the global volatile mass
+
+     // create a quadrature formula based on the compositional element alone.
+      const Quadrature<dim> &quadrature_formula1 = this->introspection().quadratures.compositional_field_max;
+      const unsigned int n_q_points = quadrature_formula1.size();
+
+      FEValues<dim> fe_values (this->get_mapping(),
+                               this->get_fe(),
+                               quadrature_formula1,
+                               update_values   |
+                               update_quadrature_points |
+                               update_JxW_values);
+
+      std::vector<double> Fvol_values(n_q_points);
+      std::vector<double> ccl_values(n_q_points);
+      std::vector<double> ccs_values(n_q_points);
+
+      double local_compositional_integrals = 0.0;
+
+      // compute the integral quantities by quadrature
+      for (const auto &cell : this->get_dof_handler().active_cell_iterators())
+        if (cell->is_locally_owned())
+          {
+            fe_values.reinit (cell);
+
+            fe_values[this->introspection().extractors.compositional_fields[porosity_idx]].get_function_values (this->get_solution(),
+                Fvol_values);
+            fe_values[this->introspection().extractors.compositional_fields[ccl_idx]].get_function_values (this->get_solution(),
+                ccl_values);
+            fe_values[this->introspection().extractors.compositional_fields[ccs_idx]].get_function_values (this->get_solution(),
+                ccs_values);
+
+            for (unsigned int q=0; q<n_q_points; ++q)
+              local_compositional_integrals += (Fvol_values[q]*ccl_values[q]*rho_l 
+                                                  + (1-Fvol_values[q])*ccs_values[q]*rho_s ) * 20/100 * 1e6
+                                                  *fe_values.JxW(q);
+
+
+          }
+
+      // compute the sum over all processors
+      const double global_compositional_integrals =
+      Utilities::MPI::sum (local_compositional_integrals,
+                           this->get_mpi_communicator());
+
+      if(this->get_timestep_number()==0)
+        initial_volatile_content = global_compositional_integrals;
+      
+      double conserve = ((time_integrated_mass_flux+global_compositional_integrals) - initial_volatile_content)/initial_volatile_content*100;
+
+  
+      statistics.add_value("Total volatile boundary change",time_integrated_mass_flux);
+      statistics.set_precision ("Total volatile boundary change", 8);
+      statistics.set_scientific ("Total volatile boundary change", true);
+
+      statistics.add_value("Global volatile mass",global_compositional_integrals);
+      statistics.set_precision ("Global volatile mass", 8);
+      statistics.set_scientific ("Global volatile mass", true);
+
+      statistics.add_value("Total volatile change (%)",conserve);
+      statistics.set_precision ("Total volatile change (%)", 2);
+      statistics.set_scientific ("Total volatile change (%)", true);
+
       return std::pair<std::string, std::string> ("Mass fluxes through boundary parts:",
                                                   screen_text.str());
+
+
     }
   }
 }
@@ -177,7 +244,7 @@ namespace aspect
   namespace Postprocess
   {
     ASPECT_REGISTER_POSTPROCESSOR(VolatileFluxStatistics,
-                                  "volatile flux statistics",
+                                  "volatile statistics",
                                   "A postprocessor that computes some statistics about "
                                   "the mass flux across boundaries. For each boundary "
                                   "indicator (see your geometry description for which boundary "
