@@ -57,6 +57,10 @@ namespace aspect
         = material_model_outputs.template get_additional_output_object<MaterialModel::MeltOutputs<dim>>();
       Assert(melt_outputs != nullptr, ExcMessage("Need MeltOutputs from the material model for shear heating with melt."));
 
+
+      // Average strain rate over cell, or compute divergence of velocity and average over cell. for material_model_inputs.
+      // melt.cc line 655 add this in.
+
       for (unsigned int q=0; q<heating_model_outputs.heating_source_terms.size(); ++q)
         {
           const double porosity = material_model_inputs.composition[q][this->introspection().compositional_index_for_name("porosity")];
