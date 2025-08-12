@@ -25,6 +25,8 @@
 
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/fe/fe_values.h>
+#include <aspect/mesh_deformation/free_surface.h>
+#include <aspect/melt.h>
 
 
 namespace aspect
@@ -46,10 +48,6 @@ namespace aspect
                               :
                               1.0;
 
-      // Get the compositional values, and limit between 0 and 1.
-      const double rho_s = 3200;
-      const double rho_l = 2700;
-
       // Get ID for all fields. Should I do this once here or do it in the main function?
       AssertThrow(this->introspection().compositional_name_exists("porosity"), ExcMessage("A porosity field is needed to use the co2 plugin."));
       const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
@@ -70,13 +68,32 @@ namespace aspect
                                         update_normal_vectors    |
                                         update_quadrature_points | update_JxW_values);
 
+      
+      std::vector<Tensor<1,dim>> fluid_velocity_values(quadrature_formula.size());
       std::vector<std::vector<double>> composition_values (this->n_compositional_fields(),std::vector<double> (quadrature_formula.size()));
 
-      std::map<types::boundary_id, double> local_boundary_fluxes;
+      std::map<types::boundary_id, double> local_co2_fluxes;
+      std::map<types::boundary_id, double> local_h2o_fluxes;
+      std::map<types::boundary_id, double> local_morb_fluxes;
+      std::map<types::boundary_id, double> local_top_co2_fluxes;
 
       MaterialModel::MaterialModelInputs<dim> in(fe_face_values.n_quadrature_points, this->n_compositional_fields());
       MaterialModel::MaterialModelOutputs<dim> out(fe_face_values.n_quadrature_points, this->n_compositional_fields());
+      
+      MeltHandler<dim>::create_material_model_outputs(out);
+
       in.requested_properties = MaterialModel::MaterialProperties::density;
+      MaterialModel::MeltOutputs<dim> *fluid_out = out.template get_additional_output<MaterialModel::MeltOutputs<dim>>();
+
+      // Get the compositional values, and limit between 0 and 1.
+      //double rho_s = 3200;
+      //const double rho_l = 2700;
+
+       // Get the boundary indicators of those boundaries with
+      // a free surface.
+      std::set<types::boundary_id> is_free_surface;
+      if (this->get_parameters().mesh_deformation_enabled == true)
+        is_free_surface = this->get_mesh_deformation_handler().get_free_surface_boundary_indicators();
       
 
       // for every surface face on which it makes sense to compute a
@@ -88,83 +105,111 @@ namespace aspect
           for (const unsigned int f : cell->face_indices())
             if (cell->at_boundary(f))
               {
+
+                const types::boundary_id boundary_ind
+                  = cell->face(f)->boundary_id();
+                  
                 fe_face_values.reinit (cell, f);
+
                 // Set use_strain_rates to false since we don't need viscosity
                 in.reinit(fe_face_values, cell, this->introspection(), this->get_solution());
 
                 this->get_material_model().evaluate(in, out);
 
-                double local_normal_flux = 0;
+                const FEValuesExtractors::Vector ex_u_f = this->introspection().variable("fluid velocity").extractor_vector();
+                fe_face_values[ex_u_f].get_function_values (this->get_solution(), fluid_velocity_values);
+
+                double local_co2_flux = 0;
                 for (unsigned int q=0; q<fe_face_values.n_quadrature_points; ++q)
                   {
                   double cmorb_cl =  std::max(0.0, std::min(in.composition[q][ccl_idx],1.0));
                   double cmorb_cs =  std::max(0.0, std::min(in.composition[q][ccs_idx],1.0));
                   double Fvol =  std::max(0.0, std::min(in.composition[q][porosity_idx],1.0));
 
-                    local_normal_flux
-                    +=
-                      (Fvol*cmorb_cl*rho_l + (1-Fvol)*cmorb_cs*rho_s) * 20/100 * 1e6
-                      * (in.velocity[q] * fe_face_values.normal_vector(q))
-                      * fe_face_values.JxW(q);
-                  }
+                  double rho_s = out.densities[q];
+                  double rho_l = fluid_out->fluid_densities[q];
+
+                  double avg_rho = Fvol*rho_l + (1 - Fvol)*rho_s;
+                  double Fmass = Fvol*rho_l/avg_rho; 
+
+                  local_co2_flux += (20./100 *  
+                    (
+                    (Fmass * cmorb_cl * rho_l * (fluid_velocity_values[q] * fe_face_values.normal_vector(q)))
+                    + ((1 - Fmass) * cmorb_cs * rho_s * (in.velocity[q] * fe_face_values.normal_vector(q)))
+                    )
+                    * fe_face_values.JxW(q));     
+
+              
+                  // Old method using only solid velocity.
+                  // (Fmass*cmorb_cl*rho_l + (1-Fmass)*cmorb_cs*rho_s) * 20/100
+                  // * (in.velocity[q] * fe_face_values.normal_vector(q))
+                  // * fe_face_values.JxW(q);
+
+                  }                           
 
                 const types::boundary_id boundary_indicator
                   = cell->face(f)->boundary_id();
-                local_boundary_fluxes[boundary_indicator] += local_normal_flux * in_years;
+                local_co2_fluxes[boundary_indicator] += local_co2_flux * in_years;                
               }
 
+      
+
       // now communicate to get the global values
-      std::map<types::boundary_id, double> global_boundary_fluxes;
+      std::map<types::boundary_id, double> global_co2_boundary_fluxes;
       {
         // first collect local values in the same order in which they are listed
         // in the set of boundary indicators
         const std::set<types::boundary_id>
         boundary_indicators
           = this->get_geometry_model().get_used_boundary_indicators ();
-        std::vector<double> local_values;
-        local_values.reserve(boundary_indicators.size());
+
+        std::vector<double> local_co2_values;
+        std::vector<double> local_top_co2_values;
+        local_co2_values.reserve(boundary_indicators.size());
         for (const auto p : boundary_indicators)
-          local_values.push_back (local_boundary_fluxes[p]);
+          local_co2_values.push_back (local_co2_fluxes[p]);
 
         // then collect contributions from all processors
-        std::vector<double> global_values (local_values.size());
-        Utilities::MPI::sum (local_values, this->get_mpi_communicator(), global_values);
+        std::vector<double> global_co2_values (local_co2_values.size());
+        Utilities::MPI::sum (local_co2_values, this->get_mpi_communicator(), global_co2_values);
 
         // and now take them apart into the global map again
         unsigned int index = 0;
         for (std::set<types::boundary_id>::const_iterator
              p = boundary_indicators.begin();
              p != boundary_indicators.end(); ++p, ++index)
-          global_boundary_fluxes[*p] = global_values[index];
+              global_co2_boundary_fluxes[*p] = global_co2_values[index];
+
       }
 
       // now add all of the computed mass fluxes to the statistics object
       // and create a single string that can be output to the screen
       std::ostringstream screen_text;
       unsigned int index = 0;
+      double top_co2_flux = 0;
       for (std::map<types::boundary_id, double>::const_iterator
-           p = global_boundary_fluxes.begin();
-           p != global_boundary_fluxes.end(); ++p, ++index)
-        {
-          const std::string name = "Outward mass flux through boundary with indicator "
-                                   + Utilities::int_to_string(p->first)
-                                   + aspect::Utilities::parenthesize_if_nonempty(this->get_geometry_model()
-                                                                                 .translate_id_to_symbol_name (p->first))
-                                   + " (" + unit + ")";
-          statistics.add_value (name, p->second);
+           p = global_co2_boundary_fluxes.begin();
+           p != global_co2_boundary_fluxes.end(); ++p, ++index)
+           {
 
-          time_integrated_mass_flux += p->second * this->get_timestep() / year_in_seconds;
+             // If it is a free surface we don't calculate outward flux.
+            if (this->get_parameters().mesh_deformation_enabled == true)
+              if(is_free_surface.find(p->first) != is_free_surface.end()) 
+                 time_integrated_mass_flux += 0;
+              else
+                time_integrated_mass_flux += p->second * this->get_timestep() / year_in_seconds;
+            else
+              time_integrated_mass_flux += p->second * this->get_timestep() / year_in_seconds;
 
-          // also make sure that the other columns filled by this object
-          // all show up with sufficient accuracy and in scientific notation
-          statistics.set_precision (name, 8);
-          statistics.set_scientific (name, true);
+            // Find flux out top boundary, and convert back from ppm to kg/yr.
+            // Do this regardless of whether it is a free surface.
+            if(p->first == this->get_geometry_model().translate_symbolic_boundary_name_to_id ("top"))
+            {
+              total_co2_degass += p->second * this->get_timestep() / year_in_seconds;
+              top_co2_flux = p->second;
+            }
+           }
 
-          // finally have something for the screen
-          screen_text.precision(4);
-          screen_text << p->second << ' ' << unit
-                      << (index == global_boundary_fluxes.size()-1 ? "" : ", ");
-        }
 
       // Now we find the global volatile mass
 
@@ -177,13 +222,21 @@ namespace aspect
                                quadrature_formula1,
                                update_values   |
                                update_quadrature_points |
+                               update_gradients |
                                update_JxW_values);
 
       std::vector<double> Fvol_values(n_q_points);
       std::vector<double> ccl_values(n_q_points);
       std::vector<double> ccs_values(n_q_points);
+      double local_co2_compositional_integrals = 0.0;
 
-      double local_compositional_integrals = 0.0;
+      MaterialModel::MaterialModelInputs<dim> in_fe(fe_values.n_quadrature_points, this->n_compositional_fields());
+      MaterialModel::MaterialModelOutputs<dim> out_fe(fe_values.n_quadrature_points, this->n_compositional_fields());
+      
+      MeltHandler<dim>::create_material_model_outputs(out_fe);
+
+      in_fe.requested_properties = MaterialModel::MaterialProperties::density;
+      MaterialModel::MeltOutputs<dim> *fluid_out_fe = out_fe.template get_additional_output<MaterialModel::MeltOutputs<dim>>();
 
       // compute the integral quantities by quadrature
       for (const auto &cell : this->get_dof_handler().active_cell_iterators())
@@ -191,47 +244,67 @@ namespace aspect
           {
             fe_values.reinit (cell);
 
+            // Set use_strain_rates to false since we don't need viscosity
+            in_fe.reinit(fe_values, cell, this->introspection(), this->get_solution());
+
+            this->get_material_model().evaluate(in_fe, out_fe);            
+
             fe_values[this->introspection().extractors.compositional_fields[porosity_idx]].get_function_values (this->get_solution(),
                 Fvol_values);
             fe_values[this->introspection().extractors.compositional_fields[ccl_idx]].get_function_values (this->get_solution(),
                 ccl_values);
             fe_values[this->introspection().extractors.compositional_fields[ccs_idx]].get_function_values (this->get_solution(),
                 ccs_values);
-
+                
             for (unsigned int q=0; q<n_q_points; ++q)
-              local_compositional_integrals += (Fvol_values[q]*ccl_values[q]*rho_l 
-                                                  + (1-Fvol_values[q])*ccs_values[q]*rho_s ) * 20/100 * 1e6
+            {
+              double rho_s = out_fe.densities[q];
+              double rho_l = fluid_out_fe->fluid_densities[q];
+
+              double avg_rho = Fvol_values[q]*rho_l + (1 - Fvol_values[q])*rho_s;
+              double Fmass = Fvol_values[q]*rho_l/avg_rho;
+
+              local_co2_compositional_integrals += (Fmass*ccl_values[q]*rho_l 
+                                                  + (1-Fmass)*ccs_values[q]*rho_s ) * 20/100
                                                   *fe_values.JxW(q);
+            }
 
 
           }
 
       // compute the sum over all processors
-      const double global_compositional_integrals =
-      Utilities::MPI::sum (local_compositional_integrals,
+      const double global_co2_compositional_integrals =
+      Utilities::MPI::sum (local_co2_compositional_integrals,
                            this->get_mpi_communicator());
-
-      if(this->get_timestep_number()==0)
-        initial_volatile_content = global_compositional_integrals;
       
-      double conserve = ((time_integrated_mass_flux+global_compositional_integrals) - initial_volatile_content)/initial_volatile_content*100;
+      // Positive indicates outward flow, so to see the total amount of mass we have had,
+      // we add that to the value.
+      double conserve_co2 = global_co2_compositional_integrals + time_integrated_mass_flux;
 
-  
-      statistics.add_value("Total volatile boundary change",time_integrated_mass_flux);
-      statistics.set_precision ("Total volatile boundary change", 8);
-      statistics.set_scientific ("Total volatile boundary change", true);
+      // Co2
+      statistics.add_value("Total co2 mass flow",-time_integrated_mass_flux);
+      statistics.set_precision ("Total co2 mass flow", 7);
+      statistics.set_scientific ("Total co2 mass flow", true);
 
-      statistics.add_value("Global volatile mass",global_compositional_integrals);
-      statistics.set_precision ("Global volatile mass", 8);
-      statistics.set_scientific ("Global volatile mass", true);
+      statistics.add_value("Global co2 mass",global_co2_compositional_integrals);
+      statistics.set_precision ("Global co2 mass", 7);
+      statistics.set_scientific ("Global co2 mass", true);
 
-      statistics.add_value("Total volatile change (%)",conserve);
-      statistics.set_precision ("Total volatile change (%)", 2);
-      statistics.set_scientific ("Total volatile change (%)", true);
+      statistics.add_value("Total co2",conserve_co2);
+      statistics.set_precision ("Total co2", 7);
+      statistics.set_scientific ("Total co2", true);
 
-      return std::pair<std::string, std::string> ("Mass fluxes through boundary parts:",
-                                                  screen_text.str());
+      statistics.add_value("Co2 degass rate",top_co2_flux);
+      statistics.set_precision ("Co2 degass rate", 7);
+      statistics.set_scientific ("Co2 degass rate", true);
 
+      statistics.add_value("Total Co2 degass",total_co2_degass);
+      statistics.set_precision ("Total Co2 degass", 7);
+      statistics.set_scientific ("Total Co2 degass", true);
+      
+
+      return std::pair<std::string, std::string> ("Writing volatile statistics",
+                                                screen_text.str());
 
     }
   }
