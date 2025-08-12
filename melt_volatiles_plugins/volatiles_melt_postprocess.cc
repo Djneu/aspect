@@ -18,8 +18,7 @@
   <http://www.gnu.org/licenses/>.
 */
 
-
-#include </Users/djneuh/software/local_code/aspect/melt_volatiles_plugins/volatiles_melt_postprocess.h>
+#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/aspect/aspect/melt_volatiles_plugins/volatiles_melt_postprocess.h>
 #include <aspect/melt.h>
 #include <deal.II/base/parameter_handler.h>
 

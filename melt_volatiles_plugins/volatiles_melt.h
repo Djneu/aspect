@@ -128,6 +128,17 @@ namespace aspect
 
           double reference_darcy_coefficient () const;
 
+        /**
+         * Make sure the reaction rate is corrected that any value already outside of 
+         * 0 and 1, or outside of 0 and 1 with the reaction change, does not leave bounds.
+         */
+        virtual
+        double
+        get_reaction_rate (const double old_value,
+                           const double reaction_rate,
+                           const double time_step,
+                           const double depth) const;
+
           
 
         private:
@@ -179,6 +190,7 @@ namespace aspect
           double melt_bulk_modulus_derivative;       //
           double reference_permeability;             // permeability constant  
           double extraction_depth;
+          double compaction_viscosity_ratio;
           bool use_fractional_melting;
       };
     }

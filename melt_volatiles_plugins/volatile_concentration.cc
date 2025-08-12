@@ -18,10 +18,10 @@
   <http://www.gnu.org/licenses/>.
 */
 
-
-#include </Users/djneuh/software/local_code/aspect/melt_volatiles_plugins/volatile_concentration.h>
+#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/aspect/aspect/melt_volatiles_plugins/volatile_concentration.h>
 #include <aspect/melt.h>
 #include <deal.II/base/parameter_handler.h>
+#include <aspect/simulator.h>
 
 
 namespace aspect
@@ -44,9 +44,12 @@ namespace aspect
       get_names () const
       {
         std::vector<std::string> solution_names;
-        solution_names.emplace_back("co2_mass");
         solution_names.emplace_back("co2_ppm");
-        solution_names.emplace_back("avg_rho");
+        solution_names.emplace_back("co2_mass");
+        solution_names.emplace_back("h20_ppm");
+        solution_names.emplace_back("h20_mass");
+        solution_names.emplace_back("morb_ppm");
+        solution_names.emplace_back("morb_mass");
         return solution_names;
       }
 
@@ -56,7 +59,7 @@ namespace aspect
       VolatilesConcentration<dim>::
       get_data_component_interpretation () const
       {
-        std::vector<DataComponentInterpretation::DataComponentInterpretation> interpretation(3,
+        std::vector<DataComponentInterpretation::DataComponentInterpretation> interpretation(6,
             DataComponentInterpretation::component_is_scalar);
 
         return interpretation;
@@ -82,6 +85,12 @@ namespace aspect
         //Assert (computed_quantities[0].size() == 1,                   ExcInternalError());
         Assert (input_data.solution_values[0].size() == this->introspection().n_components,           ExcInternalError());
 
+        MaterialModel::MaterialModelInputs<dim> in(input_data, this->introspection());
+        MaterialModel::MaterialModelOutputs<dim> out(in.n_evaluation_points(), this->n_compositional_fields());
+        MeltHandler<dim>::create_material_model_outputs(out);
+        MaterialModel::MeltOutputs<dim> *fluid_out = out.template get_additional_output<MaterialModel::MeltOutputs<dim>>();
+        this->get_material_model().evaluate(in, out);
+        
 
           for (unsigned int q=0; q<n_quadrature_points; ++q)
             {
@@ -94,21 +103,32 @@ namespace aspect
               const double cmorb_cs =  std::max(0.0, std::min(composition[ccs_idx],1.0));
               const double hmorb_cl =  std::max(0.0, std::min(composition[hcl_idx],1.0));
               const double hmorb_cs =  std::max(0.0, std::min(composition[hcs_idx],1.0));
+              const double morb_cl =  std::max(0.0, std::min(composition[mcl_idx],1.0));
+              const double morb_cs =  std::max(0.0, std::min(composition[mcs_idx],1.0));
               const double Fvol =  std::max(0.0, std::min(composition[porosity_idx],1.0));
-              const double rho_l = rho_s - fluid_density_difference;
+              double rho_ss = out.densities[q];
+              const double rho_l = fluid_out->fluid_densities[q];
 
               // We track the volume fraction of melt, convert to mass fraction here.
-              double avg_rho = Fvol*rho_l + (1 - Fvol)*rho_s;
-              double Fmass = Fvol*rho_l/avg_rho;                                                                      
+              const double avg_rho = Fvol*rho_l + (1 - Fvol)*rho_ss;
+              const double Fmass = Fvol*rho_l/avg_rho;                                                                      
 
               // Compute ppm of different compositions. Here we use the C_bar calculated from the mass fraction,
               // and multiply it by the weight percent that is co2 or h2o, and then apply a scaling factor.
               // Generally, compositions would be given in a percentage, as well as e.g., cwt, these would both need to
               // be divided by 100 and then everything multiplied by 1e6 to scale to ppm. However, in our case 
               // compositions are already not given in the percent value, so we can remove that from the scaling factor.
-              computed_quantities[q](0) = (Fmass * cmorb_cl * rho_l + (1 - Fmass)*cmorb_cs*rho_s) * cwt/100 * 1e6;
-              computed_quantities[q](1) = (Fmass * cmorb_cl + (1 - Fmass)*cmorb_cs) * cwt/100 * 1e6;
-              computed_quantities[q](2) = avg_rho;
+              computed_quantities[q](0) = (Fmass * cmorb_cl + (1 - Fmass)*cmorb_cs) * cwt/100 * 1e6;
+
+              // Mass of Co2, in this case we do not scale to ppm.
+              computed_quantities[q](1) = (Fmass * cmorb_cl * rho_l + (1 - Fmass)*cmorb_cs*rho_ss) * cwt/100;
+
+              computed_quantities[q](2) = (Fmass * hmorb_cl + (1 - Fmass) * hmorb_cs) * hwt/100 * 1e6;
+              computed_quantities[q](3) = (Fmass * hmorb_cl * rho_l + (1 - Fmass)*hmorb_cs*rho_ss) * hwt/100;
+
+              computed_quantities[q](4) = (Fmass * morb_cl + (1 - Fmass)*morb_cs) * 100/100 * 1e6;
+              computed_quantities[q](5) = (Fmass * morb_cl * rho_l + (1 - Fmass)*morb_cs*rho_ss) * 100/100 ;
+
 
         }
       }
@@ -197,6 +217,12 @@ namespace aspect
 
             AssertThrow(this->introspection().compositional_name_exists("hmorb_cs"), ExcMessage("A hmorb_cs field is needed to use the co2 plugin."));
             hcs_idx = this->introspection().compositional_index_for_name("hmorb_cs");
+
+            AssertThrow(this->introspection().compositional_name_exists("morb_cl"), ExcMessage("A hmorb_cl field is needed to use the co2 plugin."));
+            mcl_idx = this->introspection().compositional_index_for_name("morb_cl");
+
+            AssertThrow(this->introspection().compositional_name_exists("morb_cs"), ExcMessage("A hmorb_cs field is needed to use the co2 plugin."));
+            mcs_idx = this->introspection().compositional_index_for_name("morb_cs");
 
             }
             prm.leave_subsection();

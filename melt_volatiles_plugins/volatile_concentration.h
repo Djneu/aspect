@@ -95,6 +95,8 @@ namespace aspect
           unsigned int ccs_idx;  
           unsigned int hcl_idx;
           unsigned int hcs_idx;  
+          unsigned int mcl_idx;
+          unsigned int mcs_idx;  
           unsigned int n_components;       // Coefficients for T-dependence of distribution coefficients K^i
           double cwt;
           double hwt;

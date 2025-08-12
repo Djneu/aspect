@@ -48,7 +48,7 @@ namespace aspect
         execute (TableHandler &statistics) override;
       private:
         double time_integrated_mass_flux;
-        double initial_volatile_content;
+        double total_co2_degass;
     };
   }
 }
