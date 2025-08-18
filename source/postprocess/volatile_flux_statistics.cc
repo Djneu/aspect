@@ -282,7 +282,7 @@ namespace aspect
       double conserve_co2 = global_co2_compositional_integrals + time_integrated_mass_flux;
 
       // Co2
-      statistics.add_value("Total co2 mass flow",-time_integrated_mass_flux);
+      statistics.add_value("Total co2 mass flow",time_integrated_mass_flux);
       statistics.set_precision ("Total co2 mass flow", 7);
       statistics.set_scientific ("Total co2 mass flow", true);
 
