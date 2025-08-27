@@ -18,7 +18,7 @@
   <http://www.gnu.org/licenses/>.
 */
 
-#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/aspect/aspect/melt_volatiles_plugins/volatile_concentration.h>
+#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/volatile_concentration.h>
 #include <aspect/melt.h>
 #include <deal.II/base/parameter_handler.h>
 #include <aspect/simulator.h>
@@ -127,7 +127,7 @@ namespace aspect
               computed_quantities[q](3) = (Fmass * hmorb_cl * rho_l + (1 - Fmass)*hmorb_cs*rho_ss) * hwt/100;
 
               computed_quantities[q](4) = (Fmass * morb_cl + (1 - Fmass)*morb_cs) * 100/100 * 1e6;
-              computed_quantities[q](5) = (Fmass * morb_cl * rho_l + (1 - Fmass)*morb_cs*rho_ss) * 100/100 ;
+              computed_quantities[q](5) = (Fmass * morb_cl * rho_l + (1 - Fmass)*morb_cs*rho_ss) * 100/100;
 
 
         }

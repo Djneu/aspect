@@ -163,23 +163,23 @@ namespace aspect
           unsigned int ccs_idx;       // solid carbonated morb
           unsigned int hcl_idx;       // liquid hydrated morb
           unsigned int hcs_idx;       // solid hydrated morb
-          mutable int timestep_it; 
+         // mutable int timestep_it; 
           //mutable double avg_rho;
-          mutable double Cbm;
-          mutable double Cbd;
-          mutable double Cbh;
+          //mutable double Cbm;
+          //mutable double Cbd;
+          //mutable double Cbh;
 
-          mutable double sbc;
-          mutable double sbm;
-          mutable double sbd;
-          mutable double sbh;
+          //mutable double sbc;
+          //mutable double sbm;
+          //mutable double sbd;
+          //mutable double sbh;
 
-          mutable double lbc;
-          mutable double lbm;
-          mutable double lbd;
-          mutable double lbh; 
+          //mutable double lbc;
+          //mutable double lbm;
+          //mutable double lbd;
+          //mutable double lbh; 
 
-          mutable double Fo;           
+          //mutable double Fo;           
 
           double xi_0;                               // rock viscosity constant
           double viscosity_fluid;                    // melt viscosity constant
@@ -189,9 +189,9 @@ namespace aspect
           double melting_time_scale;                 // reaction time
           double melt_bulk_modulus_derivative;       //
           double reference_permeability;             // permeability constant  
-          double extraction_depth;
           double compaction_viscosity_ratio;
           bool use_fractional_melting;
+          double extraction_depth;
       };
     }
 

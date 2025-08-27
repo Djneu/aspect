@@ -307,6 +307,47 @@ namespace aspect
                                                 screen_text.str());
 
     }
+
+    template <int dim>
+    template <class Archive>
+    void VolatileFluxStatistics<dim>::serialize (Archive &ar, const unsigned int)
+    {
+      ar &time_integrated_mass_flux
+      & total_co2_degass;
+    }
+
+
+    template <int dim>
+    void
+    VolatileFluxStatistics<dim>::save (std::map<std::string, std::string> &status_strings) const
+    {
+      std::ostringstream os;
+
+      // Serialize into a stringstream. Put the following into a code
+      // block of its own to ensure the destruction of the 'oa'
+      // archive triggers a flush() on the stringstream so we can
+      // query the completed string below.
+      {
+        aspect::oarchive oa (os);
+        oa << (*this);
+      }
+
+      status_strings["co2"] = os.str();
+    }
+
+
+    template <int dim>
+    void
+    VolatileFluxStatistics<dim>::load (const std::map<std::string, std::string> &status_strings)
+    {
+      // see if something was saved
+      if (status_strings.find("co2") != status_strings.end())
+        {
+          std::istringstream is (status_strings.find("co2")->second);
+          aspect::iarchive ia (is);
+          ia >> (*this);
+        }
+    }
   }
 }
 

@@ -23,7 +23,7 @@
 #include <aspect/utilities.h>
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/numerics/fe_field_function.h>
-#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/aspect/aspect/melt_volatiles_plugins/melt_simple_volatiles.h>
+#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/melt_simple_volatiles.h>
 
 namespace aspect
 {
@@ -50,7 +50,8 @@ namespace aspect
     void
     MeltSimpleVolatile<dim>::
     melt_fractions (const MaterialModel::MaterialModelInputs<dim> &in,
-                    std::vector<double> &melt_fractions) const
+                    std::vector<double> &melt_fractions,
+                    const MaterialModel::MaterialModelOutputs<dim> *) const
     {
       for (unsigned int q=0; q<in.n_evaluation_points(); ++q)
       {
@@ -130,6 +131,10 @@ namespace aspect
           out.specific_heat[i] = reference_specific_heat;
           out.thermal_conductivities[i] = thermal_conductivity;
           out.compressibilities[i] = compressibility;
+
+          if(this->introspection().compositional_name_exists("lithosphere"))
+            if(in.composition[i][this->introspection().compositional_index_for_name("lithosphere")] > 0.5)
+              out.viscosities[i] = 1e23;
 
           double visc_temperature_dependence = 1.0;
           if (this->include_adiabatic_heating ())
