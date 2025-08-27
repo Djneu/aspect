@@ -18,7 +18,7 @@
   <http://www.gnu.org/licenses/>.
 */
 
-#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/aspect/aspect/melt_volatiles_plugins/volatiles_melt.h>
+#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/volatiles_melt.h>
 #include <aspect/utilities.h>
 #include <aspect/gravity_model/interface.h>
 #include <aspect/adiabatic_conditions/interface.h>
@@ -56,10 +56,12 @@ namespace aspect
       {
           // Reaction rates needed for operator splitting. This model doesn't consider a case
           // where there is no operator splitting that uses reaction terms instead.
-          ReactionRateOutputs<dim> *reaction_rate_out = out.template get_additional_output<ReactionRateOutputs<dim>>();
+          const std::shared_ptr<ReactionRateOutputs<dim>> reaction_rate_out 
+            = out.template get_additional_output_object<ReactionRateOutputs<dim>>();
 
           // Enthalpy outputs for the latent heat mel plugin.
-          EnthalpyOutputs<dim> *enthalpy_out = out.template get_additional_output<EnthalpyOutputs<dim>>();
+          const std::shared_ptr<EnthalpyOutputs<dim>> enthalpy_out 
+            = out.template get_additional_output_object<EnthalpyOutputs<dim>>();
 
           double reaction_time_step_size = 1.0;
           if (this->simulator_is_past_initialization())
@@ -103,12 +105,6 @@ namespace aspect
                                                                                       melt_reaction_rate, 
                                                                                       reaction_time_step_size,
                                                                                       depth);
-
-                          //if(in.composition[q][c] > 0.3 || in.composition[q][c] + reaction_rate_out->reaction_rates[q][c]*reaction_time_step_size > 0.3)
-                          //  reaction_rate_out->reaction_rates[q][c] = (0.3 - in.composition[q][c]) / reaction_time_step_size;
-
-                          //if(this->get_geometry_model().depth(in.position[q]) <  extraction_depth)
-                          //  reaction_rate_out->reaction_rates[q][c] = 0.0; //-in.composition[q][c]/melting_time_scale*(in.position[q](1) - (this->get_geometry_model().maximal_depth() - extraction_depth))/extraction_depth;
                     }
                     else if (c == mcs_idx)
                     {
@@ -305,7 +301,6 @@ template <int dim>
         for (unsigned int i=0; i<n_components; ++i)
             C_bar[i] = Fmass_old*c_l[i] + (1-Fmass_old)*c_s[i];
       
-        timestep_it = this->get_timestep_number();
         // Define parameters that will be returned.
         double Fmass_new = 0.0;
         std::vector<double> solid_reaction_rates (n_components, 0.0);
@@ -315,7 +310,7 @@ template <int dim>
 
         // Calculate the equilibrium values and reaction rates
         // if we are below the maximum solidus pressure.
-        if(pressure < pressure_max) //  && ycord > extraction_depth
+        if(pressure < pressure_max)
         {
           const double T_solidus = T_solidus_liquidus(pressure, C_bar, true);
           const double T_liquidus = T_solidus_liquidus(pressure, C_bar, false);
@@ -386,9 +381,6 @@ template <int dim>
           // Provide maximum limit to porosity.
           if(Fmass_new*(avg_rho/rho_l) > 0.3)
             Fmass_new = 0.3 * (rho_l / avg_rho);
-
-          //if(ycord > this->get_geometry_model().maximal_depth() - extraction_depth)
-          //  Fmass_new = Fmass_old*(ycord - (this->get_geometry_model().maximal_depth() - extraction_depth))/extraction_depth;
 
           double dcl = std::max(0.0, std::min(1.0, C_bar[0] / (Fmass_new + (1 - Fmass_new) * K[0])));
           double mcl = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new + (1 - Fmass_new) * K[1])));
@@ -804,10 +796,10 @@ template <int dim>
                                 Patterns::Double (0.),
                                 "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
               prm.declare_entry ("Extraction depth", "4000",
-                                Patterns::Double (0.),
+                                Patterns::Double (),
                                 "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
               prm.declare_entry ("Compaction to shear viscosity ratio", "10",
-                                Patterns::Double (0.),
+                                Patterns::Double (),
                                 "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
               prm.declare_entry ("Use fractional melting", "false",
                              Patterns::Bool (),
