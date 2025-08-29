@@ -23,6 +23,7 @@
 #include <aspect/gravity_model/interface.h>
 #include <aspect/adiabatic_conditions/interface.h>
 #include <deal.II/base/parameter_handler.h>
+#include <chrono>
 
 #include <aspect/simulator.h>
 
@@ -559,48 +560,52 @@ template <int dim>
 
         std::vector<double> K = partition_coefficients(pressure, T_solidus);
 
-        // Get residual for sum(ci_bar/Ki) = 1 or sum(ci_bar*Ki) = 1 (Equations 8 + 9)
-        double residual = compute_residual(composition, K, compute_solidus);
+const double tolerance = 1e-10;
+const unsigned int max_iterations = 200;
+double residual = compute_residual(composition, K, compute_solidus);
 
-        unsigned int n                    =  0;     // initialize iteration count
-        const double tolerance            =  1e-10; //1e-10; // tolerance for Newton residual
-        const unsigned int max_iterations =  2000;   // maximum number of iterations
-        const double eps_T                =  5;     // temperature perturbation for finite differencing, degrees
+//auto start = std::chrono::high_resolution_clock::now();
+unsigned int n = 0;
+while (std::abs(residual) > tolerance && n < max_iterations)
+{
+    // Adaptive perturbation
+    const double eps_T = std::max(1e-6, 1e-6 * std::abs(T_solidus));
 
-        while (std::abs(residual) > tolerance) 
-        {
-          // Compute partition coefficients Ki at T+eps_T
-          K = partition_coefficients(pressure, T_solidus + eps_T);
+    // Central difference derivative
+    K = partition_coefficients(pressure, T_solidus + eps_T);
+    double residual_plus = compute_residual(composition, K, compute_solidus);
 
-          // Get residual at T + eps_T
-          double residual_plus_eps_T = compute_residual(composition, K, compute_solidus);
+    K = partition_coefficients(pressure, T_solidus - eps_T);
+    double residual_minus = compute_residual(composition, K, compute_solidus);
 
-          // Compute partition coefficients Ki at T-eps_T
-          K = partition_coefficients(pressure, T_solidus - eps_T);
+    const double dresidualdT = (residual_plus - residual_minus) / (2.0 * eps_T);
 
-          // Get residual at T + eps_T
-          double residual_minus_eps_T = compute_residual(composition, K, compute_solidus);
+    if (std::abs(dresidualdT) < 1e-14) {
+        std::cerr << "Derivative vanished, aborting Newton at iteration " << n << std::endl;
+        break;
+    }
 
-          // Finite difference drdT = (r(T+eps_T)-r(T-eps_T))/2/eps_T
-          const double dresidualdT  =  (residual_plus_eps_T - residual_minus_eps_T) / (2 * eps_T);
+    // Newton step with optional damping
+    double delta_T = -residual / dresidualdT;
+    T_solidus += 0.8 * delta_T;  // 0.8 damping factor
 
-          // Apply Newton correction to current guess of Tsol
-          T_solidus = T_solidus - 0.5 * residual/dresidualdT;
+    // Recompute residual
+    K = partition_coefficients(pressure, T_solidus);
+    residual = compute_residual(composition, K, compute_solidus);
 
-          // Compute partition coefficients Ki at Tsol
-          K = partition_coefficients(pressure, T_solidus);
+    ++n;
+}
 
-          // Get residual at T_solidus
-          residual = compute_residual(composition, K, compute_solidus);
+if (n == max_iterations) {
+    std::cerr << "!!! Newton solver did not converge after "
+              << n << " iterations. Final residual = " << residual << " !!!" << std::endl;
+}
 
-          ++n;
-
-          if (n == max_iterations) 
-          {
-            std::cerr << "!!! Newton solver for solidus/liquidus T has not converged after " << residual << " iterations !!!" << std::endl;
-            break;
-          }
-        }
+      //auto tend = std::chrono::high_resolution_clock::now();
+      //std::chrono::duration<double> elapsed = tend - start;
+      //totaln = totaln + n;
+      //totaltime = totaltime + elapsed.count();
+      //std::cout<<n<<" "<<T_solidus<<" "<<elapsed.count()<<" "<<totaln<<" "<<totaltime<<std::endl;
       return T_solidus;
     }
 
