@@ -35,6 +35,7 @@
 #include <aspect/material_model/rheology/drucker_prager.h>
 #include <aspect/material_model/rheology/elasticity.h>
 #include <aspect/material_model/rheology/grain_boundary_sliding.h>
+#include <aspect/material_model/rheology/pore_fluid_pressure.h>
 #include <aspect/simulator_access.h>
 
 #include<deal.II/fe/component_mask.h>
@@ -81,6 +82,8 @@ namespace aspect
          * and viscosity is rescaled back to the yield envelope.
          */
         std::vector<double> yielding;
+
+        std::vector<double> fluid_ratios;
 
     };
 
@@ -235,6 +238,11 @@ namespace aspect
            */
           Rheology::Elasticity<dim> elastic_rheology;
 
+          /**
+           * Object for computing the strain dependence of the rheology model.
+           */
+          Rheology::PoreFluidPressure<dim> pore_pressure;
+
 
         private:
 
@@ -356,6 +364,8 @@ namespace aspect
            * Object for computing plastic stresses, viscosities, and additional outputs
            */
           Rheology::DruckerPrager<dim> drucker_prager_plasticity;
+
+          bool use_pore_fluid_pressure;
 
       };
     }

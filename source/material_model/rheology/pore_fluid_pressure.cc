@@ -29,6 +29,8 @@
 #include <deal.II/fe/fe_values.h>
 #include <deal.II/base/quadrature_lib.h>
 #include <aspect/material_model/utilities.h>
+#include <aspect/postprocess/current_surface.h>
+
 
 
 namespace aspect

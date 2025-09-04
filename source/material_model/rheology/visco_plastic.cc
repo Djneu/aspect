@@ -27,6 +27,7 @@
 #include <deal.II/base/signaling_nan.h>
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/fe/fe_values.h>
+#include <aspect/postprocess/current_surface.h>
 
 namespace aspect
 {
@@ -41,6 +42,7 @@ namespace aspect
         names.emplace_back("current_friction_angles");
         names.emplace_back("current_yield_stresses");
         names.emplace_back("plastic_yielding");
+        names.emplace_back("current_fluid_ratios");
         return names;
       }
     }
@@ -51,7 +53,8 @@ namespace aspect
         cohesions(n_points, numbers::signaling_nan<double>()),
         friction_angles(n_points, numbers::signaling_nan<double>()),
         yield_stresses(n_points, numbers::signaling_nan<double>()),
-        yielding(n_points, numbers::signaling_nan<double>())
+        yielding(n_points, numbers::signaling_nan<double>()),
+        fluid_ratios(n_points, numbers::signaling_nan<double>())
     {}
 
 
@@ -74,6 +77,9 @@ namespace aspect
 
           case 3:
             return yielding;
+
+          case 4:
+            return fluid_ratios;
 
           default:
             AssertThrow(false, ExcInternalError());
@@ -362,6 +368,24 @@ namespace aspect
             if (use_adiabatic_pressure_in_plasticity)
               pressure_for_plasticity = this->get_adiabatic_conditions().pressure(in.position[i]);
 
+            if(use_pore_fluid_pressure)
+            {
+              //std::cout<<"here"<<std::endl;
+              double depth = this->get_geometry_model().depth(in.position[i]);
+              if(this->get_timestep_number() > 0)
+              {
+              const Postprocess::CurrentSurface<dim> &surface =
+                    this->get_postprocess_manager().template get_matching_active_plugin<Postprocess::CurrentSurface<dim>>();
+              
+              depth = surface.depth_including_mesh_deformation (in.position[i]);
+              }
+              //std::cout<<"here2"<<std::endl;
+              double current_fluid_ratio = pore_pressure.compute_fluid_ratio(j,
+                                                                             depth);
+
+              pressure_for_plasticity = pressure_for_plasticity * (1 - current_fluid_ratio);
+            }
+
             if (allow_negative_pressures_in_plasticity == false)
               pressure_for_plasticity = std::max(pressure_for_plasticity,0.0);
 
@@ -646,6 +670,8 @@ namespace aspect
 
         Rheology::Elasticity<dim>::declare_parameters (prm);
 
+        Rheology::PoreFluidPressure<dim>::declare_parameters (prm);
+
         // Reference and minimum/maximum values
         prm.declare_entry ("Minimum strain rate", "1.0e-20", Patterns::Double (0.),
                            "Stabilizes strain dependent viscosity. Units: \\si{\\per\\second}.");
@@ -758,6 +784,11 @@ namespace aspect
                            "Using a pressure gradient of 32436 Pa/m, then a value of "
                            "0.3 K/km = 0.0003 K/m = 9.24e-09 K/Pa gives an earth-like adiabat."
                            "Units: \\si{\\kelvin\\per\\pascal}.");
+
+        prm.declare_entry ("Include pore fluid pressure", "false",
+                           Patterns::Bool (),
+                           "Whether to include Peierls creep in the rheological formulation.");
+                           
       }
 
 
@@ -767,6 +798,9 @@ namespace aspect
       ViscoPlastic<dim>::parse_parameters (ParameterHandler &prm,
                                            const std::unique_ptr<std::vector<unsigned int>> &expected_n_phases_per_composition)
       {
+        pore_pressure.initialize_simulator (this->get_simulator());
+        pore_pressure.parse_parameters(prm, expected_n_phases_per_composition);
+
         strain_rheology.initialize_simulator (this->get_simulator());
         strain_rheology.parse_parameters(prm);
 
@@ -781,6 +815,7 @@ namespace aspect
 
         // Reference and minimum/maximum values
         min_strain_rate = prm.get_double("Minimum strain rate");
+        use_pore_fluid_pressure = prm.get_bool("Include pore fluid pressure");
         ref_strain_rate = prm.get_double("Reference strain rate");
         AssertThrow(ref_strain_rate >= min_strain_rate,
                     ExcMessage("The reference strain rate for the viscoplastic material model should be larger than the minimum strain rate."));
@@ -959,6 +994,7 @@ namespace aspect
             plastic_out->friction_angles[i] = 0;
             plastic_out->yield_stresses[i] = 0;
             plastic_out->yielding[i] = plastic_yielding ? 1 : 0;
+            plastic_out->fluid_ratios[i] =  0;
 
             double pressure_for_plasticity = in.pressure[i];
 
@@ -969,6 +1005,7 @@ namespace aspect
               pressure_for_plasticity = std::max(pressure_for_plasticity, 0.0);
 
             // average over the volume volume fractions
+            double current_fluid_ratios = 0.0;
             for (unsigned int j = 0; j < volume_fractions.size(); ++j)
               {
                 const Rheology::DruckerPragerParameters &drucker_prager_parameters = isostrain_viscosities.drucker_prager_parameters[j];
@@ -977,8 +1014,27 @@ namespace aspect
                 // Also convert radians to degrees
                 plastic_out->friction_angles[i] += constants::radians_to_degree * volume_fractions[j] * drucker_prager_parameters.angle_internal_friction;
 
+                if(use_pore_fluid_pressure)
+                {
+                  double depth = this->get_geometry_model().depth(in.position[i]);
+                  if(this->get_timestep_number() > 0)
+                  {
+                  const Postprocess::CurrentSurface<dim> &surface =
+                        this->get_postprocess_manager().template get_matching_active_plugin<Postprocess::CurrentSurface<dim>>();
+                  
+                  depth = surface.depth_including_mesh_deformation (in.position[i]);
+                  }
+                  current_fluid_ratios = volume_fractions[j] * pore_pressure.compute_fluid_ratio(j,
+                                                                                                 depth);
+                  plastic_out->fluid_ratios[i] += volume_fractions[j] * current_fluid_ratios;
+
+                  pressure_for_plasticity = pressure_for_plasticity * (1 - plastic_out->fluid_ratios[i]);
+                } 
+
                 plastic_out->yield_stresses[i] += volume_fractions[j] * drucker_prager_plasticity.compute_yield_stress(pressure_for_plasticity,
                                                   drucker_prager_parameters);
+
+                                                 
               }
           }
       }
