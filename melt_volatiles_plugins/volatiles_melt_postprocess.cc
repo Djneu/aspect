@@ -105,24 +105,46 @@ namespace aspect
               double cmorb_cs =  std::max(0.0, std::min(composition[ccs_idx],1.0));
               double hmorb_cl =  std::max(0.0, std::min(composition[hcl_idx],1.0));
               double hmorb_cs =  std::max(0.0, std::min(composition[hcs_idx],1.0));
-              double Fvol_old =  std::max(0.0, std::min(composition[melt_idx],1.0));                                                                           
+              double Fvol_old =  0.0; //std::max(0.0, std::min(composition[melt_idx],1.0));
+              const double rho_l = rho_s - fluid_density_difference;                                                                           
 
-              // Calculate dunite and order liquid and solid components
-              double dunite = 1 - morb_cs - cmorb_cs - hmorb_cs;
-              double dunite_l = 1 - morb_cl - cmorb_cl - hmorb_cl;
-              std::vector<double> c_s = {dunite, morb_cs, cmorb_cs, hmorb_cs};
-              std::vector<double> c_l = {dunite_l, morb_cl, cmorb_cl, hmorb_cl};
+        // Near the surface we sometimes get liquid values above one.
+        // here we force them to 1 and assume there is no dunite
+        // Would there be a better way to do this?
+        double comp_sum = morb_cl + cmorb_cl + hmorb_cl;
+        if(comp_sum > 1)
+        {
+          morb_cl = morb_cl/comp_sum;
+          cmorb_cl = cmorb_cl/comp_sum;
+          hmorb_cl = hmorb_cl/comp_sum;
+        }
 
-              // We track the volume of melt, convert to mass here.
-              double avg_rho = Fvol_old*rho_l + (1 - Fvol_old)*rho_s;
-              double Fmass_old = Fvol_old*avg_rho/rho_l;
+        comp_sum = morb_cs + cmorb_cs + hmorb_cs;
+        if(comp_sum > 1)
+        {
+          morb_cs = morb_cs/comp_sum;
+          cmorb_cs = cmorb_cs/comp_sum;
+          hmorb_cs = hmorb_cs/comp_sum;
+        }
 
-              // Now that things are ordered, find the bulk composition for each component.
-              for (unsigned int i=0; i<n_components; ++i)
-                C_bar[i] = Fmass_old*c_l[i] + (1-Fmass_old)*c_s[i];
+        // Find dunite and make sure it isn't below zero.
+        double dunite = std::max(0. ,(1 - morb_cs - cmorb_cs - hmorb_cs)); 
+        double dunite_l = std::max(0. ,(1 - morb_cl - cmorb_cl - hmorb_cl));    
+          
+        std::vector<double> c_s = {dunite, morb_cs, cmorb_cs, hmorb_cs};
+        std::vector<double> c_l = {dunite_l, morb_cl, cmorb_cl, hmorb_cl};
+
+        double avg_rho = Fvol_old*rho_l + (1. - Fvol_old)*rho_s;
+        double avg_rho_new = avg_rho; // Will be updated later.
+        double Fmass_old = Fvol_old*rho_l/avg_rho;
+   
+        // Now that things are ordered, find the bulk composition for each component.
+        for (unsigned int i=0; i<n_components; ++i)
+            C_bar[i] = Fmass_old*c_l[i] + (1-Fmass_old)*c_s[i];
             
-              // Define parameters that will be returned.
-              double Fmass_new = 0.0;
+        //std::cout<<C_bar[0]<<" "<<C_bar[1]<<" "<<C_bar[2]" "<<C_bar[0]<<std::endl;
+        // Define parameters that will be returned.
+        double Fmass_new = 0.0;
            
       // Calculate the equilibrium values and reaction rates
       // if we are below the maximum solidus pressure.
@@ -132,8 +154,8 @@ namespace aspect
         double mcs = 0.0;
         double ccs = 0.0;
         double hcs = 0.0;
-          const double T_solidus = T_solidus_liquidus(pressure, C_bar, true);
-          const double T_liquidus = T_solidus_liquidus(pressure, C_bar, false);
+        const double T_solidus = T_solidus_liquidus(pressure, C_bar, true);
+        const double T_liquidus = T_solidus_liquidus(pressure, C_bar, false);
 
           std::vector<double> Tm = melting_temperatures(pressure);
           std::vector<double> K = partition_coefficients(pressure, std::max(T_solidus,std::min(T_liquidus,temperature)));
@@ -142,7 +164,7 @@ namespace aspect
           Fmass_new = Fmass_old;
           int n      =  0;       
           const double r_tol = 1e-5;
-          const int its_tol   = 10000;
+          const int its_tol   = 100;
           double residual = 0.;
           for (unsigned int i=0; i<n_components; ++i)
             residual += C_bar[i]/(Fmass_old + (1-Fmass_old)*K[i]) - C_bar[i]/(Fmass_old/K[i] + (1-Fmass_old));
@@ -195,14 +217,30 @@ namespace aspect
           Fmass_new = std::max(0.0, std::min(1.0, Fmass_new));
 
           // Liquid values
+          double dcl = std::max(0.0, std::min(1.0, C_bar[0] / (Fmass_new + (1 - Fmass_new) * K[0])));
           mcl = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new + (1 - Fmass_new) * K[1])));
           ccl = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new + (1 - Fmass_new) * K[2])));     
           hcl = std::max(0.0, std::min(1.0, C_bar[3] / (Fmass_new + (1 - Fmass_new) * K[3])));
           
           // Solid values
+          double dcs = std::max(0.0, std::min(1.0, C_bar[0] / (Fmass_new / K[0] + (1 - Fmass_new))));
           mcs = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new / K[1] + (1 - Fmass_new))));
           ccs = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new / K[2] + (1 - Fmass_new))));
           hcs = std::max(0.0, std::min(1.0, C_bar[3] / (Fmass_new / K[3] + (1 - Fmass_new))));
+
+          // Check unity, setup new equilibirum liquid in order, and calculate reaction rates.
+          comp_sum = dcl + ccl + mcl + hcl;
+          dcl = dcl/comp_sum;
+          mcl = mcl/comp_sum;
+          ccl = ccl/comp_sum;
+          hcl = hcl/comp_sum;
+
+          // Check unity, setup new equilibirum liquid in order, and calculate reaction rates.
+          comp_sum = dcs + ccs + mcs + hcs;
+          dcs = dcs/comp_sum;
+          mcs = mcs/comp_sum;
+          ccs = ccs/comp_sum;
+          hcs = hcs/comp_sum;
 
           computed_quantities[q](0) = Fmass_new; //Fmass_new*(rho_l/avg_rho);
           computed_quantities[q](1) = mcl;
@@ -223,20 +261,26 @@ namespace aspect
         std::vector<double> Tm (n_components);
 
         const double Pmax = 6e9;
-        if (pressure <= Pmax)
-          for (unsigned int i=0; i<n_components; ++i) 
-            Tm[i]  =  T0[i] + A[i] * pressure + B[i] * pressure * pressure;
-
+        if(use_simons_law)
+        {
+          for (unsigned int i=0; i<n_components; ++i)
+            Tm[i]  =  T0[i] * std::pow(1.0 + pressure/A[i], 1.0/B[i]);
+        }
         else
         {
-          // safeguard: continue melting point with linear slope above Pmax
-          const double dP = 1e7;
-          for (unsigned int i=0; i<n_components; ++i) 
+          if (pressure <= Pmax)
+            for (unsigned int i=0; i<n_components; ++i) 
+              Tm[i]  =  T0[i] + A[i] * pressure + B[i] * pressure * pressure;
+          else
           {
-            bool ind = pressure > Pmax;
-            const double T0_at_Pmax = T0[i] + A[i] * Pmax + B[i] * Pmax * Pmax;
-            const double dTdP = ((A[i]*Pmax + B[i]*Pmax*Pmax) - (A[i]*(Pmax-1e7) + B[i]*(Pmax-1e7)*(Pmax-1e7)))/dP;
-            Tm[i] = T0_at_Pmax + dTdP * (pressure-Pmax);
+            // safeguard: continue melting point with linear slope above Pmax
+            const double dP = 1e7;
+            for (unsigned int i=0; i<n_components; ++i) 
+            {
+              const double T0_at_Pmax = T0[i] + A[i] * Pmax + B[i] * Pmax * Pmax;
+              const double dTdP = ((A[i]*Pmax + B[i]*Pmax*Pmax) - (A[i]*(Pmax-1e7) + B[i]*(Pmax-1e7)*(Pmax-1e7)))/dP;
+              Tm[i] = T0_at_Pmax + dTdP * (pressure-Pmax);
+            }
           }
         }
         return Tm;
@@ -292,9 +336,7 @@ namespace aspect
                           bool compute_solidus) const
       {
         // TODO: Exclude invalid compositions (that do not sum up to 1)?
-
         const std::vector<double> Tm = melting_temperatures(pressure);
-
 
         // Set starting guess for Tsol
         const double minTm = *std::min_element(Tm.begin(), Tm.end());
@@ -314,51 +356,54 @@ namespace aspect
 
         std::vector<double> K = partition_coefficients(pressure, T_solidus);
 
-        // Get residual for sum(ci_bar/Ki) = 1 or sum(ci_bar*Ki) = 1 (Equations 8 + 9)
-        double residual = compute_residual(composition, K, compute_solidus);
+const double tolerance = 1e-10;
+const unsigned int max_iterations = 200;
+double residual = compute_residual(composition, K, compute_solidus);
 
-        unsigned int n                    =  0;     // initialize iteration count
-        const double tolerance            =  1e-10; //1e-10; // tolerance for Newton residual
-        const unsigned int max_iterations =  500;   // maximum number of iterations
-        const double eps_T                =  5;     // temperature perturbation for finite differencing, degrees
+//auto start = std::chrono::high_resolution_clock::now();
+unsigned int n = 0;
+while (std::abs(residual) > tolerance && n < max_iterations)
+{
+    // Adaptive perturbation
+    const double eps_T = std::max(1e-6, 1e-6 * std::abs(T_solidus));
 
-        while (std::abs(residual) > tolerance) 
-        {
-          // Compute partition coefficients Ki at T+eps_T
-          K = partition_coefficients(pressure, T_solidus + eps_T);
+    // Central difference derivative
+    K = partition_coefficients(pressure, T_solidus + eps_T);
+    double residual_plus = compute_residual(composition, K, compute_solidus);
 
-          // Get residual at T + eps_T
-          double residual_plus_eps_T = compute_residual(composition, K, compute_solidus);
+    K = partition_coefficients(pressure, T_solidus - eps_T);
+    double residual_minus = compute_residual(composition, K, compute_solidus);
 
-          // Compute partition coefficients Ki at T-eps_T
-          K = partition_coefficients(pressure, T_solidus - eps_T);
+    const double dresidualdT = (residual_plus - residual_minus) / (2.0 * eps_T);
 
-          // Get residual at T + eps_T
-          double residual_minus_eps_T = compute_residual(composition, K, compute_solidus);
+    if (std::abs(dresidualdT) < 1e-14) {
+        std::cerr << "Derivative vanished, aborting Newton at iteration " << n << std::endl;
+        break;
+    }
 
-          // Finite difference drdT = (r(T+eps_T)-r(T-eps_T))/2/eps_T
-          const double dresidualdT  =  (residual_plus_eps_T - residual_minus_eps_T) / (2 * eps_T);
+    // Newton step with optional damping
+    double delta_T = -residual / dresidualdT;
+    T_solidus += 0.8 * delta_T;  // 0.8 damping factor
 
-          // Apply Newton correction to current guess of Tsol
-          // Note the step size is set to 0.5 whereas the original r_DMC implementation uses 1 
-          T_solidus = T_solidus - 0.5 * residual/dresidualdT;
+    // Recompute residual
+    K = partition_coefficients(pressure, T_solidus);
+    residual = compute_residual(composition, K, compute_solidus);
 
-          // Compute partition coefficients Ki at Tsol
-          K = partition_coefficients(pressure, T_solidus);
+    ++n;
+}
 
-          // Get residual at T_solidus
-          residual = compute_residual(composition, K, compute_solidus);
+if (n == max_iterations) {
+    std::cerr << "??? Newton solver did not converge after "
+              << n << " iterations. Final residual = " << residual << " !!!" << std::endl;
+}
 
-          ++n;
-
-          if (n == max_iterations) 
-          {
-            std::cerr << "!!! Newton solver for solidus/liquidus T has not converged after " << max_iterations << " iterations !!!" << std::endl;
-            break;
-          }
-        }
+      //auto tend = std::chrono::high_resolution_clock::now();
+      //std::chrono::duration<double> elapsed = tend - start;
+      //totaln = totaln + n;
+      //totaltime = totaltime + elapsed.count();
+      //std::cout<<n<<" "<<T_solidus<<" "<<elapsed.count()<<" "<<totaln<<" "<<totaltime<<std::endl;
       return T_solidus;
-    } 
+    }
 
       template <int dim>
       void
@@ -421,7 +466,7 @@ namespace aspect
                     "derived melt. "
                     "\\si{\\degreeCelsius\\per\\pascal}.");     
 
-              prm.declare_entry ("Fluid density", "2700",
+              prm.declare_entry ("Fluid density difference", "500",
                     Patterns::List(Patterns::Double (0.)),
                     "Constant parameter in the quadratic "
                     "function that approximates the solidus "
@@ -438,6 +483,10 @@ namespace aspect
               prm.declare_entry ("Maximum pressure for melt", "4.75e9",
                                 Patterns::Double (0.),
                                 "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
+
+              prm.declare_entry ("Use simons law", "false",
+                             Patterns::Bool (),
+                             "Whether to use fractional or batch melting.");
 
             }
             prm.leave_subsection();
@@ -475,9 +524,10 @@ namespace aspect
             R = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("R"))),
                                                                           n_components,
                                                                           "Thermal diffusivities");
-            rho_l         = prm.get_double ("Fluid density");
+            fluid_density_difference         = prm.get_double ("Fluid density difference");
             rho_s         = prm.get_double ("Solid density");
             pressure_max         = prm.get_double ("Maximum pressure for melt");
+            use_simons_law     = prm.get_bool ("Use simons law");
 
             // Get ID for all fields. Should I do this once here or do it in the main function?
             AssertThrow(this->introspection().compositional_name_exists("porosity"), ExcMessage("A porosity field is needed to use the co2 plugin."));

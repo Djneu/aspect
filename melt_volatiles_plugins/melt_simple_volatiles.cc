@@ -24,6 +24,7 @@
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/numerics/fe_field_function.h>
 #include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/melt_simple_volatiles.h>
+#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/volatiles_melt.h>
 
 namespace aspect
 {
@@ -134,7 +135,7 @@ namespace aspect
 
           if(this->introspection().compositional_name_exists("lithosphere"))
             if(in.composition[i][this->introspection().compositional_index_for_name("lithosphere")] > 0.5)
-              out.viscosities[i] = 1e23;
+              out.viscosities[i] = lith_visc;
 
           double visc_temperature_dependence = 1.0;
           if (this->include_adiabatic_heating ())
@@ -228,6 +229,10 @@ namespace aspect
                              Patterns::Double (0.),
                              "Reference density of the solid $\\rho_{s,0}$. "
                              "Units: \\si{\\kilogram\\per\\meter\\cubed}.");
+          prm.declare_entry ("Lithosphere viscosity", "1e22",
+                             Patterns::Double (0.),
+                             "Reference density of the solid $\\rho_{s,0}$. "
+                             "Units: \\si{\\kilogram\\per\\meter\\cubed}.");
         }
         prm.leave_subsection();
       }
@@ -257,6 +262,7 @@ namespace aspect
           reference_T                = prm.get_double ("Reference temperature");
           depletion_density_change   = prm.get_double ("Depletion density change");
           reference_rho_solid        = prm.get_double ("Reference solid density");
+          lith_visc        = prm.get_double ("Lithosphere viscosity");
 
 
 
@@ -273,7 +279,7 @@ namespace aspect
     void
     MeltSimpleVolatile<dim>::create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
     {
-      if (this->get_parameters().use_operator_splitting && out.template get_additional_output<ReactionRateOutputs<dim>>() == nullptr)
+      if (this->get_parameters().use_operator_splitting && out.template has_additional_output_object<ReactionRateOutputs<dim>>() == false)
         {
           const unsigned int n_points = out.n_evaluation_points();
           out.additional_outputs.push_back(

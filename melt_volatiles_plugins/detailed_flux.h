@@ -19,8 +19,8 @@
 */
 
 
-#ifndef _aspect_postprocess_mass_flux_statistics_h
-#define _aspect_postprocess_mass_flux_statistics_h
+#ifndef _aspect_postprocess_detailed_flux_statistics_h
+#define _aspect_postprocess_detailed_flux_statistics_h
 
 #include <aspect/postprocess/interface.h>
 #include <aspect/simulator_access.h>
@@ -38,7 +38,7 @@ namespace aspect
      * @ingroup Postprocessing
      */
     template <int dim>
-    class MassFluxStatistics : public Interface<dim>, public ::aspect::SimulatorAccess<dim>
+    class DetailedFluxStatistics : public Interface<dim>, public ::aspect::SimulatorAccess<dim>
     {
       public:
         /**
@@ -65,10 +65,20 @@ namespace aspect
         void serialize (Archive &ar, const unsigned int version);
 
       private:
-        double top_total_flux;
-        double bottom_total_flux;
-        double left_total_flux;
-        double right_total_flux;
+      double top_total_flux;
+      double bottom_total_flux;
+      double left_total_flux;
+      double right_total_flux;
+
+      double top_solid_flux;
+      double bottom_solid_flux;
+      double left_solid_flux;
+      double right_solid_flux;
+
+      double top_fluid_flux;
+      double bottom_fluid_flux;
+      double left_fluid_flux;
+      double right_fluid_flux;
     };
   }
 }

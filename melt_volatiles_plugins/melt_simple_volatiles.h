@@ -130,6 +130,7 @@ namespace aspect
         double reference_T;
         double depletion_density_change;
         double reference_rho_solid;
+        double lith_visc;
 
         /*
         * Object for computing the melt parameters

@@ -137,7 +137,8 @@ namespace aspect
         get_reaction_rate (const double old_value,
                            const double reaction_rate,
                            const double time_step,
-                           const double depth) const;
+                           const double depth,
+                           const double x) const;
 
           
 
@@ -171,10 +172,14 @@ namespace aspect
           double melt_compressibility;               
           double melting_time_scale;                 // reaction time
           double melt_bulk_modulus_derivative;       //
-          double reference_permeability;             // permeability constant  
+          double reference_permeability;             // permeability constant 
+          double maximum_permeability;             // permeability constant   
           double compaction_viscosity_ratio;
           bool use_fractional_melting;
           double extraction_depth;
+          double extraction_width;
+          double use_extraction_patch;
+          bool use_simons_law;
 
           mutable int totaln = 0;
           mutable double totaltime = 0;
