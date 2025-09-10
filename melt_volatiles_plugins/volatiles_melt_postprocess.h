@@ -118,7 +118,7 @@ namespace aspect
           unsigned int n_components;       // Coefficients for T-dependence of distribution coefficients K^i
           double porosity;       // Coefficients for T-dependence of distribution coefficients K^i
           double reference_darcy_coefficient () const;
-          double rho_l;       // Coefficients for T-dependence of distribution coefficients K^i
+          double fluid_density_difference;       // Coefficients for T-dependence of distribution coefficients K^i
           double  rho_s;       // Coefficients for T-dependence of distribution coefficients K^i
 
           unsigned int melt_idx;
@@ -129,6 +129,7 @@ namespace aspect
           unsigned int hcl_idx;
           unsigned int hcs_idx;  
           double pressure_max;
+          bool use_simons_law;
       };
     }
   }

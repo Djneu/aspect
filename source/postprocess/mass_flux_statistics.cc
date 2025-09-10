@@ -135,6 +135,15 @@ namespace aspect
                                    + " (" + unit + ")";
           statistics.add_value (name, p->second);
 
+         if(this->get_geometry_model().translate_id_to_symbol_name (p->first) == "left")
+          left_total_flux += p->second * this->get_timestep() / year_in_seconds;
+         if(this->get_geometry_model().translate_id_to_symbol_name (p->first) == "right")
+          right_total_flux += p->second * this->get_timestep() / year_in_seconds;
+         if(this->get_geometry_model().translate_id_to_symbol_name (p->first) == "bottom")
+          bottom_total_flux += p->second * this->get_timestep() / year_in_seconds;
+         if(this->get_geometry_model().translate_id_to_symbol_name (p->first) == "top")
+          top_total_flux += p->second * this->get_timestep() / year_in_seconds;
+
           // also make sure that the other columns filled by this object
           // all show up with sufficient accuracy and in scientific notation
           statistics.set_precision (name, 8);
@@ -146,8 +155,67 @@ namespace aspect
                       << (index == global_boundary_fluxes.size()-1 ? "" : ", ");
         }
 
+      statistics.add_value("Left solid mass flow",left_total_flux);
+      statistics.set_precision ("Left solid mass flow", 7);
+      statistics.set_scientific ("Left solid mass flow", true);
+
+      statistics.add_value("Right solid mass flow",right_total_flux);
+      statistics.set_precision ("Right solid mass flow", 7);
+      statistics.set_scientific ("Right solid mass flow", true);
+
+      statistics.add_value("Bottom solid mass flow",bottom_total_flux);
+      statistics.set_precision ("Bottom solid mass flow", 7);
+      statistics.set_scientific ("Bottom solid mass flow", true);
+
+      statistics.add_value("Top solid mass flow",top_total_flux);
+      statistics.set_precision ("Top solid mass flow", 7);
+      statistics.set_scientific ("Top solid mass flow", true);
+
       return std::pair<std::string, std::string> ("Mass fluxes through boundary parts:",
                                                   screen_text.str());
+    }
+
+    template <int dim>
+    template <class Archive>
+    void MassFluxStatistics<dim>::serialize (Archive &ar, const unsigned int)
+    {
+      ar &top_total_flux
+      &bottom_total_flux
+      &left_total_flux
+      &right_total_flux;
+    }
+
+
+    template <int dim>
+    void
+    MassFluxStatistics<dim>::save (std::map<std::string, std::string> &status_strings) const
+    {
+      std::ostringstream os;
+
+      // Serialize into a stringstream. Put the following into a code
+      // block of its own to ensure the destruction of the 'oa'
+      // archive triggers a flush() on the stringstream so we can
+      // query the completed string below.
+      {
+        aspect::oarchive oa (os);
+        oa << (*this);
+      }
+
+      status_strings["co2det"] = os.str();
+    }
+
+
+    template <int dim>
+    void
+    MassFluxStatistics<dim>::load (const std::map<std::string, std::string> &status_strings)
+    {
+      // see if something was saved
+      if (status_strings.find("co2det") != status_strings.end())
+        {
+          std::istringstream is (status_strings.find("co2det")->second);
+          aspect::iarchive ia (is);
+          ia >> (*this);
+        }
     }
   }
 }

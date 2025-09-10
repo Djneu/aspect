@@ -229,6 +229,8 @@ namespace aspect
       std::vector<double> ccl_values(n_q_points);
       std::vector<double> ccs_values(n_q_points);
       double local_co2_compositional_integrals = 0.0;
+      double local_fluid_compositional_integrals = 0.0;
+      double local_solid_compositional_integrals = 0.0;
 
       MaterialModel::MaterialModelInputs<dim> in_fe(fe_values.n_quadrature_points, this->n_compositional_fields());
       MaterialModel::MaterialModelOutputs<dim> out_fe(fe_values.n_quadrature_points, this->n_compositional_fields());
@@ -263,10 +265,16 @@ namespace aspect
 
               double avg_rho = Fvol_values[q]*rho_l + (1 - Fvol_values[q])*rho_s;
               double Fmass = Fvol_values[q]*rho_l/avg_rho;
+              double liquid_mass = Fmass * ccl_values[q] * rho_l * 20/100 * fe_values.JxW(q);
+              double solid_mass = (1-Fmass) * ccs_values[q] * rho_s * 20/100 *fe_values.JxW(q);
 
-              local_co2_compositional_integrals += (Fmass*ccl_values[q]*rho_l 
-                                                  + (1-Fmass)*ccs_values[q]*rho_s ) * 20/100
-                                                  *fe_values.JxW(q);
+              local_co2_compositional_integrals += liquid_mass + solid_mass;
+              local_fluid_compositional_integrals += liquid_mass;
+              local_solid_compositional_integrals += solid_mass;
+              
+              //(Fmass*ccl_values[q]*rho_l 
+              //                                    + (1-Fmass)*ccs_values[q]*rho_s ) * 20/100
+              //                                    *fe_values.JxW(q);
             }
 
 
@@ -275,6 +283,14 @@ namespace aspect
       // compute the sum over all processors
       const double global_co2_compositional_integrals =
       Utilities::MPI::sum (local_co2_compositional_integrals,
+                           this->get_mpi_communicator());
+
+      const double global_liquid_compositional_integrals =
+      Utilities::MPI::sum (local_fluid_compositional_integrals,
+                           this->get_mpi_communicator());
+
+      const double global_solid_compositional_integrals =
+      Utilities::MPI::sum (local_solid_compositional_integrals,
                            this->get_mpi_communicator());
       
       // Positive indicates outward flow, so to see the total amount of mass we have had,
@@ -301,6 +317,14 @@ namespace aspect
       statistics.add_value("Total Co2 degass",total_co2_degass);
       statistics.set_precision ("Total Co2 degass", 7);
       statistics.set_scientific ("Total Co2 degass", true);
+
+      statistics.add_value("Global co2 solid mass",global_solid_compositional_integrals);
+      statistics.set_precision ("Global co2 solid mass", 7);
+      statistics.set_scientific ("Global co2 solid mass", true);
+
+      statistics.add_value("Global co2 liquid mass",global_liquid_compositional_integrals);
+      statistics.set_precision ("Global co2 liquid mass", 7);
+      statistics.set_scientific ("Global co2 liquid mass", true);
       
 
       return std::pair<std::string, std::string> ("Writing volatile statistics",

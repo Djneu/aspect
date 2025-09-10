@@ -57,8 +57,8 @@ namespace aspect
       {
           // Reaction rates needed for operator splitting. This model doesn't consider a case
           // where there is no operator splitting that uses reaction terms instead.
-          const std::shared_ptr<ReactionRateOutputs<dim>> reaction_rate_out 
-            = out.template get_additional_output_object<ReactionRateOutputs<dim>>();
+          const std::shared_ptr<ReactionRateOutputs<dim>>
+          reaction_rate_out = out.template get_additional_output_object<ReactionRateOutputs<dim>>();
 
           // Enthalpy outputs for the latent heat mel plugin.
           const std::shared_ptr<EnthalpyOutputs<dim>> enthalpy_out 
@@ -105,7 +105,8 @@ namespace aspect
                           reaction_rate_out->reaction_rates[q][c] = get_reaction_rate(in.composition[q][c], 
                                                                                       melt_reaction_rate, 
                                                                                       reaction_time_step_size,
-                                                                                      depth);
+                                                                                      depth,
+                                                                                      xcord);
                     }
                     else if (c == mcs_idx)
                     {
@@ -113,7 +114,8 @@ namespace aspect
                           reaction_rate_out->reaction_rates[q][c] = get_reaction_rate(in.composition[q][c], 
                                                           solid_reaction_rates[1], 
                                                           reaction_time_step_size,
-                                                          depth);
+                                                          depth,
+                                                          xcord);
 
                     }
                     else if (c == mcl_idx)
@@ -122,7 +124,8 @@ namespace aspect
                           reaction_rate_out->reaction_rates[q][c] = get_reaction_rate(in.composition[q][c], 
                                                           liquid_reaction_rates[1], 
                                                           reaction_time_step_size,
-                                                          depth);
+                                                          depth,
+                                                          xcord);
                     }
                     else if (c == ccs_idx)
                     {
@@ -130,7 +133,8 @@ namespace aspect
                           reaction_rate_out->reaction_rates[q][c] = get_reaction_rate(in.composition[q][c], 
                                                           solid_reaction_rates[2], 
                                                           reaction_time_step_size,
-                                                          depth);                            
+                                                          depth,
+                                                          xcord);                            
                     }
                     else if (c == ccl_idx)
                     {
@@ -138,7 +142,8 @@ namespace aspect
                           reaction_rate_out->reaction_rates[q][c] = get_reaction_rate(in.composition[q][c], 
                                                           liquid_reaction_rates[2], 
                                                           reaction_time_step_size,
-                                                          depth);
+                                                          depth,
+                                                          xcord);
                     }
                     else if (c == hcs_idx)
                     {
@@ -146,7 +151,8 @@ namespace aspect
                           reaction_rate_out->reaction_rates[q][c] = get_reaction_rate(in.composition[q][c], 
                                                           solid_reaction_rates[3], 
                                                           reaction_time_step_size,
-                                                          depth);
+                                                          depth,
+                                                          xcord);
                     }
                     else if (c == hcl_idx)
                     {
@@ -154,7 +160,8 @@ namespace aspect
                       reaction_rate_out->reaction_rates[q][c] = get_reaction_rate(in.composition[q][c], 
                                                       liquid_reaction_rates[3], 
                                                       reaction_time_step_size,
-                                                      depth);
+                                                      depth,
+                                                      xcord);
                     }
                     else
                       reaction_rate_out->reaction_rates[q][c] = 0.0;
@@ -203,7 +210,7 @@ template <int dim>
                 // We should maybe double check that the liquid components sum to unity.
                 melt_out->fluid_viscosities[i] = viscosity_fluid*((pow(1.0, morb_cl))*(pow(10.0, dunite_cl))*(pow(0.1, hmorb_cl))*(pow(0.01, cmorb_cl)));
             
-                melt_out->permeabilities[i] = reference_permeability * Utilities::fixed_power<3>(porosity) * Utilities::fixed_power<2>(1.0-porosity);
+                melt_out->permeabilities[i] = std::min(reference_permeability * Utilities::fixed_power<3>(porosity) * Utilities::fixed_power<2>(1.0-porosity), maximum_permeability);
 
                 // At the moment we don't include compressibility.
                 melt_out->fluid_densities[i] = out.densities[i] - fluid_density_difference;
@@ -616,21 +623,29 @@ if (n == max_iterations) {
         std::vector<double> Tm (n_components);
 
         const double Pmax = 6e9;
-        if (pressure <= Pmax)
-          for (unsigned int i=0; i<n_components; ++i) 
-            Tm[i]  =  T0[i] + A[i] * pressure + B[i] * pressure * pressure;
-
+        if(use_simons_law)
+        {
+          for (unsigned int i=0; i<n_components; ++i)
+            Tm[i]  =  T0[i] * std::pow(1.0 + pressure/A[i], 1.0/B[i]);
+        }
         else
         {
-          // safeguard: continue melting point with linear slope above Pmax
-          const double dP = 1e7;
-          for (unsigned int i=0; i<n_components; ++i) 
+          if (pressure <= Pmax)
+            for (unsigned int i=0; i<n_components; ++i) 
+              Tm[i]  =  T0[i] + A[i] * pressure + B[i] * pressure * pressure;
+          else
           {
-            const double T0_at_Pmax = T0[i] + A[i] * Pmax + B[i] * Pmax * Pmax;
-            const double dTdP = ((A[i]*Pmax + B[i]*Pmax*Pmax) - (A[i]*(Pmax-1e7) + B[i]*(Pmax-1e7)*(Pmax-1e7)))/dP;
-            Tm[i] = T0_at_Pmax + dTdP * (pressure-Pmax);
+            // safeguard: continue melting point with linear slope above Pmax
+            const double dP = 1e7;
+            for (unsigned int i=0; i<n_components; ++i) 
+            {
+              const double T0_at_Pmax = T0[i] + A[i] * Pmax + B[i] * Pmax * Pmax;
+              const double dTdP = ((A[i]*Pmax + B[i]*Pmax*Pmax) - (A[i]*(Pmax-1e7) + B[i]*(Pmax-1e7)*(Pmax-1e7)))/dP;
+              Tm[i] = T0_at_Pmax + dTdP * (pressure-Pmax);
+            }
           }
         }
+
         return Tm;
     }
 
@@ -677,7 +692,8 @@ if (n == max_iterations) {
     get_reaction_rate (const double old_value,
                                      const double reaction_rate,
                                      const double time_step,
-                                     const double depth) const
+                                     const double depth,
+                                     const double x) const
     {
       // Ensure composition stays between 1 and 0.
       double final_reaction_rate = reaction_rate;
@@ -687,8 +703,9 @@ if (n == max_iterations) {
       else if (old_value < 0.0 || old_value + reaction_rate * time_step < 0.0)
         final_reaction_rate = -old_value / time_step;
 
-      if(depth <  extraction_depth)
-            final_reaction_rate = 0.0;
+      if(use_extraction_patch)
+        if(depth <  extraction_depth && x < extraction_width)
+              final_reaction_rate = 0.0;
 
       return final_reaction_rate;
     }     
@@ -797,16 +814,29 @@ if (n == max_iterations) {
                                 Patterns::Double(),
                                 "Reference permeability of the solid host rock."
                                 "Units: \\si{\\meter\\squared}.");
+              prm.declare_entry ("Maximum permeability", "1e-1",
+                                Patterns::Double(),
+                                "Maximum permeability of the solid host rock."
+                                "Units: \\si{\\meter\\squared}.");
               prm.declare_entry ("Maximum pressure for melt", "4.75e12",
                                 Patterns::Double (0.),
                                 "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
               prm.declare_entry ("Extraction depth", "4000",
                                 Patterns::Double (),
                                 "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
+              prm.declare_entry ("Extraction width", "4000",
+                                Patterns::Double (),
+                                "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
               prm.declare_entry ("Compaction to shear viscosity ratio", "10",
                                 Patterns::Double (),
                                 "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
               prm.declare_entry ("Use fractional melting", "false",
+                             Patterns::Bool (),
+                             "Whether to use fractional or batch melting.");
+              prm.declare_entry ("Use extraction patch", "false",
+                             Patterns::Bool (),
+                             "Whether to use fractional or batch melting.");
+              prm.declare_entry ("Use simons law", "false",
                              Patterns::Bool (),
                              "Whether to use fractional or batch melting.");
             }
@@ -844,10 +874,13 @@ if (n == max_iterations) {
                                                                           "Thermal diffusivities");
             fluid_density_difference         = prm.get_double ("Fluid density difference");
             extraction_depth        = prm.get_double ("Extraction depth");
+            extraction_width        = prm.get_double ("Extraction width");
             pressure_max         = prm.get_double ("Maximum pressure for melt");
             compaction_viscosity_ratio         = prm.get_double ("Compaction to shear viscosity ratio");
             melting_time_scale         = prm.get_double ("Melting time scale for operator splitting");
             use_fractional_melting        = prm.get_bool ("Use fractional melting");
+            use_extraction_patch        = prm.get_bool ("Use extraction patch");
+            use_simons_law     = prm.get_bool ("Use simons law");
 
             if (this->convert_output_to_years() == true)
               melting_time_scale *= year_in_seconds;
@@ -881,6 +914,7 @@ if (n == max_iterations) {
             melt_compressibility       = prm.get_double ("Melt compressibility");
             melt_bulk_modulus_derivative = prm.get_double ("Melt bulk modulus derivative");
             reference_permeability     = prm.get_double ("Reference permeability");
+            maximum_permeability     = prm.get_double ("Maximum permeability");
             }
             prm.leave_subsection();
         }
