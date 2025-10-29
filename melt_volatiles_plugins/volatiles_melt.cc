@@ -304,6 +304,13 @@ template <int dim>
         double avg_rho = Fvol_old*rho_l + (1. - Fvol_old)*rho_s;
         double avg_rho_new = avg_rho; // Will be updated later.
         double Fmass_old = Fvol_old*rho_l/avg_rho;
+
+        if(ep == 1)
+        {
+          double cppm = (Fmass_old * cmorb_cl + (1 - Fmass_old)*cmorb_cs) * 20/100 * 1e6;
+          double cmass = (Fmass_old * cmorb_cl * rho_l + (1 - Fmass_old)*cmorb_cs*rho_s) * 20/100;
+          std::cout<<"Old: "<<cppm<<" "<<cmass<<std::endl;
+        }
    
         // Now that things are ordered, find the bulk composition for each component.
         for (unsigned int i=0; i<n_components; ++i)
@@ -316,15 +323,23 @@ template <int dim>
         double melt_reaction_rate = 0.0;
         double enthalpy = 0.0;
 
+        std::vector<double> T0 (n_components);
+        std::vector<double> A (n_components);
+        std::vector<double> B (n_components);
+        std::vector<double> L (n_components);
+        std::vector<double> R (n_components);
+
+        initialize_component_values(A, B, L, T0, R, pressure);
+
         // Calculate the equilibrium values and reaction rates
         // if we are below the maximum solidus pressure.
         if(pressure < pressure_max)
         {
-          const double T_solidus = T_solidus_liquidus(pressure, C_bar, true);
-          const double T_liquidus = T_solidus_liquidus(pressure, C_bar, false);
+          const double T_solidus = T_solidus_liquidus(pressure, C_bar, true, A, B, L, T0, R);
+          const double T_liquidus = T_solidus_liquidus(pressure, C_bar, false, A, B, L, T0, R);
 
-          std::vector<double> Tm = melting_temperatures(pressure);
-          std::vector<double> K = partition_coefficients(pressure, std::max(T_solidus,std::min(T_liquidus,temperature)));
+          std::vector<double> Tm = melting_temperatures(pressure, A, B, L, T0);
+          std::vector<double> K = partition_coefficients(pressure, std::max(T_solidus,std::min(T_liquidus,temperature)), A, B, L, T0, R);
           
           // Calculate equilibrium melt fraction.
           Fmass_new = Fmass_old;
@@ -382,13 +397,9 @@ template <int dim>
           // Calculate new Cl and Cs values, and limit all between 0 and 1.
           Fmass_new = std::max(0.0, std::min(1.0, Fmass_new));
 
-          // Set a minimum porosity. Need to test is this is necesssary.esst 
-          //if(Fmass_new < 1e-8)
-          //  Fmass_new = 0.0;
-
           // Provide maximum limit to porosity.
-          if(Fmass_new*(avg_rho/rho_l) > 0.3)
-            Fmass_new = 0.3 * (rho_l / avg_rho);
+          //if(Fmass_new*(avg_rho/rho_l) > 0.3)
+          //  Fmass_new = 0.3 * (rho_l / avg_rho);
 
           double dcl = std::max(0.0, std::min(1.0, C_bar[0] / (Fmass_new + (1 - Fmass_new) * K[0])));
           double mcl = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new + (1 - Fmass_new) * K[1])));
@@ -527,6 +538,13 @@ template <int dim>
             }
           }
 
+        if(ep == 1)
+        {
+          double cppm = (Fmass_new * ccl + (1 - Fmass_new)*ccs) * 20/100 * 1e6;
+          double cmass = (Fmass_new * ccl * rho_l + (1 - Fmass_new)*ccs*rho_s) * 20/100;
+          std::cout<<"New: "<<Fmass_old<<" "<<Fmass_new<<" "<<cppm<<" "<<cmass<<std::endl;
+        }
+
           if(reaction_time_step_size > 0)
             melt_reaction_rate += Fvol_old * rho_l * (1.0 / avg_rho - 1.0 / avg_rho_new) / reaction_time_step_size;
 
@@ -544,10 +562,15 @@ template <int dim>
       VolatilesMelt<dim>::
       T_solidus_liquidus (const double pressure, 
                           std::vector<double> composition, 
-                          bool compute_solidus) const
+                          bool compute_solidus,
+                          std::vector<double> A,
+                          std::vector<double> B,
+                          std::vector<double> L,
+                          std::vector<double> T0,
+                          std::vector<double> R) const
       {
         // TODO: Exclude invalid compositions (that do not sum up to 1)?
-        const std::vector<double> Tm = melting_temperatures(pressure);
+        const std::vector<double> Tm = melting_temperatures(pressure, A, B, L, T0);
 
         // Set starting guess for Tsol
         const double minTm = *std::min_element(Tm.begin(), Tm.end());
@@ -565,7 +588,7 @@ template <int dim>
 
         double T_solidus = std::max(minTm, std::min(maxTm, mean_Tm));
 
-        std::vector<double> K = partition_coefficients(pressure, T_solidus);
+        std::vector<double> K = partition_coefficients(pressure, T_solidus, A, B, L, T0, R);
 
 const double tolerance = 1e-10;
 const unsigned int max_iterations = 200;
@@ -579,10 +602,10 @@ while (std::abs(residual) > tolerance && n < max_iterations)
     const double eps_T = std::max(1e-6, 1e-6 * std::abs(T_solidus));
 
     // Central difference derivative
-    K = partition_coefficients(pressure, T_solidus + eps_T);
+    K = partition_coefficients(pressure, T_solidus + eps_T, A, B, L, T0, R);
     double residual_plus = compute_residual(composition, K, compute_solidus);
 
-    K = partition_coefficients(pressure, T_solidus - eps_T);
+    K = partition_coefficients(pressure, T_solidus - eps_T, A, B, L, T0, R);
     double residual_minus = compute_residual(composition, K, compute_solidus);
 
     const double dresidualdT = (residual_plus - residual_minus) / (2.0 * eps_T);
@@ -597,7 +620,7 @@ while (std::abs(residual) > tolerance && n < max_iterations)
     T_solidus += 0.8 * delta_T;  // 0.8 damping factor
 
     // Recompute residual
-    K = partition_coefficients(pressure, T_solidus);
+    K = partition_coefficients(pressure, T_solidus, A, B, L, T0, R);
     residual = compute_residual(composition, K, compute_solidus);
 
     ++n;
@@ -618,7 +641,11 @@ if (n == max_iterations) {
 
     template <int dim>
     std::vector<double>
-    VolatilesMelt<dim>::melting_temperatures(const double pressure) const
+    VolatilesMelt<dim>::melting_temperatures(const double pressure,
+                                             std::vector<double> A,
+                                             std::vector<double> B,
+                                             std::vector<double> L,
+                                             std::vector<double> T0) const
     {
         std::vector<double> Tm (n_components);
 
@@ -653,11 +680,16 @@ if (n == max_iterations) {
     template <int dim>
     std::vector<double>
     VolatilesMelt<dim>::partition_coefficients(const double pressure, 
-                                                const double temperature) const
+                                                const double temperature,
+                                                std::vector<double> A,
+                                                std::vector<double> B,
+                                                std::vector<double> L,
+                                                std::vector<double> T0,
+                                                std::vector<double> R) const
     {
         std::vector<double> K (n_components);
 
-        std::vector<double> Tm = melting_temperatures(pressure);
+        std::vector<double> Tm = melting_temperatures(pressure, A, B, L, T0);
 
         // Parameterization after Rudge, Bercovici, & Spiegelman (2010)
         for (unsigned int i=0; i<n_components; ++i) 
@@ -708,7 +740,61 @@ if (n == max_iterations) {
               final_reaction_rate = 0.0;
 
       return final_reaction_rate;
-    }     
+    }
+
+    template <int dim>
+    double
+    VolatilesMelt<dim>::linear_interpolation(double P,
+                                                 double P1,
+                                                 double P2,
+                                                 double v1,
+                                                 double v2) const
+    {
+      // Linear interpolation
+      double t = (P - P1) / (P2 - P1);
+      double value = v1 + t * (v2 - v1);
+
+      // Clamp so that we don't extrapolate beyond val1–val2
+      return std::clamp(value, std::min(v1, v2), std::max(v1, v2));
+
+    }
+
+      template <int dim>
+      void
+      VolatilesMelt<dim>::initialize_component_values (std::vector<double> &Ac,
+                                                          std::vector<double> &Bc,
+                                                          std::vector<double> &Lc,
+                                                          std::vector<double> &Tc,
+                                                          std::vector<double> &Rc,
+                                                          const double pressure) const
+      {
+        double P1 = 1.8e9; double P2 = 2.1e9;
+
+        // High pressure parameters for cmorb
+        double T2 = 1238; double A2 = 10e-9; double B2=4e-18;
+        for (unsigned int i=0; i<n_components; ++i) 
+        {
+            Ac[i] = Ai[i];
+            Bc[i] = Bi[i];
+            Lc[i] = Li[i];
+            Tc[i] = T0i[i];
+            Rc[i] = Ri[i];
+        }
+
+      /*if(pressure >= P2)
+       {
+          Ac[2] = A2;
+          Bc[2] = B2;
+          Tc[2] = T2;
+       }
+       else if (pressure < P2 && pressure > P1)
+       {
+          Ac[2] = linear_interpolation(pressure, P1, P2, Ai[2], A2);
+          Bc[2] = linear_interpolation(pressure, P1, P2, Bi[2], B2);
+          Tc[2] = linear_interpolation(pressure, P1, P2, T0i[2], T2);
+       }*/
+
+      }        
 
 
       template <int dim>
@@ -726,7 +812,7 @@ if (n == max_iterations) {
                                  "of peridotite. "
                                  "Units: \\si{\\degreeCelsius}.");
               prm.declare_entry ("A", "1.329e-7",
-                                 Patterns::List(Patterns::Double (0.)),
+                                 Patterns::List(Patterns::Double ()),
                                  "Prefactor of the linear pressure term "
                                  "in the quadratic function that approximates "
                                  "the solidus of peridotite. "
@@ -857,19 +943,19 @@ if (n == max_iterations) {
         prm.enter_subsection("Volatiles model");
         {
             n_components = prm.get_integer("Number of components");
-            T0 = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("T0"))),
+            T0i = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("T0"))),
                                                                           n_components,
                                                                           "Thermal diffusivities");
-            A = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("A"))),
+            Ai = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("A"))),
                                                                           n_components,
                                                                           "Thermal diffusivities");                                                              
-            B = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("B"))),
+            Bi = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("B"))),
                                                                           n_components,
                                                                           "Thermal diffusivities");
-            L = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("L"))),
+            Li = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("L"))),
                                                                           n_components,
                                                                           "Thermal diffusivities");
-            R = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("R"))),
+            Ri = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("R"))),
                                                                           n_components,
                                                                           "Thermal diffusivities");
             fluid_density_difference         = prm.get_double ("Fluid density difference");
