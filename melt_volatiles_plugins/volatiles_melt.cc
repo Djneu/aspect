@@ -781,7 +781,7 @@ if (n == max_iterations) {
             Rc[i] = Ri[i];
         }
 
-      /*if(pressure >= P2)
+      if(pressure >= P2)
        {
           Ac[2] = A2;
           Bc[2] = B2;
@@ -792,7 +792,7 @@ if (n == max_iterations) {
           Ac[2] = linear_interpolation(pressure, P1, P2, Ai[2], A2);
           Bc[2] = linear_interpolation(pressure, P1, P2, Bi[2], B2);
           Tc[2] = linear_interpolation(pressure, P1, P2, T0i[2], T2);
-       }*/
+       }
 
       }        
 
