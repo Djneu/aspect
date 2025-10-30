@@ -305,12 +305,12 @@ template <int dim>
         double avg_rho_new = avg_rho; // Will be updated later.
         double Fmass_old = Fvol_old*rho_l/avg_rho;
 
-        if(ep == 1)
+        /*if(ep == 1)
         {
           double cppm = (Fmass_old * cmorb_cl + (1 - Fmass_old)*cmorb_cs) * 20/100 * 1e6;
           double cmass = (Fmass_old * cmorb_cl * rho_l + (1 - Fmass_old)*cmorb_cs*rho_s) * 20/100;
           std::cout<<"Old: "<<cppm<<" "<<cmass<<std::endl;
-        }
+        }*/
    
         // Now that things are ordered, find the bulk composition for each component.
         for (unsigned int i=0; i<n_components; ++i)
@@ -538,12 +538,12 @@ template <int dim>
             }
           }
 
-        if(ep == 1)
+        /*if(ep == 1)
         {
           double cppm = (Fmass_new * ccl + (1 - Fmass_new)*ccs) * 20/100 * 1e6;
           double cmass = (Fmass_new * ccl * rho_l + (1 - Fmass_new)*ccs*rho_s) * 20/100;
           std::cout<<"New: "<<Fmass_old<<" "<<Fmass_new<<" "<<cppm<<" "<<cmass<<std::endl;
-        }
+        }*/
 
           if(reaction_time_step_size > 0)
             melt_reaction_rate += Fvol_old * rho_l * (1.0 / avg_rho - 1.0 / avg_rho_new) / reaction_time_step_size;
