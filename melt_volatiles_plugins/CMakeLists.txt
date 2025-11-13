@@ -46,6 +46,10 @@ DEAL_II_INITIALIZE_CACHED_VARIABLES()
 SET(TARGET "volatile_plugin")
 PROJECT(${TARGET})
 
-ADD_LIBRARY(${TARGET} SHARED /home/bbpdneu1/software/co2/aspect/melt_volatiles_plugins/volatiles_melt.cc /home/bbpdneu1/software/co2/aspect/melt_volatiles_plugins/melt_simple_volatiles.cc /home/bbpdneu1/software/co2/aspect/melt_volatiles_plugins/volatiles_melt_postprocess.cc
+ADD_LIBRARY(${TARGET} SHARED /mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/volatile_concentration.cc 
+/mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/volatiles_melt.cc 
+/mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/melt_simple_volatiles.cc 
+/mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/volatiles_melt_postprocess.cc
+/mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/detailed_flux.cc
 )
 ASPECT_SETUP_PLUGIN(${TARGET})
