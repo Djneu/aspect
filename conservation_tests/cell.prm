@@ -1,0 +1,329 @@
+# 2d model for melting and melt transport at a mid-ocean ridge.
+# As the flow at mid-ocean ridges can be assumed to be roughly symmetric
+# with respect to the ridge axis in the center, we only model one half
+# of the ridge.
+
+# plugins has correction, plugins 2 does not.
+set Additional shared libraries = /mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/plugins_noconserve/libvolatile_plugin.release.so
+set Dimension                              = 2
+set Adiabatic surface temperature          = 1623
+set Resume computation = false
+
+# Because our model includes melt transport, it is nonlinear and we have to
+# use an iterative solver scheme, that iterates between solving the temperature
+# composition and Stokes equations.
+
+set Nonlinear solver scheme                = iterated Advection and Stokes
+set Output directory                       = singlecell
+set Max nonlinear iterations = 1
+
+# The end time of the simulation. We want to run the model until it reaches
+# steady state, which is after approximately 6 million years.
+set End time                               = 100e3
+set CFL number = 0.25
+set Surface pressure = 2.9e9
+set Maximum time step = 1000
+set Timing output frequency = 1
+set Nonlinear solver tolerance = 1e-5
+
+##################### Melting and freezing ########################
+
+# Because the model includes reactions that might be on a faster time scale
+# than the time step of the model (melting and the freezing of melt), we use
+# the operator splitting scheme.
+set Use operator splitting                     = true
+
+
+# We write a checkpoint every 100 time steps, so that we are able to restart
+# the computation from that point.
+subsection Checkpointing
+  set Steps between checkpoint = 100
+end
+
+subsection Discretization
+  set Composition polynomial degree = 2
+  set Stokes velocity polynomial degree = 2
+end
+
+subsection Solver parameters
+  # Because this model includes strong localized viscosity contrasts we
+  # increase the robustness of the solver at the cost of memory consumption.
+
+  subsection Operator splitting parameters
+    set Reaction time step                     = 500
+    set Reaction time steps per advection step = 2
+    set Reaction solver type =  fixed step 
+  end
+
+  subsection Stokes solver parameters
+    set GMRES solver restart length = 200
+    set Stokes solver type = block AMG 
+    set Maximum number of expensive Stokes solver steps = 5000
+end
+end
+
+# We use the melt simple material model that includes melting and freezing of
+# melt for an average mantle composition that is characteristic for a mid-ocean
+# ridge setting, and mainly use its default parameters.
+# In particular, we have to define how fast melting and freezing should be.
+# We assume that both reactions happen on a time scale of 200 years (or a rate
+# of 5e-3/year), which should be substantially shorter than the time step size,
+# so that the melt fraction will always be close to equilibrium.
+# As the model includes melting and freezing, we do not have to extract any melt.
+# We also slightly reduce the dependence of shear viscosity on the melt
+# fraction, because the model is relatively coarse and would otherwise develop
+# velocity oscillations in the region of highest melt content.
+
+subsection Material model
+  set Model name = melt simple volatiles
+
+  subsection Melt simple volatiles
+    set Reference solid density = 3200
+    set Thermal expansion coefficient = 2e-5
+    set Thermal conductivity = 0
+    set Reference specific heat = 1250
+    set Reference shear viscosity = 5e20
+    set Thermal viscosity exponent = 0.0
+    set Reference solid density = 3200
+
+    subsection Reaction model
+      
+      # See Keller and Katz, 2016 for parameters.
+      subsection Volatiles model
+        set Number of components = 4   # At the moment this should always be 4.
+        set Fluid density difference = 500
+        set A = 45e-9, 112e-9, 30.1e-9, 40.8e-9
+        set B = -2e-18, -3.37e-18, -1.88e-18, -1.54e-18
+        set L = 600e3, 450e3, 350e3, 350e3
+        set R = 60, 30, 30, 30
+        set T0 = 2053, 1273, 913, 983
+
+        set Melting time scale for operator splitting = 1000
+        set Reference permeability = 1e-7
+        set Reference melt viscosity = 100
+        set Maximum pressure for melt = 12e9
+        set Exponential melt weakening factor = 30
+        set Reference bulk viscosity = 5e20
+        set Extraction depth = 0
+        set Use fractional melting = false
+      end
+    end
+
+
+  end
+end
+
+subsection Boundary fluid pressure model
+subsection Density
+    set Density formulation = solid density #default solid density
+  end
+end
+
+##################### Model geometry ########################
+
+# Our model geometry is a box of 105x70 km. This guarantees that inflowing
+# material is solid, and will start to melt within the model domain.
+subsection Geometry model
+  set Model name = box
+
+  subsection Box
+    set X extent      = 1e3
+    set Y extent      = 1e3
+
+    # To keep the aspect ratio of our elements close to one, we chose the
+    # coarse mesh is such a way that it has more elements in X than in Y
+    # direction, in the same ratio as the aspect ratio of the model.
+    set X repetitions = 1
+    set Y repetitions = 1
+  end
+end
+
+# The gravity is constant and points downward.
+subsection Gravity model
+  set Model name = vertical
+
+  subsection Vertical
+    set Magnitude = 0.0
+  end
+end
+
+##################### Velocity ########################
+
+# To model the divergent velocitiy field of a mid-ocean ridge, we prescribe
+# the plate velocity (pointing away from the ridge) at the top boundary.
+# We use a closed boundary with free slip conditions as the left boundary, which
+# marks the ridge axis and also acts as a center line for our model, so that
+# material can not cross this boundary.
+# We prescribe the velocity at the top boundary using a function:
+# At the ridge axis, the velocity is zero, at a distance of 10 km from the ridge
+# axis or more, the rigid plate uniformly moves away from the ridge with a constant
+# speed, and close to the ridge we interpolate between these two conditions.
+subsection Boundary velocity model
+  set Tangential velocity boundary indicators = left, right, top, bottom
+end
+
+##################### Temperature ########################
+
+# As initial temperature, we choose an adiabatic profile with boundary layers at the
+# top and the bottom. We make the top boundary layer very old (100 Ma) so that in the
+# beginning, the material is still solid and the porosity is zero.
+subsection Initial temperature model
+  set Model name = function
+
+  subsection Function
+    set Function expression = 1550 #1623 1400 1900 1716
+  end
+
+end  
+
+# We choose a constant temperature at the top and bottom of the domain.
+# In particular, the bottom boundary temperature will control the steady state
+# temperature profile, and we choose a potential temperature of 1570 K (1300 °C).
+subsection Boundary temperature model
+  set Fixed temperature boundary indicators = #top, bottom
+  set List of model names = #box
+
+  subsection Box
+    set Top temperature = 1000
+    set Bottom temperature = 1000
+  end
+end
+
+# We want to include latent heat of melting and freezing in the model, as it is
+# an essential process for the temperature evolution, but as the model domain
+# is quite small and this is a simple model, we do not include any other sources
+# of heat.
+subsection Heating model
+  set List of model names = function,  #latent heat melt #adiabatic heating of melt,  # 
+
+  subsection Function
+    set Variable names      = x,y,t
+    set Function expression = if(t<500e3, 150/15/3.154e+7, -300/10/3.154e+7)
+  end
+
+  subsection Latent heat melt
+    set Retrieve entropy change from material model = true
+  end
+end
+
+# Melt moves with a different velocity than the solid, and transports energy,
+# so we include this process in the model.
+subsection Melt settings
+  # We want to solve the McKenzie Equations to track the flow of melt.
+  set Include melt transport = true
+  set Heat advection by melt = true
+end
+
+##################### Composition ########################
+
+# We need two compositional fields: The porosity field to track the motion of
+# melt, and the peridotite field to track the depletion of material, which is
+# changed by the melting and freezing reactions.
+subsection Compositional fields
+  set Number of fields = 7
+  set Names of fields = porosity, morb_cs, morb_cl, cmorb_cs, cmorb_cl, hmorb_cs, hmorb_cl
+  set Types of fields = porosity, generic, generic, generic, generic, generic, generic
+  set Compositional field methods = field, field, melt field, field, melt field, field, melt field
+end
+
+# We set both fields to zero at the start of the model: The material is solid
+# (zero porosity) and has the average mantle composition (zero depletion).
+subsection Initial composition model
+  set Model name = function
+
+  subsection Function
+    set Function expression = 0.0; \
+                              0.25; \
+                              0.0; \
+                              0.0005; \   
+                              0.0; \
+                              0.002; \ 
+                              0.0; 
+    set Variable names      = x,y
+  end
+end
+
+#cmorb (100 ppm) 0.0005, hmorb (100 ppm) 0.002
+ #+ 0.025 * (2.0 * rand() - 1.0)
+
+# 0.25, 0.0005, 0.002
+# The boundary conditions (which are relevant for material inflowing at the
+# bottom boundary of the model) are the same as the initial conditions.
+subsection Boundary composition model
+  set Fixed composition boundary indicators   = #bottom, #left
+  set List of model names = initial composition
+end
+
+##################### Mesh refinement #########################
+
+# We use adaptive mesh refinement to increase the resolution in regions where
+# melt is present, and otherwise use a uniform grid.
+subsection Mesh refinement
+  set Coarsening fraction                      = 0.5
+  set Refinement fraction                      = 0.5
+
+  # A refinement level of 5 (4 global + 1 adaptive refinements) corresponds to
+  set Initial adaptive refinement              = 0
+  set Initial global refinement                = 0
+  set Strategy                                 = minimum refinement function, composition threshold
+  set Time steps between mesh refinement       = 1
+
+
+  subsection Minimum refinement function
+    set Coordinate system   = cartesian
+    set Function expression = if(y>290e3 && x<10e3,2,2)
+    set Variable names      = x,y
+  end
+
+  # We use a very small refinement threshold for the porosity to make sure that
+  # all cells where the two-phase flow equations are solved (melt cells) have
+  # the higher resolution.
+  subsection Composition threshold
+    set Compositional field thresholds = 1e-6, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0
+  end
+end
+
+##################### Postprocessing ########################
+
+subsection Postprocess
+  set List of postprocessors = visualization, volatile statistics
+
+  # We mainly want to look at material properties of the solid and the melt.
+  subsection Visualization
+    set List of output variables      = material properties, adiabat, heating, strain rate, volatile concentrations, #volatiles melt post
+    set Time between graphical output = 0
+    set Interpolate output = false
+    set Write higher order output = false
+    set Point-wise stress and strain = true
+
+    subsection Material properties
+      set List of material properties = density, viscosity
+    end
+
+      # See Keller and Katz, 2016 for parameters.
+      subsection Volatiles melt
+        set Number of components = 4   # At the moment this should always be 4.
+        set A = 45e-9, 112e-9, 30.1e-9, 40.8e-9
+        set B = -2e-18, -3.37e-18, -1.88e-18, -1.54e-18
+        set L = 600e3, 450e3, 350e3, 350e3
+        set R = 60, 30, 30, 30
+        set T0 = 2053, 1273, 913, 983
+
+        set Maximum pressure for melt = 12e9
+      end
+
+      subsection Volatiles concentration
+        set Fluid density difference = 500
+      end
+
+    # To see in which cells melt transport is modelled, it can be useful to look
+    # at the property 'is melt cell', so we include it in the output. In addition,
+    # we always visualize the compaction pressure 'p_c' if this postprocessor is
+    # used.
+    subsection Melt material properties
+      set List of properties = compaction viscosity, permeability, fluid density, is melt cell, fluid viscosity
+    end
+  end
+end
+
+
