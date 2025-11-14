@@ -338,8 +338,8 @@ template <int dim>
           const double T_solidus = T_solidus_liquidus(pressure, C_bar, true, A, B, L, T0, R);
           const double T_liquidus = T_solidus_liquidus(pressure, C_bar, false, A, B, L, T0, R);
 
-          std::vector<double> Tm = melting_temperatures(pressure, A, B, L, T0);
-          std::vector<double> K = partition_coefficients(pressure, std::max(T_solidus,std::min(T_liquidus,temperature)), A, B, L, T0, R);
+          small_vector<double> Tm = melting_temperatures(pressure, A, B, L, T0);
+          small_vector<double> K = partition_coefficients(pressure, std::max(T_solidus,std::min(T_liquidus,temperature)), A, B, L, T0, R);
           
           // Calculate equilibrium melt fraction.
           Fmass_new = Fmass_old;
@@ -570,7 +570,7 @@ template <int dim>
                           std::vector<double> R) const
       {
         // TODO: Exclude invalid compositions (that do not sum up to 1)?
-        const std::vector<double> Tm = melting_temperatures(pressure, A, B, L, T0);
+        const small_vector<double> Tm = melting_temperatures(pressure, A, B, L, T0);
 
         // Set starting guess for Tsol
         const double minTm = *std::min_element(Tm.begin(), Tm.end());
@@ -588,7 +588,7 @@ template <int dim>
 
         double T_solidus = std::max(minTm, std::min(maxTm, mean_Tm));
 
-        std::vector<double> K = partition_coefficients(pressure, T_solidus, A, B, L, T0, R);
+        small_vector<double> K = partition_coefficients(pressure, T_solidus, A, B, L, T0, R);
 
 const double tolerance = 1e-10;
 const unsigned int max_iterations = 200;
@@ -640,14 +640,14 @@ if (n == max_iterations) {
     }
 
     template <int dim>
-    std::vector<double>
+    small_vector<double>
     VolatilesMelt<dim>::melting_temperatures(const double pressure,
-                                             std::vector<double> A,
-                                             std::vector<double> B,
-                                             std::vector<double> L,
-                                             std::vector<double> T0) const
+                                             const std::vector<double> &A,
+                                             const std::vector<double> &B,
+                                             const std::vector<double> &L,
+                                             const std::vector<double> &T0) const
     {
-        std::vector<double> Tm (n_components);
+        small_vector<double> Tm (n_components);
 
         const double Pmax = 6e9;
         if(use_simons_law)
@@ -678,24 +678,23 @@ if (n == max_iterations) {
 
 
     template <int dim>
-    std::vector<double>
+    small_vector<double>
     VolatilesMelt<dim>::partition_coefficients(const double pressure, 
                                                 const double temperature,
-                                                std::vector<double> A,
-                                                std::vector<double> B,
-                                                std::vector<double> L,
-                                                std::vector<double> T0,
-                                                std::vector<double> R) const
+                                                const std::vector<double> &A,
+                                                const std::vector<double> &B,
+                                                const std::vector<double> &L,
+                                                const std::vector<double> &T0,
+                                                const std::vector<double> &R) const
     {
-        std::vector<double> K (n_components);
-
-        std::vector<double> Tm = melting_temperatures(pressure, A, B, L, T0);
+        small_vector<double> K (n_components);
+        const small_vector<double> Tm = melting_temperatures(pressure, A, B, L, T0);
 
         // Parameterization after Rudge, Bercovici, & Spiegelman (2010)
         for (unsigned int i=0; i<n_components; ++i) 
         {
             // L/T gives the change in entropy.
-            double Ls = L[i]/T0[i]*temperature;
+            const double Ls = L[i]/T0[i]*temperature;
             K[i] = std::exp(Ls/R[i] * (1./temperature - 1./Tm[i]));
         }
 
@@ -704,9 +703,9 @@ if (n == max_iterations) {
 
     template <int dim>
     double 
-    VolatilesMelt<dim>::compute_residual (std::vector<double> composition,
-                      std::vector<double> K,
-                      bool compute_solidus) const
+    VolatilesMelt<dim>::compute_residual (const std::vector<double> &composition,
+                      const small_vector<double> &K,
+                      const bool compute_solidus) const
     {
       double residual = -1.;
       for (unsigned int i=0; i<n_components; ++i) 
