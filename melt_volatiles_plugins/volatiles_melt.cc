@@ -18,7 +18,7 @@
   <http://www.gnu.org/licenses/>.
 */
 
-#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/volatiles_melt.h>
+#include "volatiles_melt.h"
 #include <aspect/utilities.h>
 #include <aspect/gravity_model/interface.h>
 #include <aspect/adiabatic_conditions/interface.h>
