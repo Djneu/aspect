@@ -2,7 +2,7 @@
 # As the flow at mid-ocean ridges can be assumed to be roughly symmetric
 # with respect to the ridge axis in the center, we only model one half
 # of the ridge.
-set Additional shared libraries = /mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/plugin_simon/libvolatile_plugin.release.so
+set Additional shared libraries = ../melt_volatiles_plugins/libvolatile_plugin.so
 
 set Dimension                              = 2
 set Adiabatic surface temperature          = 1623

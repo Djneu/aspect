@@ -18,7 +18,7 @@
   <http://www.gnu.org/licenses/>.
 */
 
-#include </mnt/vast-nhr/home/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/volatile_concentration.h>
+#include "volatile_concentration.h"
 #include <aspect/melt.h>
 #include <deal.II/base/parameter_handler.h>
 #include <aspect/simulator.h>

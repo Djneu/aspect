@@ -67,28 +67,28 @@ namespace aspect
           parse_parameters (ParameterHandler &prm);
 
                     // Calculate melting temperature for each composition.
-          std::vector<double>
+          small_vector<double>
           melting_temperatures(const double pressure,
-                              std::vector<double> A,
-                              std::vector<double> B,
-                              std::vector<double> L,
-                              std::vector<double> T0) const;
+                              const std::vector<double> &A,
+                              const std::vector<double> &B,
+                              const std::vector<double> &L,
+                              const std::vector<double> &T0) const;
 
           // Calculate melting temperature for each composition.
           double
-          compute_residual(std::vector<double> composition,
-                      std::vector<double> K,
-                      bool compute_solidus) const;
+          compute_residual(const std::vector<double> &composition,
+                      const small_vector<double> &K,
+                      const bool compute_solidus) const;
 
           // Calculate melting temperature for each composition.
-          std::vector<double>
+          small_vector<double>
           partition_coefficients(const double pressure,
                                const double temperature,
-                               std::vector<double> A,
-                               std::vector<double> B,
-                               std::vector<double> L,
-                               std::vector<double> T0,
-                               std::vector<double> R) const;
+                               const std::vector<double> &A,
+                               const std::vector<double> &B,
+                               const std::vector<double> &L,
+                               const std::vector<double> &T0,
+                               const std::vector<double> &R) const;
 
           double
           T_solidus_liquidus (const double pressure, 
