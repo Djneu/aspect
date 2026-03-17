@@ -102,6 +102,9 @@ namespace aspect
                   {
                     if (c == porosity_idx)
                     {
+                          if(q==1)
+                            std::cout<<"output: "<<melt_reaction_rate<<std::endl;
+
                           reaction_rate_out->reaction_rates[q][c] = get_reaction_rate(in.composition[q][c], 
                                                                                       melt_reaction_rate, 
                                                                                       reaction_time_step_size,
@@ -305,12 +308,14 @@ template <int dim>
         double avg_rho_new = avg_rho; // Will be updated later.
         double Fmass_old = Fvol_old*rho_l/avg_rho;
 
-        /*if(ep == 1)
+        if(ep == 1)
         {
           double cppm = (Fmass_old * cmorb_cl + (1 - Fmass_old)*cmorb_cs) * 20/100 * 1e6;
-          double cmass = (Fmass_old * cmorb_cl * rho_l + (1 - Fmass_old)*cmorb_cs*rho_s) * 20/100;
-          std::cout<<"Old: "<<cppm<<" "<<cmass<<std::endl;
-        }*/
+          double cmass = (Fvol_old * cmorb_cl * rho_l + (1 - Fvol_old)*cmorb_cs*rho_s) * 20/100;
+          std::cout<<"Plugin start: ppm | mass | liquid | solid | porosity | volume | int_mass"<<std::endl;
+          std::cout<<"Plugin start: "<<cppm<<" | "<<cmass<<" | "<<cmorb_cl<<" | "<<cmorb_cs<<" | "<<Fvol_old<<" | "<<this->get_volume()<<" | "<<this->get_volume()*cmass<<std::endl;
+          std::cout<<"----"<<std::endl;
+        }
    
         // Now that things are ordered, find the bulk composition for each component.
         for (unsigned int i=0; i<n_components; ++i)
@@ -401,16 +406,18 @@ template <int dim>
           //if(Fmass_new*(avg_rho/rho_l) > 0.3)
           //  Fmass_new = 0.3 * (rho_l / avg_rho);
 
-          double dcl = std::max(0.0, std::min(1.0, C_bar[0] / (Fmass_new + (1 - Fmass_new) * K[0])));
+          //double dcl = std::max(0.0, std::min(1.0, C_bar[0] / (Fmass_new + (1 - Fmass_new) * K[0])));
           double mcl = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new + (1 - Fmass_new) * K[1])));
           double ccl = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new + (1 - Fmass_new) * K[2])));     
           double hcl = std::max(0.0, std::min(1.0, C_bar[3] / (Fmass_new + (1 - Fmass_new) * K[3])));
+          double dcl = std::max(0. ,(1 - mcl - ccl - hcl)); 
           
           // Solid values, these aren't actually used for the reaction rates so can remove.
-          double dcs = std::max(0.0, std::min(1.0, C_bar[0] / (Fmass_new / K[0] + (1 - Fmass_new))));
+          //double dcs = std::max(0.0, std::min(1.0, C_bar[0] / (Fmass_new / K[0] + (1 - Fmass_new))));
           double mcs = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new / K[1] + (1 - Fmass_new))));
           double ccs = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new / K[2] + (1 - Fmass_new))));
           double hcs = std::max(0.0, std::min(1.0, C_bar[3] / (Fmass_new / K[3] + (1 - Fmass_new))));
+          double dcs = std::max(0. ,(1 - mcs - ccs - hcs)); 
         
           // Define reaction rate parameters and calculate rates for each component.
           std::vector<double> Gamma (n_components);
@@ -545,8 +552,23 @@ template <int dim>
           std::cout<<"New: "<<Fmass_old<<" "<<Fmass_new<<" "<<cppm<<" "<<cmass<<std::endl;
         }*/
 
+          // Correct for the change in avg_rho.
           if(reaction_time_step_size > 0)
             melt_reaction_rate += Fvol_old * rho_l * (1.0 / avg_rho - 1.0 / avg_rho_new) / reaction_time_step_size;
+
+        if(ep == 1)
+        {
+          double Fvol_new = Fmass_new*(avg_rho_new/rho_l);
+          double cppm = (Fmass_new * ccl + (1 - Fmass_new)*ccs) * 20/100 * 1e6;
+          double cmass = (Fvol_new * ccl * rho_l + (1 - Fvol_new)*ccs*rho_s) * 20/100;
+          //td::cout<<"Plugin end: "<<melt_reaction_rate*(avg_rho_new/rho_l)<<" new avg_rho: "<<avg_rho_new<<" old avg_rho: "<<avg_rho<<std::endl;
+          //std::cout<<"New: "<<Fmass_old<<" "<<Fmass_new<<" "<<cppm<<" "<<cmass<<" "<<melt_reaction_rate<<std::endl;
+
+          //std::cout<<"Plugin end: ppm | mass | liquid | solid | porosity | reaction_rate | old_avg_rho | new_avg_rho"<<std::endl;
+          //std::cout<<"Plugin end: "<<cppm<<" | "<<cmass<<" | "<<ccl<<" | "<<ccs<<" | "<<Fvol_new<<" | "<<melt_reaction_rate*(avg_rho_new/rho_l)<<" | "<<avg_rho<<" | "<<avg_rho_new<<std::endl;
+          //std::cout<<"Plugin end: "<<melt_reaction_rate*(avg_rho_new/rho_l)<<std::endl;
+          //std::cout<<"------------------"<<std::endl;
+        }
 
 
           if(GammaSum != 0)

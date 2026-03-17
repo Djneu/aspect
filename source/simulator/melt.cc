@@ -359,6 +359,13 @@ namespace aspect
                           :
                           0.0);
 
+        if(q_point == 1) 
+        {
+          std::cout<<"************************************************************************************"<<std::endl;
+          std::cout<<"FLUID PRESSURE - melting rate: "<<operator_split_reaction / simulator_access->get_timestep()<<" | "<<operator_split_reaction<<std::endl; 
+          std::cout<<"************************************************************************************"<<std::endl;
+        }
+
         const double solid_compressibility = scratch.material_model_outputs.compressibilities[q_point];
         const Tensor<1,dim> fluid_density_gradient = melt_out->fluid_density_gradients[q_point];
         const Tensor<1,dim> current_u = scratch.velocity_values[q_point];
