@@ -130,7 +130,7 @@ namespace aspect
                   double rho_l = fluid_out->fluid_densities[q];
 
                   double avg_rho = Fvol*rho_l + (1 - Fvol)*rho_s;
-                  double Fmass = Fvol*rho_l/avg_rho; 
+                  double Fmass = Fvol; //*rho_l/avg_rho; 
 
                   local_co2_flux += (20./100 *  
                     (
@@ -264,7 +264,7 @@ namespace aspect
               double rho_l = fluid_out_fe->fluid_densities[q];
 
               double avg_rho = Fvol_values[q]*rho_l + (1 - Fvol_values[q])*rho_s;
-              double Fmass = Fvol_values[q]*rho_l/avg_rho;
+              double Fmass = Fvol_values[q]; //*rho_l/avg_rho;
               double liquid_mass = Fmass * ccl_values[q] * rho_l * 20/100 * fe_values.JxW(q);
               double solid_mass = (1-Fmass) * ccs_values[q] * rho_s * 20/100 *fe_values.JxW(q);
 

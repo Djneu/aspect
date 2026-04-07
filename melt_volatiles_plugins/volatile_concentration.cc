@@ -111,7 +111,7 @@ namespace aspect
 
               // We track the volume fraction of melt, convert to mass fraction here.
               const double avg_rho = Fvol*rho_l + (1 - Fvol)*rho_ss;
-              const double Fmass = Fvol*rho_l/avg_rho;                                                                      
+              const double Fmass = Fvol; //Fvol*rho_l/avg_rho;                                                                      
 
               // Compute ppm of different compositions. Here we use the C_bar calculated from the mass fraction,
               // and multiply it by the weight percent that is co2 or h2o, and then apply a scaling factor.
