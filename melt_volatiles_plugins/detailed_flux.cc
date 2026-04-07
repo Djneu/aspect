@@ -112,7 +112,7 @@ namespace aspect
                   double rho_l = fluid_out->fluid_densities[q];
 
                   double avg_rho = Fvol*rho_l + (1 - Fvol)*rho_s;
-                  double Fmass = Fvol*rho_l/avg_rho; 
+                  double Fmass = Fvol; //*rho_l/avg_rho; 
 
                   
                   local_normal_flux += (20./100 *  
