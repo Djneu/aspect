@@ -111,7 +111,7 @@ namespace aspect
 
               // We track the volume fraction of melt, convert to mass fraction here.
               const double avg_rho = Fvol*rho_l + (1 - Fvol)*rho_ss;
-              const double Fmass = Fvol; //Fvol*rho_l/avg_rho;                                                                      
+              const double Fmass = Fvol*rho_l/avg_rho;                                                                      
 
               // Compute ppm of different compositions. Here we use the C_bar calculated from the mass fraction,
               // and multiply it by the weight percent that is co2 or h2o, and then apply a scaling factor.
@@ -121,13 +121,13 @@ namespace aspect
               computed_quantities[q](0) = (Fmass * cmorb_cl + (1 - Fmass)*cmorb_cs) * cwt/100 * 1e6;
 
               // Mass of Co2, in this case we do not scale to ppm.
-              computed_quantities[q](1) = (Fmass * cmorb_cl * rho_l + (1 - Fmass)*cmorb_cs*rho_ss) * cwt/100;
+              computed_quantities[q](1) = (Fvol * cmorb_cl * rho_l + (1 - Fvol)*cmorb_cs*rho_ss) * cwt/100;
 
               computed_quantities[q](2) = (Fmass * hmorb_cl + (1 - Fmass) * hmorb_cs) * hwt/100 * 1e6;
-              computed_quantities[q](3) = (Fmass * hmorb_cl * rho_l + (1 - Fmass)*hmorb_cs*rho_ss) * hwt/100;
+              computed_quantities[q](3) = (Fvol * hmorb_cl * rho_l + (1 - Fvol)*hmorb_cs*rho_ss) * hwt/100;
 
               computed_quantities[q](4) = (Fmass * morb_cl + (1 - Fmass)*morb_cs) * 100/100 * 1e6;
-              computed_quantities[q](5) = (Fmass * morb_cl * rho_l + (1 - Fmass)*morb_cs*rho_ss) * 100/100;
+              computed_quantities[q](5) = (Fvol * morb_cl * rho_l + (1 - Fvol)*morb_cs*rho_ss) * 100/100;
 
 
         }
