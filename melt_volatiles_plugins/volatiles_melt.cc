@@ -312,8 +312,9 @@ template <int dim>
         {
           double cppm = (Fmass_old * cmorb_cl + (1 - Fmass_old)*cmorb_cs) * 20/100 * 1e6;
           double cmass = (Fvol_old * cmorb_cl * rho_l + (1 - Fvol_old)*cmorb_cs*rho_s) * 20/100;
-          std::cout<<"Plugin start: ppm | mass | liquid | solid | porosity | volume | int_mass"<<std::endl;
-          std::cout<<"Plugin start: "<<cppm<<" | "<<cmass<<" | "<<cmorb_cl<<" | "<<cmorb_cs<<" | "<<Fvol_old<<" | "<<this->get_volume()<<" | "<<this->get_volume()*cmass<<std::endl;
+          double percent_change = (this->get_volume() * cmass - 0.32) / 0.32 * 100.0;
+          std::cout<<"Plugin start: ppm | mass | liquid | solid | porosity | volume | int_mass | percent change"<<std::endl;
+          std::cout<<"Plugin start: "<<cppm<<" | "<<cmass<<" | "<<cmorb_cl<<" | "<<cmorb_cs<<" | "<<Fvol_old<<" | "<<this->get_volume()<<" | "<<this->get_volume()*cmass<<" | "<<percent_change<<std::endl;
           std::cout<<"----"<<std::endl;
         }
    
@@ -427,7 +428,8 @@ template <int dim>
           // constant R factor of 3. We use the model density, so there may be
           // some variation. How important is this? Maybe we don't want to use
           // model density as it will take into consideration other compositions.
-          double R  =  avg_rho/melting_time_scale;
+          double reaction_rho = rho_s;
+          double R  =  reaction_rho/melting_time_scale;
 
           // Check unity, setup new equilibirum liquid in order, and calculate reaction rates.
           comp_sum = dcl + ccl + mcl + hcl;
@@ -500,12 +502,12 @@ template <int dim>
           // From eq. 17b and 17c in Keller and Katz, 2016
           for (unsigned int i=0; i<n_components; ++i)
           {
-            solid_reaction_rates[i] = -(Gamma[i] - c_s[i]*GammaSum) / (std::max(1e-6,(1 - Fmass_new))*avg_rho);
-            liquid_reaction_rates[i] = (Gamma[i] - c_l[i]*GammaSum) / (std::max(1e-6,Fmass_new)*avg_rho);
+            solid_reaction_rates[i] = -(Gamma[i] - c_s[i]*GammaSum) / (std::max(1e-6,(1 - Fmass_new))*reaction_rho);
+            liquid_reaction_rates[i] = (Gamma[i] - c_l[i]*GammaSum) / (std::max(1e-6,Fmass_new)*reaction_rho);
           }
 
           // Melt reaction rate using mass fraction
-          melt_reaction_rate = GammaSum/avg_rho;
+          melt_reaction_rate = GammaSum/reaction_rho;
 
           // Find the mass fraction of melt we will have at the end of the reaction step. 
           double melt_reaction_step = Fmass_old + melt_reaction_rate * reaction_time_step_size;
