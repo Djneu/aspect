@@ -26,7 +26,12 @@
 #include <aspect/material_model/equation_of_state/multicomponent_incompressible.h>
 #include <aspect/material_model/rheology/visco_plastic.h>
 
-#include<deal.II/fe/component_mask.h>
+#include <deal.II/fe/component_mask.h>
+#include <deal.II/fe/component_mask.h>
+//#include "../../../melt_volatiles_plugins/volatiles_melt.h"
+//#include "melt_volatiles_plugins/volatiles_melt.h"
+#include "/user/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/volatiles_melt.h"
+#include <aspect/melt.h>
 
 namespace aspect
 {
@@ -181,7 +186,9 @@ namespace aspect
      * @ingroup MaterialModels
      */
     template <int dim>
-    class ViscoPlastic : public MaterialModel::Interface<dim>, public ::aspect::SimulatorAccess<dim>
+    class ViscoPlastic : public MaterialModel::MeltInterface<dim>,
+      public MaterialModel::MeltFractionModel<dim>,
+      public ::aspect::SimulatorAccess<dim>
     {
       public:
         /**
@@ -205,6 +212,16 @@ namespace aspect
          * This material model is incompressible.
          */
         bool is_compressible () const override;
+
+        void melt_fractions (const MaterialModel::MaterialModelInputs<dim> &in,
+                             std::vector<double> &melt_fractions,
+                             const MaterialModel::MaterialModelOutputs<dim> *) const override;
+
+        /**
+         * @name Reference quantities
+         * @{
+         */
+        double reference_darcy_coefficient () const override;
 
         static
         void
@@ -279,6 +296,11 @@ namespace aspect
          * Object that handles discrete phase transitions for the rheology if requested by the variable use_dominant_phase_for_viscosity.
          */
         std::unique_ptr<MaterialUtilities::PhaseFunctionDiscrete<dim>> phase_function_discrete;
+
+        /*
+        * Object for computing the melt parameters
+        */
+        ReactionModel::VolatilesMelt<dim> volatile_model;
 
     };
 
