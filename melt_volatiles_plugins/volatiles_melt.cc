@@ -85,15 +85,14 @@ namespace aspect
               for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
                       composition[c] = in.composition[q][c];
 
-              const double ycord = in.position[q](1);
               const double xcord = in.position[q](0);
               const double depth = this->get_geometry_model().depth(in.position[q]);
-              double porosity = in.composition[q][porosity_idx];
+
               // Ignore melt fraction, get melt reaction rate (volume)
               // and solid and liquid reaction rates, ordered as dunite (background field), morb, cmorb, hmorb.
               // Note: At the moment compositions are hardcoded in assuming there is always 4 components.
               const double rho_s = out.densities[q]; //3200
-              auto [vfrac, melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates, enthalpy] = equilibrium(composition, temperature, pressure, ycord, rho_s, q, xcord);
+              auto [vfrac, melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates, enthalpy] = equilibrium(composition, temperature, pressure, rho_s, q);
 
               for (unsigned int c=0; c<in.composition[q].size(); ++c)
                 {
@@ -180,10 +179,10 @@ template <int dim>
       void
       VolatilesMelt<dim>::
       calculate_fluid_outputs(const typename Interface<dim>::MaterialModelInputs &in,
-                              typename Interface<dim>::MaterialModelOutputs &out,
-                              const double reference_T) const
+                              typename Interface<dim>::MaterialModelOutputs &out) const
       {
-        MeltOutputs<dim> *melt_out = out.template get_additional_output<MeltOutputs<dim>>();
+        const std::shared_ptr<MeltOutputs<dim>> melt_out
+          = out.template get_additional_output_object<MeltOutputs<dim>>();
 
         // Next, find fluid outputs.
         if (melt_out != nullptr)
@@ -235,9 +234,9 @@ template <int dim>
         {
           for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
             {
-            // cutoff for viscosity at 30%
-            const double porosity = std::min(0.3, std::max(in.composition[i][porosity_idx],0.0));
-            out.viscosities[i] = std::max(out.viscosities[i] * std::exp(- alpha_phi * porosity),1e15);
+              // cutoff for viscosity at 30%
+              const double porosity = std::min(0.3, std::max(in.composition[i][porosity_idx],0.0));
+              out.viscosities[i] = std::max(out.viscosities[i] * std::exp(- alpha_phi * porosity),1e17);
             }
         }
       }
@@ -249,10 +248,8 @@ template <int dim>
       equilibrium (std::vector<double> composition, 
                      const double temperature, 
                      const double pressure,
-                     const double ycord,
                      const double rho_s,
-                     const int ep,
-                     const double x) const
+                     const int ep) const
       {
         // Define component dependent parameters 
         std::vector<double> C_bar (n_components);
@@ -338,7 +335,7 @@ template <int dim>
           const double T_solidus = T_solidus_liquidus(pressure, C_bar, true, A, B, L, T0, R);
           const double T_liquidus = T_solidus_liquidus(pressure, C_bar, false, A, B, L, T0, R);
 
-          small_vector<double> Tm = melting_temperatures(pressure, A, B, L, T0);
+          small_vector<double> Tm = melting_temperatures(pressure, A, B, T0);
           small_vector<double> K = partition_coefficients(pressure, std::max(T_solidus,std::min(T_liquidus,temperature)), A, B, L, T0, R);
           
           // Calculate equilibrium melt fraction.
@@ -401,16 +398,19 @@ template <int dim>
           //if(Fmass_new*(avg_rho/rho_l) > 0.3)
           //  Fmass_new = 0.3 * (rho_l / avg_rho);
 
-          double dcl = std::max(0.0, std::min(1.0, C_bar[0] / (Fmass_new + (1 - Fmass_new) * K[0])));
+          //Find equilibrium liquid values.
           double mcl = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new + (1 - Fmass_new) * K[1])));
           double ccl = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new + (1 - Fmass_new) * K[2])));     
           double hcl = std::max(0.0, std::min(1.0, C_bar[3] / (Fmass_new + (1 - Fmass_new) * K[3])));
           
-          // Solid values, these aren't actually used for the reaction rates so can remove.
-          double dcs = std::max(0.0, std::min(1.0, C_bar[0] / (Fmass_new / K[0] + (1 - Fmass_new))));
+          // Solid values, these aren't actually used for the reaction rates so can be remove.
           double mcs = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new / K[1] + (1 - Fmass_new))));
           double ccs = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new / K[2] + (1 - Fmass_new))));
           double hcs = std::max(0.0, std::min(1.0, C_bar[3] / (Fmass_new / K[3] + (1 - Fmass_new))));
+
+          // Find dunite and make sure it isn't below zero.
+          double dcs = std::max(0. ,(1 - mcs - ccs - hcs)); 
+          double dcl = std::max(0. ,(1 - mcl - ccl - hcl)); 
         
           // Define reaction rate parameters and calculate rates for each component.
           std::vector<double> Gamma (n_components);
@@ -420,7 +420,8 @@ template <int dim>
           // constant R factor of 3. We use the model density, so there may be
           // some variation. How important is this? Maybe we don't want to use
           // model density as it will take into consideration other compositions.
-          double R  =  avg_rho/melting_time_scale;
+          const double reaction_rho = rho_s;
+          double R  =  reaction_rho/melting_time_scale;
 
           // Check unity, setup new equilibirum liquid in order, and calculate reaction rates.
           comp_sum = dcl + ccl + mcl + hcl;
@@ -493,12 +494,12 @@ template <int dim>
           // From eq. 17b and 17c in Keller and Katz, 2016
           for (unsigned int i=0; i<n_components; ++i)
           {
-            solid_reaction_rates[i] = -(Gamma[i] - c_s[i]*GammaSum) / (std::max(1e-6,(1 - Fmass_new))*avg_rho);
-            liquid_reaction_rates[i] = (Gamma[i] - c_l[i]*GammaSum) / (std::max(1e-6,Fmass_new)*avg_rho);
+            solid_reaction_rates[i] = -(Gamma[i] - c_s[i]*GammaSum) / (std::max(1e-6,(1 - Fmass_new))*reaction_rho);
+            liquid_reaction_rates[i] = (Gamma[i] - c_l[i]*GammaSum) / (std::max(1e-6,Fmass_new)*reaction_rho);
           }
 
           // Melt reaction rate using mass fraction
-          melt_reaction_rate = GammaSum/avg_rho;
+          melt_reaction_rate = GammaSum/reaction_rho;
 
           // Find the mass fraction of melt we will have at the end of the reaction step. 
           double melt_reaction_step = Fmass_old + melt_reaction_rate * reaction_time_step_size;
@@ -570,7 +571,7 @@ template <int dim>
                           std::vector<double> R) const
       {
         // TODO: Exclude invalid compositions (that do not sum up to 1)?
-        const small_vector<double> Tm = melting_temperatures(pressure, A, B, L, T0);
+        const small_vector<double> Tm = melting_temperatures(pressure, A, B, T0);
 
         // Set starting guess for Tsol
         const double minTm = *std::min_element(Tm.begin(), Tm.end());
@@ -644,7 +645,6 @@ if (n == max_iterations) {
     VolatilesMelt<dim>::melting_temperatures(const double pressure,
                                              const std::vector<double> &A,
                                              const std::vector<double> &B,
-                                             const std::vector<double> &L,
                                              const std::vector<double> &T0) const
     {
         small_vector<double> Tm (n_components);
@@ -688,7 +688,7 @@ if (n == max_iterations) {
                                                 const std::vector<double> &R) const
     {
         small_vector<double> K (n_components);
-        const small_vector<double> Tm = melting_temperatures(pressure, A, B, L, T0);
+        const small_vector<double> Tm = melting_temperatures(pressure, A, B, T0);
 
         // Parameterization after Rudge, Bercovici, & Spiegelman (2010)
         for (unsigned int i=0; i<n_components; ++i) 

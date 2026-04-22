@@ -79,7 +79,8 @@ namespace aspect
 
       MeltHandler<dim>::create_material_model_outputs(out);
       in.requested_properties = MaterialModel::MaterialProperties::density;
-      MaterialModel::MeltOutputs<dim> *fluid_out = out.template get_additional_output<MaterialModel::MeltOutputs<dim>>();
+      const std::shared_ptr<MaterialModel::MeltOutputs<dim>> fluid_out
+                  = out.template get_additional_output_object<MaterialModel::MeltOutputs<dim>>();
 
       // for every surface face on which it makes sense to compute a
       // mass flux and that is owned by this processor,
@@ -110,20 +111,16 @@ namespace aspect
 
                   double rho_s = out.densities[q];
                   double rho_l = fluid_out->fluid_densities[q];
-
-                  double avg_rho = Fvol*rho_l + (1 - Fvol)*rho_s;
-                  double Fmass = Fvol*rho_l/avg_rho; 
-
-                  
+              
                   local_normal_flux += (20./100 *  
                     (
-                    (Fmass * cmorb_cl * rho_l * (fluid_velocity_values[q] * fe_face_values.normal_vector(q)))
-                    + ((1 - Fmass) * cmorb_cs * rho_s * (in.velocity[q] * fe_face_values.normal_vector(q)))
+                    (Fvol * cmorb_cl * rho_l * (fluid_velocity_values[q] * fe_face_values.normal_vector(q)))
+                    + ((1 - Fvol) * cmorb_cs * rho_s * (in.velocity[q] * fe_face_values.normal_vector(q)))
                     )
                     * fe_face_values.JxW(q));  
 
-                  local_solid_flux += 0.2 * (1 - Fmass) * cmorb_cs * rho_s * (in.velocity[q] * fe_face_values.normal_vector(q)) * fe_face_values.JxW(q);
-                  local_fluid_flux += 0.2 * Fmass * cmorb_cl * rho_l * (fluid_velocity_values[q] * fe_face_values.normal_vector(q)) * fe_face_values.JxW(q);                   
+                  local_solid_flux += 0.2 * (1 - Fvol) * cmorb_cs * rho_s * (in.velocity[q] * fe_face_values.normal_vector(q)) * fe_face_values.JxW(q);
+                  local_fluid_flux += 0.2 * Fvol * cmorb_cl * rho_l * (fluid_velocity_values[q] * fe_face_values.normal_vector(q)) * fe_face_values.JxW(q);                   
                   }
 
                 const types::boundary_id boundary_indicator
@@ -175,13 +172,21 @@ namespace aspect
 
          
          if(this->get_geometry_model().translate_id_to_symbol_name (p->first) == "left")
+         {
           left_total_flux += p->second * this->get_timestep() / year_in_seconds;
-         if(this->get_geometry_model().translate_id_to_symbol_name (p->first) == "right")
+         }
+         else if(this->get_geometry_model().translate_id_to_symbol_name (p->first) == "right")
+         {
           right_total_flux += p->second * this->get_timestep() / year_in_seconds;
-         if(this->get_geometry_model().translate_id_to_symbol_name (p->first) == "bottom")
+         }
+         else if(this->get_geometry_model().translate_id_to_symbol_name (p->first) == "bottom")
+         {
           bottom_total_flux += p->second * this->get_timestep() / year_in_seconds;
-         if(this->get_geometry_model().translate_id_to_symbol_name (p->first) == "top")
+         }
+         else if(this->get_geometry_model().translate_id_to_symbol_name (p->first) == "top")
+         {
           top_total_flux += p->second * this->get_timestep() / year_in_seconds;
+         }
 
 
           // also make sure that the other columns filled by this object
