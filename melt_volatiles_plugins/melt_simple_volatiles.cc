@@ -81,11 +81,11 @@ namespace aspect
           else
             temperature_dependence -= (in.temperature[q] - reference_T) * thermal_expansivity;
 
-        const double rho_s = 3200; //reference_rho_solid * temperature_dependence;
+        const double rho_s = reference_rho_solid * temperature_dependence;
 
         const double depth = in.position[q](1); //this->get_geometry_model().depth(in.position[q]);
         const double xcord = in.position[q](0);
-        double volume_fraction = std::get<0>(volatile_model.equilibrium(composition, in.temperature[q], pressure, depth, rho_s, q, xcord));
+        double volume_fraction = std::get<0>(volatile_model.equilibrium(composition, in.temperature[q], pressure, rho_s, q));
 
         melt_fractions[q] = volume_fraction;  
       }
@@ -164,7 +164,7 @@ namespace aspect
           out.reaction_terms[q][c] = 0.0;      
       
       volatile_model.calculate_reaction_rate_outputs(in, out);
-      volatile_model.calculate_fluid_outputs(in, out, reference_T);
+      volatile_model.calculate_fluid_outputs(in, out);
       
     }
 

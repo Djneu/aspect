@@ -83,18 +83,14 @@ namespace aspect
       MeltHandler<dim>::create_material_model_outputs(out);
 
       in.requested_properties = MaterialModel::MaterialProperties::density;
-      MaterialModel::MeltOutputs<dim> *fluid_out = out.template get_additional_output<MaterialModel::MeltOutputs<dim>>();
-
-      // Get the compositional values, and limit between 0 and 1.
-      //double rho_s = 3200;
-      //const double rho_l = 2700;
+      const std::shared_ptr<MaterialModel::MeltOutputs<dim>> fluid_out
+                  = out.template get_additional_output_object<MaterialModel::MeltOutputs<dim>>();
 
        // Get the boundary indicators of those boundaries with
       // a free surface.
       std::set<types::boundary_id> is_free_surface;
       if (this->get_parameters().mesh_deformation_enabled == true)
         is_free_surface = this->get_mesh_deformation_handler().get_free_surface_boundary_indicators();
-      
 
       // for every surface face on which it makes sense to compute a
       // mass flux and that is owned by this processor,
@@ -104,11 +100,7 @@ namespace aspect
         if (cell->is_locally_owned())
           for (const unsigned int f : cell->face_indices())
             if (cell->at_boundary(f))
-              {
-
-                const types::boundary_id boundary_ind
-                  = cell->face(f)->boundary_id();
-                  
+              {                
                 fe_face_values.reinit (cell, f);
 
                 // Set use_strain_rates to false since we don't need viscosity
@@ -129,22 +121,12 @@ namespace aspect
                   double rho_s = out.densities[q];
                   double rho_l = fluid_out->fluid_densities[q];
 
-                  double avg_rho = Fvol*rho_l + (1 - Fvol)*rho_s;
-                  double Fmass = Fvol*rho_l/avg_rho; 
-
                   local_co2_flux += (20./100 *  
                     (
-                    (Fmass * cmorb_cl * rho_l * (fluid_velocity_values[q] * fe_face_values.normal_vector(q)))
-                    + ((1 - Fmass) * cmorb_cs * rho_s * (in.velocity[q] * fe_face_values.normal_vector(q)))
+                    (Fvol * cmorb_cl * rho_l * (fluid_velocity_values[q] * fe_face_values.normal_vector(q)))
+                    + ((1 - Fvol) * cmorb_cs * rho_s * (in.velocity[q] * fe_face_values.normal_vector(q)))
                     )
                     * fe_face_values.JxW(q));     
-
-              
-                  // Old method using only solid velocity.
-                  // (Fmass*cmorb_cl*rho_l + (1-Fmass)*cmorb_cs*rho_s) * 20/100
-                  // * (in.velocity[q] * fe_face_values.normal_vector(q))
-                  // * fe_face_values.JxW(q);
-
                   }                           
 
                 const types::boundary_id boundary_indicator
@@ -238,7 +220,9 @@ namespace aspect
       MeltHandler<dim>::create_material_model_outputs(out_fe);
 
       in_fe.requested_properties = MaterialModel::MaterialProperties::density;
-      MaterialModel::MeltOutputs<dim> *fluid_out_fe = out_fe.template get_additional_output<MaterialModel::MeltOutputs<dim>>();
+      const std::shared_ptr<MaterialModel::MeltOutputs<dim>> fluid_out_fe
+                = out_fe.template get_additional_output_object<MaterialModel::MeltOutputs<dim>>();
+
 
       // compute the integral quantities by quadrature
       for (const auto &cell : this->get_dof_handler().active_cell_iterators())
@@ -263,21 +247,13 @@ namespace aspect
               double rho_s = out_fe.densities[q];
               double rho_l = fluid_out_fe->fluid_densities[q];
 
-              double avg_rho = Fvol_values[q]*rho_l + (1 - Fvol_values[q])*rho_s;
-              double Fmass = Fvol_values[q]*rho_l/avg_rho;
-              double liquid_mass = Fmass * ccl_values[q] * rho_l * 20/100 * fe_values.JxW(q);
-              double solid_mass = (1-Fmass) * ccs_values[q] * rho_s * 20/100 *fe_values.JxW(q);
+              double liquid_mass = Fvol_values[q] * ccl_values[q] * rho_l * 20/100 * fe_values.JxW(q);
+              double solid_mass = (1-Fvol_values[q]) * ccs_values[q] * rho_s * 20/100 * fe_values.JxW(q);
 
               local_co2_compositional_integrals += liquid_mass + solid_mass;
               local_fluid_compositional_integrals += liquid_mass;
               local_solid_compositional_integrals += solid_mass;
-              
-              //(Fmass*ccl_values[q]*rho_l 
-              //                                    + (1-Fmass)*ccs_values[q]*rho_s ) * 20/100
-              //                                    *fe_values.JxW(q);
             }
-
-
           }
 
       // compute the sum over all processors

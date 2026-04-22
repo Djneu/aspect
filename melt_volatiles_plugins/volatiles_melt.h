@@ -66,12 +66,11 @@ namespace aspect
           void
           parse_parameters (ParameterHandler &prm);
 
-                    // Calculate melting temperature for each composition.
+          // Calculate melting temperature for each composition.
           small_vector<double>
           melting_temperatures(const double pressure,
                               const std::vector<double> &A,
                               const std::vector<double> &B,
-                              const std::vector<double> &L,
                               const std::vector<double> &T0) const;
 
           // Calculate melting temperature for each composition.
@@ -121,8 +120,7 @@ namespace aspect
            * in the out object here because the presence of melt weakens the material.
            */
           void calculate_fluid_outputs(const typename Interface<dim>::MaterialModelInputs &in,
-                                       typename Interface<dim>::MaterialModelOutputs &out,
-                                       const double reference_T) const;
+                                       typename Interface<dim>::MaterialModelOutputs &out) const;
 
 
         /**
@@ -135,10 +133,8 @@ namespace aspect
         equilibrium (std::vector<double> composition, 
                      const double temperature, 
                      const double pressure,
-                     const double depth,
                      const double rho_ss,
-                     const int ep,
-                     const double x) const;
+                     const int ep) const;
 
           double reference_darcy_coefficient () const;
 

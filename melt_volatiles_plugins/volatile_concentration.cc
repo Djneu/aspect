@@ -88,7 +88,9 @@ namespace aspect
         MaterialModel::MaterialModelInputs<dim> in(input_data, this->introspection());
         MaterialModel::MaterialModelOutputs<dim> out(in.n_evaluation_points(), this->n_compositional_fields());
         MeltHandler<dim>::create_material_model_outputs(out);
-        MaterialModel::MeltOutputs<dim> *fluid_out = out.template get_additional_output<MaterialModel::MeltOutputs<dim>>();
+        const std::shared_ptr<MaterialModel::MeltOutputs<dim>> fluid_out
+                  = out.template get_additional_output_object<MaterialModel::MeltOutputs<dim>>();
+
         this->get_material_model().evaluate(in, out);
         
 
@@ -106,12 +108,12 @@ namespace aspect
               const double morb_cl =  std::max(0.0, std::min(composition[mcl_idx],1.0));
               const double morb_cs =  std::max(0.0, std::min(composition[mcs_idx],1.0));
               const double Fvol =  std::max(0.0, std::min(composition[porosity_idx],1.0));
-              double rho_ss = out.densities[q];
+              double rho_s = out.densities[q];
               const double rho_l = fluid_out->fluid_densities[q];
 
               // We track the volume fraction of melt, convert to mass fraction here.
-              const double avg_rho = Fvol*rho_l + (1 - Fvol)*rho_ss;
-              const double Fmass = Fvol*rho_l/avg_rho;                                                                      
+              const double avg_rho = Fvol*rho_l + (1 - Fvol)*rho_s;
+              const double Fmass = Fvol*rho_l/avg_rho;                                           
 
               // Compute ppm of different compositions. Here we use the C_bar calculated from the mass fraction,
               // and multiply it by the weight percent that is co2 or h2o, and then apply a scaling factor.
@@ -120,14 +122,18 @@ namespace aspect
               // compositions are already not given in the percent value, so we can remove that from the scaling factor.
               computed_quantities[q](0) = (Fmass * cmorb_cl + (1 - Fmass)*cmorb_cs) * cwt/100 * 1e6;
 
-              // Mass of Co2, in this case we do not scale to ppm.
-              computed_quantities[q](1) = (Fmass * cmorb_cl * rho_l + (1 - Fmass)*cmorb_cs*rho_ss) * cwt/100;
+              // Next, we output the mass of the composition. In this case, if we want to use the real
+              // densities we multiply by the volume fraction of melt. If we wanted to use the mass fraction,
+              // we would multiply the whole thing by the avg_rho instead.
+              computed_quantities[q](1) = (Fvol * cmorb_cl * rho_l + (1 - Fvol)*cmorb_cs*rho_s) * cwt/100;
 
+              // H2O content.
               computed_quantities[q](2) = (Fmass * hmorb_cl + (1 - Fmass) * hmorb_cs) * hwt/100 * 1e6;
-              computed_quantities[q](3) = (Fmass * hmorb_cl * rho_l + (1 - Fmass)*hmorb_cs*rho_ss) * hwt/100;
+              computed_quantities[q](3) = (Fvol * hmorb_cl * rho_l + (1 - Fvol)*hmorb_cs*rho_s) * hwt/100;
 
+              // MORB content.
               computed_quantities[q](4) = (Fmass * morb_cl + (1 - Fmass)*morb_cs) * 100/100 * 1e6;
-              computed_quantities[q](5) = (Fmass * morb_cl * rho_l + (1 - Fmass)*morb_cs*rho_ss) * 100/100;
+              computed_quantities[q](5) = (Fvol * morb_cl * rho_l + (1 - Fvol)*morb_cs*rho_s) * 100/100;
 
 
         }
