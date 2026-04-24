@@ -24,7 +24,7 @@
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/numerics/fe_field_function.h>
 #include "melt_simple_volatiles.h"
-#include "volatiles_melt.h"
+#include <aspect/material_model/reaction_model/volatiles_melt.h>
 
 namespace aspect
 {
@@ -85,7 +85,7 @@ namespace aspect
 
         const double depth = in.position[q](1); //this->get_geometry_model().depth(in.position[q]);
         const double xcord = in.position[q](0);
-        double volume_fraction = std::get<0>(volatile_model.equilibrium(composition, in.temperature[q], pressure, rho_s, q));
+        double volume_fraction = std::get<0>(volatile_model.equilibrium(composition, in.temperature[q], pressure, rho_s, q, 0.));
 
         melt_fractions[q] = volume_fraction;  
       }

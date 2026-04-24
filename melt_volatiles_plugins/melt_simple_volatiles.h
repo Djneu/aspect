@@ -25,8 +25,7 @@
 #include <aspect/simulator_access.h>
 #include <aspect/postprocess/melt_statistics.h>
 #include <aspect/melt.h>
-/*#include </Users/djneuh/software/local_code/aspect/melt_volatiles_plugins/volatiles_melt.h>*/
-#include "volatiles_melt.h"
+#include <aspect/material_model/reaction_model/volatiles_melt.h>
 
 namespace aspect
 {

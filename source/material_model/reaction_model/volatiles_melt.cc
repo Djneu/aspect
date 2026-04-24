@@ -92,7 +92,7 @@ namespace aspect
               // and solid and liquid reaction rates, ordered as dunite (background field), morb, cmorb, hmorb.
               // Note: At the moment compositions are hardcoded in assuming there is always 4 components.
               const double rho_s = out.densities[q]; //3200
-              auto [vfrac, melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates, enthalpy] = equilibrium(composition, temperature, pressure, rho_s, q);
+              auto [vfrac, melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates, enthalpy] = equilibrium(composition, temperature, pressure, rho_s, q, 0.);
 
               for (unsigned int c=0; c<in.composition[q].size(); ++c)
                 {
@@ -249,7 +249,8 @@ template <int dim>
                      const double temperature, 
                      const double pressure,
                      const double rho_s,
-                     const int ep) const
+                     const int ep,
+                     const bool return_composition) const
       {
         // Define component dependent parameters 
         std::vector<double> C_bar (n_components);
@@ -332,6 +333,7 @@ template <int dim>
         // if we are below the maximum solidus pressure.
         if(pressure < pressure_max)
         {
+
           const double T_solidus = T_solidus_liquidus(pressure, C_bar, true, A, B, L, T0, R);
           const double T_liquidus = T_solidus_liquidus(pressure, C_bar, false, A, B, L, T0, R);
 
@@ -403,7 +405,7 @@ template <int dim>
           double ccl = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new + (1 - Fmass_new) * K[2])));     
           double hcl = std::max(0.0, std::min(1.0, C_bar[3] / (Fmass_new + (1 - Fmass_new) * K[3])));
           
-          // Solid values, these aren't actually used for the reaction rates so can be remove.
+          // Solid values, these aren't actually used for the reaction rates.
           double mcs = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new / K[1] + (1 - Fmass_new))));
           double ccs = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new / K[2] + (1 - Fmass_new))));
           double hcs = std::max(0.0, std::min(1.0, C_bar[3] / (Fmass_new / K[3] + (1 - Fmass_new))));
@@ -551,11 +553,23 @@ template <int dim>
 
 
           if(GammaSum != 0)
-            enthalpy = enthalpy/GammaSum;         
+            enthalpy = enthalpy/GammaSum; 
+            
+          // If we only want to return the composition for the initial conditions,
+          // overwrite the solid and liquid vectors with the actual values. 
+          if(return_composition)
+            for (unsigned int i=0; i<n_components; ++i)
+            {
+              solid_reaction_rates[i] = c_seq[i];
+              liquid_reaction_rates[i] = c_leq[i];
+            }
       }   
 
       // Return values, with melt_fractions converted from mass fraction to volume fraction.
-      return {Fmass_new*(avg_rho_new/rho_l), melt_reaction_rate*(avg_rho_new/rho_l), solid_reaction_rates, liquid_reaction_rates, enthalpy};
+      if(return_composition)
+        return {Fmass_new*(avg_rho_new/rho_l), 0., solid_reaction_rates, liquid_reaction_rates, 0.};
+      else
+        return {Fmass_new*(avg_rho_new/rho_l), melt_reaction_rate*(avg_rho_new/rho_l), solid_reaction_rates, liquid_reaction_rates, enthalpy};
       }
 
       template <int dim>
