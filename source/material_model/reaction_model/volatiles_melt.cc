@@ -18,7 +18,7 @@
   <http://www.gnu.org/licenses/>.
 */
 
-#include <aspect/material_model/reaction_model/volatiles.h>
+#include <aspect/material_model/reaction_model/volatiles_melt.h>
 #include <aspect/utilities.h>
 #include <aspect/gravity_model/interface.h>
 #include <aspect/adiabatic_conditions/interface.h>

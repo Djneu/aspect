@@ -28,9 +28,7 @@
 
 #include <deal.II/fe/component_mask.h>
 #include <deal.II/fe/component_mask.h>
-//#include "../../../melt_volatiles_plugins/volatiles_melt.h"
-//#include "melt_volatiles_plugins/volatiles_melt.h"
-#include "/user/derekjohn.neuharth/u16318/software/co2/aspect/melt_volatiles_plugins/volatiles_melt.h"
+#include <aspect/material_model/reaction_model/volatiles_melt.h>
 #include <aspect/melt.h>
 
 namespace aspect
