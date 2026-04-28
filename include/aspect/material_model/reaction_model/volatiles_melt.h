@@ -69,13 +69,13 @@ namespace aspect
           // Calculate melting temperature for each composition.
           small_vector<double>
           melting_temperatures(const double pressure,
-                              const std::vector<double> &A,
-                              const std::vector<double> &B,
-                              const std::vector<double> &T0) const;
+                              const small_vector<double> &A,
+                              const small_vector<double> &B,
+                              const small_vector<double> &T0) const;
 
           // Calculate melting temperature for each composition.
           double
-          compute_residual(const std::vector<double> &composition,
+          compute_residual(const small_vector<double> &composition,
                       const small_vector<double> &K,
                       const bool compute_solidus) const;
 
@@ -83,21 +83,21 @@ namespace aspect
           small_vector<double>
           partition_coefficients(const double pressure,
                                const double temperature,
-                               const std::vector<double> &A,
-                               const std::vector<double> &B,
-                               const std::vector<double> &L,
-                               const std::vector<double> &T0,
-                               const std::vector<double> &R) const;
+                               const small_vector<double> &A,
+                               const small_vector<double> &B,
+                               const small_vector<double> &L,
+                               const small_vector<double> &T0,
+                               const small_vector<double> &R) const;
 
           double
           T_solidus_liquidus (const double pressure, 
-                              std::vector<double> composition, 
+                              const small_vector<double> &composition, 
                               bool compute_solidus,                              
-                              std::vector<double> A,
-                              std::vector<double> B,
-                              std::vector<double> L,
-                              std::vector<double> T0,
-                              std::vector<double> R) const;
+                              const small_vector<double> &A,
+                              const small_vector<double> &B,
+                              const small_vector<double> &L,
+                              const small_vector<double> &T0,
+                              const small_vector<double> &R) const;
 
 
           /**
@@ -129,8 +129,8 @@ namespace aspect
          * This function returns the volume melt fraction, melt reaction rate,
          * and solid and liquid reaction rates for each component.
          */
-        std::tuple<double, double, std::vector<double>, std::vector<double>, double>
-        equilibrium (std::vector<double> composition, 
+        std::tuple<double, double, small_vector<double>, small_vector<double>, double>
+        equilibrium (std::vector<double> &composition, 
                      const double temperature, 
                      const double pressure,
                      const double rho_ss,
@@ -155,11 +155,11 @@ namespace aspect
            * Read the parameters this class declares from the parameter file.
            */
           void
-          initialize_component_values (std::vector<double> &Ac,
-                                                          std::vector<double> &Bc,
-                                                          std::vector<double> &Lc,
-                                                          std::vector<double> &Tc,
-                                                          std::vector<double> &Rc,
+          initialize_component_values (small_vector<double> &Ac,
+                                                          small_vector<double> &Bc,
+                                                          small_vector<double> &Lc,
+                                                          small_vector<double> &Tc,
+                                                          small_vector<double> &Rc,
                                                           const double pressure) const;
 
           double 

@@ -243,9 +243,9 @@ template <int dim>
 
 
       template <int dim>
-      std::tuple<double, double, std::vector<double>, std::vector<double>, double>
+      std::tuple<double, double, small_vector<double>, small_vector<double>, double>
       VolatilesMelt<dim>::
-      equilibrium (std::vector<double> composition, 
+      equilibrium (std::vector<double> &composition, 
                      const double temperature, 
                      const double pressure,
                      const double rho_s,
@@ -253,7 +253,7 @@ template <int dim>
                      const bool return_composition) const
       {
         // Define component dependent parameters 
-        std::vector<double> C_bar (n_components);
+        small_vector<double> C_bar (n_components);
 
         // Get the compositional values, and limit between 0 and 1.
         double morb_cl =  std::max(0.0, std::min(composition[mcl_idx],1.0));
@@ -296,8 +296,8 @@ template <int dim>
         double dunite = std::max(0. ,(1 - morb_cs - cmorb_cs - hmorb_cs)); 
         double dunite_l = std::max(0. ,(1 - morb_cl - cmorb_cl - hmorb_cl));    
           
-        std::vector<double> c_s = {dunite, morb_cs, cmorb_cs, hmorb_cs};
-        std::vector<double> c_l = {dunite_l, morb_cl, cmorb_cl, hmorb_cl};
+        small_vector<double> c_s = {dunite, morb_cs, cmorb_cs, hmorb_cs};
+        small_vector<double> c_l = {dunite_l, morb_cl, cmorb_cl, hmorb_cl};
 
         double avg_rho = Fvol_old*rho_l + (1. - Fvol_old)*rho_s;
         double avg_rho_new = avg_rho; // Will be updated later.
@@ -316,16 +316,16 @@ template <int dim>
       
         // Define parameters that will be returned.
         double Fmass_new = 0.0;
-        std::vector<double> solid_reaction_rates (n_components, 0.0);
-        std::vector<double> liquid_reaction_rates (n_components, 0.0);
+        small_vector<double> solid_reaction_rates (n_components, 0.0);
+        small_vector<double> liquid_reaction_rates (n_components, 0.0);
         double melt_reaction_rate = 0.0;
         double enthalpy = 0.0;
 
-        std::vector<double> T0 (n_components);
-        std::vector<double> A (n_components);
-        std::vector<double> B (n_components);
-        std::vector<double> L (n_components);
-        std::vector<double> R (n_components);
+        small_vector<double> T0 (n_components);
+        small_vector<double> A (n_components);
+        small_vector<double> B (n_components);
+        small_vector<double> L (n_components);
+        small_vector<double> R (n_components);
 
         initialize_component_values(A, B, L, T0, R, pressure);
 
@@ -333,7 +333,6 @@ template <int dim>
         // if we are below the maximum solidus pressure.
         if(pressure < pressure_max)
         {
-
           const double T_solidus = T_solidus_liquidus(pressure, C_bar, true, A, B, L, T0, R);
           const double T_liquidus = T_solidus_liquidus(pressure, C_bar, false, A, B, L, T0, R);
 
@@ -415,7 +414,7 @@ template <int dim>
           double dcl = std::max(0. ,(1 - mcl - ccl - hcl)); 
         
           // Define reaction rate parameters and calculate rates for each component.
-          std::vector<double> Gamma (n_components);
+          small_vector<double> Gamma (n_components);
           double GammaSum = 0.0;
 
           // In the paper they use the constant reference density, resulting in a 
@@ -439,14 +438,14 @@ template <int dim>
           ccs = ccs/comp_sum;
           hcs = hcs/comp_sum;
 
-          std::vector<double> c_leq = {dcl, mcl, ccl, hcl};
-          std::vector<double> c_seq = {dcs, mcs, ccs, hcs};
+          small_vector<double> c_leq = {dcl, mcl, ccl, hcl};
+          small_vector<double> c_seq = {dcs, mcs, ccs, hcs};
           if(use_fractional_melting)
           {
-            std::vector<double> Csf (n_components);
-            std::vector<double> Clf (n_components);
-            std::vector<double> CGamma (n_components);
-            std::vector<double> Delta (n_components);
+            small_vector<double> Csf (n_components);
+            small_vector<double> Clf (n_components);
+            small_vector<double> CGamma (n_components);
+            small_vector<double> Delta (n_components);
             double GammaNet  =  R * (Fmass_new - Fmass_old);
             double gsum = 0;
             for (unsigned int i=0; i<n_components; ++i)
@@ -576,16 +575,18 @@ template <int dim>
       double
       VolatilesMelt<dim>::
       T_solidus_liquidus (const double pressure, 
-                          std::vector<double> composition, 
+                          const small_vector<double> &composition, 
                           bool compute_solidus,
-                          std::vector<double> A,
-                          std::vector<double> B,
-                          std::vector<double> L,
-                          std::vector<double> T0,
-                          std::vector<double> R) const
+                          const small_vector<double> &A,
+                          const small_vector<double> &B,
+                          const small_vector<double> &L,
+                          const small_vector<double> &T0,
+                          const small_vector<double> &R) const
       {
         // TODO: Exclude invalid compositions (that do not sum up to 1)?
         const small_vector<double> Tm = melting_temperatures(pressure, A, B, T0);
+
+        //std::cout<<pressure<<std::endl;
 
         // Set starting guess for Tsol
         const double minTm = *std::min_element(Tm.begin(), Tm.end());
@@ -605,61 +606,61 @@ template <int dim>
 
         small_vector<double> K = partition_coefficients(pressure, T_solidus, A, B, L, T0, R);
 
-const double tolerance = 1e-10;
-const unsigned int max_iterations = 200;
-double residual = compute_residual(composition, K, compute_solidus);
+        const double tolerance = 1e-10;
+        const unsigned int max_iterations = 200;
+        double residual = compute_residual(composition, K, compute_solidus);
 
-//auto start = std::chrono::high_resolution_clock::now();
-unsigned int n = 0;
-while (std::abs(residual) > tolerance && n < max_iterations)
-{
-    // Adaptive perturbation
-    const double eps_T = std::max(1e-6, 1e-6 * std::abs(T_solidus));
+        //auto start = std::chrono::high_resolution_clock::now();
+        unsigned int n = 0;
+        while (std::abs(residual) > tolerance && n < max_iterations)
+        {
+            // Adaptive perturbation
+            const double eps_T = std::max(1e-6, 1e-6 * std::abs(T_solidus));
 
-    // Central difference derivative
-    K = partition_coefficients(pressure, T_solidus + eps_T, A, B, L, T0, R);
-    double residual_plus = compute_residual(composition, K, compute_solidus);
+            // Central difference derivative
+            K = partition_coefficients(pressure, T_solidus + eps_T, A, B, L, T0, R);
+            double residual_plus = compute_residual(composition, K, compute_solidus);
 
-    K = partition_coefficients(pressure, T_solidus - eps_T, A, B, L, T0, R);
-    double residual_minus = compute_residual(composition, K, compute_solidus);
+            K = partition_coefficients(pressure, T_solidus - eps_T, A, B, L, T0, R);
+            double residual_minus = compute_residual(composition, K, compute_solidus);
 
-    const double dresidualdT = (residual_plus - residual_minus) / (2.0 * eps_T);
+            const double dresidualdT = (residual_plus - residual_minus) / (2.0 * eps_T);
 
-    if (std::abs(dresidualdT) < 1e-14) {
-        std::cerr << "Derivative vanished, aborting Newton at iteration " << n << std::endl;
-        break;
-    }
+            if (std::abs(dresidualdT) < 1e-14) {
+                std::cerr << "Derivative vanished, aborting Newton at iteration " << n << std::endl;
+                break;
+            }
 
-    // Newton step with optional damping
-    double delta_T = -residual / dresidualdT;
-    T_solidus += 0.8 * delta_T;  // 0.8 damping factor
+            // Newton step with optional damping
+            double delta_T = -residual / dresidualdT;
+            T_solidus += 0.8 * delta_T;  // 0.8 damping factor
 
-    // Recompute residual
-    K = partition_coefficients(pressure, T_solidus, A, B, L, T0, R);
-    residual = compute_residual(composition, K, compute_solidus);
+            // Recompute residual
+            K = partition_coefficients(pressure, T_solidus, A, B, L, T0, R);
+            residual = compute_residual(composition, K, compute_solidus);
 
-    ++n;
-}
+            ++n;
+        }
 
-if (n == max_iterations) {
-    std::cerr << "!!! Newton solver did not converge after "
-              << n << " iterations. Final residual = " << residual << " !!!" << std::endl;
-}
+        if (n == max_iterations) {
+            std::cerr << "!!! Newton solver did not converge after "
+                      << n << " iterations. Final residual = " << residual << " !!!" << std::endl;
+        }
 
-      //auto tend = std::chrono::high_resolution_clock::now();
-      //std::chrono::duration<double> elapsed = tend - start;
-      //totaln = totaln + n;
-      //totaltime = totaltime + elapsed.count();
-      //std::cout<<n<<" "<<T_solidus<<" "<<elapsed.count()<<" "<<totaln<<" "<<totaltime<<std::endl;
-      return T_solidus;
+        //auto tend = std::chrono::high_resolution_clock::now();
+        //std::chrono::duration<double> elapsed = tend - start;
+        //totaln = totaln + n;
+        //totaltime = totaltime + elapsed.count();
+        //std::cout<<n<<" "<<T_solidus<<" "<<elapsed.count()<<" "<<totaln<<" "<<totaltime<<std::endl;
+        return T_solidus;
     }
 
     template <int dim>
     small_vector<double>
     VolatilesMelt<dim>::melting_temperatures(const double pressure,
-                                             const std::vector<double> &A,
-                                             const std::vector<double> &B,
-                                             const std::vector<double> &T0) const
+                                             const small_vector<double> &A,
+                                             const small_vector<double> &B,
+                                             const small_vector<double> &T0) const
     {
         small_vector<double> Tm (n_components);
 
@@ -695,11 +696,11 @@ if (n == max_iterations) {
     small_vector<double>
     VolatilesMelt<dim>::partition_coefficients(const double pressure, 
                                                 const double temperature,
-                                                const std::vector<double> &A,
-                                                const std::vector<double> &B,
-                                                const std::vector<double> &L,
-                                                const std::vector<double> &T0,
-                                                const std::vector<double> &R) const
+                                                const small_vector<double> &A,
+                                                const small_vector<double> &B,
+                                                const small_vector<double> &L,
+                                                const small_vector<double> &T0,
+                                                const small_vector<double> &R) const
     {
         small_vector<double> K (n_components);
         const small_vector<double> Tm = melting_temperatures(pressure, A, B, T0);
@@ -717,7 +718,7 @@ if (n == max_iterations) {
 
     template <int dim>
     double 
-    VolatilesMelt<dim>::compute_residual (const std::vector<double> &composition,
+    VolatilesMelt<dim>::compute_residual (const small_vector<double> &composition,
                       const small_vector<double> &K,
                       const bool compute_solidus) const
     {
@@ -774,11 +775,11 @@ if (n == max_iterations) {
 
       template <int dim>
       void
-      VolatilesMelt<dim>::initialize_component_values (std::vector<double> &Ac,
-                                                          std::vector<double> &Bc,
-                                                          std::vector<double> &Lc,
-                                                          std::vector<double> &Tc,
-                                                          std::vector<double> &Rc,
+      VolatilesMelt<dim>::initialize_component_values (small_vector<double> &Ac,
+                                                          small_vector<double> &Bc,
+                                                          small_vector<double> &Lc,
+                                                          small_vector<double> &Tc,
+                                                          small_vector<double> &Rc,
                                                           const double pressure) const
       {
         double P1 = 1.8e9; double P2 = 2.1e9;

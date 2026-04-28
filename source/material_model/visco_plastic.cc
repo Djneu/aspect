@@ -387,6 +387,9 @@ namespace aspect
     {
       prm.enter_subsection("Material model");
       {
+
+        // Melt model
+        ReactionModel::VolatilesMelt<dim>::declare_parameters(prm);
         prm.enter_subsection ("Visco Plastic");
         {
           prm.declare_entry ("Use dominant phase for viscosity","false",
@@ -402,9 +405,6 @@ namespace aspect
           EquationOfState::MulticomponentIncompressible<dim>::declare_parameters (prm);
 
           Rheology::ViscoPlastic<dim>::declare_parameters(prm);
-
-          // Melt model
-          ReactionModel::VolatilesMelt<dim>::declare_parameters(prm);
 
           // Equation of state parameters
           prm.declare_entry ("Thermal diffusivities", "0.8e-6",
@@ -440,15 +440,14 @@ namespace aspect
     {
       prm.enter_subsection("Material model");
       {
+        // Melt model parameters
+        volatile_model.initialize_simulator (this->get_simulator());
+        volatile_model.parse_parameters(prm);
         prm.enter_subsection ("Visco Plastic");
         {
           // Phase transition parameters
           phase_function.initialize_simulator (this->get_simulator());
           phase_function.parse_parameters (prm);
-
-          // Melt model parameters
-          volatile_model.initialize_simulator (this->get_simulator());
-          volatile_model.parse_parameters(prm);
 
           const std::vector<unsigned int> n_phases_for_each_chemical_composition = phase_function.n_phases_for_each_chemical_composition();
           n_phase_transitions_for_each_chemical_composition = phase_function.n_phase_transitions_for_each_chemical_composition();

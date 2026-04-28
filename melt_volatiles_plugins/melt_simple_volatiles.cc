@@ -175,11 +175,10 @@ namespace aspect
     {
       prm.enter_subsection("Material model");
       {
+        ReactionModel::VolatilesMelt<dim>::declare_parameters(prm);
         prm.enter_subsection("Melt simple volatiles");
         {
           // Melt model
-          ReactionModel::VolatilesMelt<dim>::declare_parameters(prm);
-
           prm.declare_entry ("Use full compressibility", "false",
                              Patterns::Bool (),
                              "If the compressibility should be used everywhere in the code "
@@ -247,11 +246,10 @@ namespace aspect
     {
       prm.enter_subsection("Material model");
       {
+        volatile_model.initialize_simulator (this->get_simulator());
+        volatile_model.parse_parameters(prm);
         prm.enter_subsection("Melt simple volatiles");
         {
-          volatile_model.initialize_simulator (this->get_simulator());
-          volatile_model.parse_parameters(prm);
-
           model_is_compressible      = prm.get_bool ("Use full compressibility");
           reference_specific_heat    = prm.get_double ("Reference specific heat");
           eta_0                      = prm.get_double ("Reference shear viscosity");

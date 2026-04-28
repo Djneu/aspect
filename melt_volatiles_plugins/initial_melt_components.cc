@@ -66,35 +66,44 @@ namespace aspect
       const unsigned int ccl_index = this->introspection().compositional_index_for_name("cmorb_cl");
       const unsigned int hcs_index = this->introspection().compositional_index_for_name("hmorb_cs");
       const unsigned int hcl_index = this->introspection().compositional_index_for_name("hmorb_cl");
-      
-      MaterialModel::MaterialModelInputs<dim> in(1, this->n_compositional_fields());
 
-      in.position[0] = position;
-      in.temperature[0] = initial_temperature_manager->initial_temperature(position);
-      in.pressure[0] = this->get_adiabatic_conditions().pressure(position);
-      in.pressure_gradient[0] = 0.0;
-      in.velocity[0] = 0.0;
-                
-      const Utilities::NaturalCoordinate<dim> point =
-        this->get_geometry_model().cartesian_to_other_coordinates(position, coordinate_system);
+        MaterialModel::MaterialModelInputs<dim> in(1, this->n_compositional_fields());
+        MaterialModel::MaterialModelOutputs<dim> out(1, this->n_compositional_fields());
+        in.requested_properties = MaterialModel::MaterialProperties::density;
 
-      std::vector<double> composition(this->n_compositional_fields());
-      for (unsigned int i = 0; i < this->n_compositional_fields(); ++i)
-        composition[i] = function->value(Utilities::convert_array_to_point<dim>(point.get_coordinates()),i);
+        in.position[0] = position;
+        in.temperature[0] = initial_temperature_manager->initial_temperature(position);
+        in.pressure[0] = this->get_adiabatic_conditions().pressure(position);
+        const double density = this->get_adiabatic_conditions().density(position);
+        in.pressure_gradient[0] = 0.0;
+        in.velocity[0] = 0.0;    
+                  
+        const Utilities::NaturalCoordinate<dim> point =
+          this->get_geometry_model().cartesian_to_other_coordinates(position, coordinate_system);
 
-      auto [vfrac, melt_reaction_rate, solids, liquids, enthalpy] 
-          = volatile_model.equilibrium(composition, in.temperature[0], 
-                              in.pressure[0], 3200, 0, 1);
-      
-      if (compositional_index == porosity_index) return vfrac;
-      if (compositional_index == mcs_index) return solids[1];
-      if (compositional_index == ccs_index) return solids[2];
-      if (compositional_index == hcs_index) return solids[3];
-      if (compositional_index == mcl_index) return liquids[1];
-      if (compositional_index == ccl_index) return liquids[2];
-      if (compositional_index == hcl_index) return liquids[3];
+        std::vector<double> composition(this->n_compositional_fields());
+        for (unsigned int i = 0; i < this->n_compositional_fields(); ++i)
+          composition[i] = function->value(Utilities::convert_array_to_point<dim>(point.get_coordinates()),i);
+        
+        auto [vfrac, melt_reaction_rate, solids, liquids, enthalpy] 
+            = volatile_model.equilibrium(composition, in.temperature[0], 
+                                in.pressure[0], density, 0, 1);
+        
+        if (compositional_index == porosity_index) return vfrac;
+        if (compositional_index == mcs_index) return solids[1];
+        if (compositional_index == ccs_index) return solids[2];
+        if (compositional_index == hcs_index) return solids[3];
+        //if (compositional_index == mcl_index) return liquids[1];
+        if (compositional_index == mcl_index)
+            return (vfrac > 0.0 ? liquids[1] : 0.0);
+        //if (compositional_index == ccl_index) return liquids[2];
+        if (compositional_index == ccl_index)
+            return (vfrac > 0.0 ? liquids[2] : 0.0);
+        //if (compositional_index == hcl_index) return liquids[3];
+        if (compositional_index == hcl_index)
+            return (vfrac > 0.0 ? liquids[3] : 0.0);
     
-      return 0.0;
+      return std::numeric_limits<double>::quiet_NaN();
     }
 
     template <int dim>
@@ -103,11 +112,8 @@ namespace aspect
     {
       prm.enter_subsection("Material model");
       {
-        prm.enter_subsection("Melt simple volatiles");
-        {
-          volatile_model.initialize_simulator (this->get_simulator());
-          volatile_model.parse_parameters(prm);
-        }
+        volatile_model.initialize_simulator (this->get_simulator());
+        volatile_model.parse_parameters(prm);
         prm.leave_subsection();
       }
       prm.leave_subsection();
