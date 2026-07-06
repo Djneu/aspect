@@ -351,6 +351,9 @@ namespace aspect
         const double solid_density    = scratch.material_model_outputs.densities[q_point];
         const double fluid_density    = melt_out->fluid_densities[q_point];
         double melting_rate           = scratch.material_model_outputs.reaction_terms[q_point][porosity_index];
+        const double porosity         = std::max(scratch.material_model_inputs.composition[q_point][porosity_index],0.0);
+
+        double avg_rho = porosity * fluid_density + (1 - porosity) * solid_density;
 
         if (simulator_access->get_parameters().use_operator_splitting)
           melting_rate = (simulator_access->get_timestep() > 0
@@ -359,17 +362,16 @@ namespace aspect
                           :
                           0.0);
 
-        if(q_point == 1) 
+        /*if(q_point == 1) 
         {
           std::cout<<"************************************************************************************"<<std::endl;
-          std::cout<<"FLUID PRESSURE - melting rate: "<<operator_split_reaction / simulator_access->get_timestep()<<" | "<<operator_split_reaction<<std::endl; 
+          std::cout<<"FLUID PRESSURE - melting rate: "<<operator_split_reaction / simulator_access->get_timestep()<<" | "<<operator_split_reaction<<" | "<<solid_density<<std::endl; 
           std::cout<<"************************************************************************************"<<std::endl;
-        }
+        }*/
 
         const double solid_compressibility = scratch.material_model_outputs.compressibilities[q_point];
         const Tensor<1,dim> fluid_density_gradient = melt_out->fluid_density_gradients[q_point];
         const Tensor<1,dim> current_u = scratch.velocity_values[q_point];
-        const double porosity         = std::max(scratch.material_model_inputs.composition[q_point][porosity_index],0.0);
 
         const Tensor<1,dim>
         gravity = simulator_access->get_gravity_model().gravity_vector (scratch.finite_element_values.quadrature_point(q_point));
@@ -863,6 +865,8 @@ namespace aspect
               density_c_P_melt = 1.0;
             }
 
+
+          //std::cout<<"DIVU: "<<divergence_u<<std::endl;
           const double JxW = scratch.finite_element_values.JxW(q);
 
           // do the actual assembly. note that we only need to loop over the advection
@@ -965,9 +969,10 @@ namespace aspect
                                                  :
                                                  0.0);
 
-              const double melt_transport_LHS =
-                (this->get_melt_handler().is_porosity(*scratch.advection_field)
-                 ?
+          const double melt_transport_LHS =
+            (this->get_melt_handler().is_porosity(*scratch.advection_field)
+             && this->get_melt_handler().is_melt_cell(scratch.material_model_inputs.current_cell)
+             ?
                  scratch.current_velocity_divergences[q]
                  + (this->get_material_model().is_compressible()
                     ?
