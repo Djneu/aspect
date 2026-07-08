@@ -453,9 +453,20 @@ template <int dim>
           const double tau_r        = melting_time_scale; // + 2.0 * reaction_time_step_size;
           const double R  =  reaction_rho/tau_r;
           const int max_iter = 50;
-          const double tol   = 1e-6;
-          double Fmass_pred = Fmass_old;
+          const double tol   = 1e-9;
+          // Better initial guess
+          const double relax = 0.5 * reaction_time_step_size / (melting_time_scale + reaction_time_step_size);
+          double Fmass_pred = Fmass_old + relax * (Fmass_new - Fmass_old);
           double enthalpy = 0.0;
+
+              if(ep ==1)
+              {
+              double co2 = (Fmass_pred * c_l_pred[2] + (1.0 - Fmass_pred) * c_s_pred[2])*1e6*20/100;
+              double h2o = (Fmass_pred * c_l_pred[3] + (1.0 - Fmass_pred) * c_s_pred[3])*1e6*5/100;
+              double morb = (Fmass_pred * c_l_pred[1] + (1.0 - Fmass_pred) * c_s_pred[1]);
+              double dun = (Fmass_pred * c_l_pred[0] + (1.0 - Fmass_pred) * c_s_pred[0]);
+              std::cout<<"it: 0 | F_eq: "<<Fmass_new<<" "<<Fmass_old<<" "<<dun<<" "<<morb<<" "<<co2<<" "<<h2o<<std::endl;  
+              }   
 
           // Iterate to find conserving reaction rates using batch melting.
           for (int iter = 0; iter < max_iter; ++iter)
@@ -481,11 +492,36 @@ template <int dim>
               for (unsigned int i = 0; i < n_components; ++i)
               {
                   solid_reaction_rates[i]  = -(Gamma[i] - c_s[i] * GammaSum) * inv_solid_denom;
-                  liquid_reaction_rates[i] = (Gamma[i] - c_l[i] * GammaSum) * inv_liquid_denom;
+                  //liquid_reaction_rates[i] = (Gamma[i] - c_l[i] * GammaSum) * inv_liquid_denom;
+                  liquid_reaction_rates[i] = (Fmass_pred < 1e-6)
+                                            ? (c_leq[i] - c_l[i]) / reaction_time_step_size
+                                            :  (Gamma[i] - c_l[i] * GammaSum) * inv_liquid_denom;
               }
 
               // Predict end state from initial value + rates
-              Fmass_pred = Fmass_old + melt_reaction_rate * reaction_time_step_size;
+             // Fmass_pred = Fmass_old + melt_reaction_rate * reaction_time_step_size;
+
+double Fmass_pred_new = Fmass_old + melt_reaction_rate * reaction_time_step_size;
+
+// Newton step
+// Residual: how far predicted is from fixed point
+double f = Fmass_pred - Fmass_pred_new;
+
+// Derivative of GammaSum with respect to Fmass_pred
+// GammaSum = R * sum(Fmass_new * c_leq[i] - Fmass_pred * c_l_pred[i])
+// dGammaSum/dFmass_pred = -R * sum(c_l_pred[i])
+double dGammaSum_dF = 0.0;
+for (unsigned int i = 0; i < n_components; ++i)
+    dGammaSum_dF -= R * c_l_pred[i];
+
+// df/dFmass_pred = 1 - dGammaSum/dFmass_pred * dt / rho
+double df = 1.0 - dGammaSum_dF * reaction_time_step_size / reaction_rho;
+
+// Newton update
+if (std::abs(df) > 1e-10)
+    Fmass_pred = Fmass_pred - f / df;
+else
+    Fmass_pred = Fmass_pred_new;
 
               // Find the maximum error.
               double max_error = 0.0;
@@ -498,6 +534,15 @@ template <int dim>
                                     + (1.0 - Fmass_pred) * c_s_pred[i];
                   max_error = std::max(max_error, std::abs(C_bar_pred - C_bar[i]));
               }
+
+              if(ep ==1)
+              {
+              double co2 = (Fmass_pred * c_l_pred[2] + (1.0 - Fmass_pred) * c_s_pred[2])*1e6*20/100;
+              double h2o = (Fmass_pred * c_l_pred[3] + (1.0 - Fmass_pred) * c_s_pred[3])*1e6*5/100;
+              double morb = (Fmass_pred * c_l_pred[1] + (1.0 - Fmass_pred) * c_s_pred[1]);
+              double dun = (Fmass_pred * c_l_pred[0] + (1.0 - Fmass_pred) * c_s_pred[0]);
+              std::cout<<"it: "<<iter+1<<"| F: "<<Fmass_pred<<" "<<GammaSum<<" "<<dun<<" "<<morb<<" "<<co2<<" "<<h2o<<" "<<max_error<<std::endl;  
+              }               
 
               if (max_error < tol)
                   break;
