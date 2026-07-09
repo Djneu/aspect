@@ -25,6 +25,7 @@
 #include <aspect/simulator_access.h>
 #include <aspect/postprocess/melt_statistics.h>
 #include <aspect/melt.h>
+#include <deal.II/matrix_free/fe_point_evaluation.h>
 
 namespace aspect
 {
@@ -138,7 +139,8 @@ namespace aspect
                      const double depth,
                      const double rho_ss,
                      const int ep,
-                     const double x) const;
+                     const double x,
+                     const double div_v) const;
 
           double reference_darcy_coefficient () const;
 
@@ -211,6 +213,14 @@ namespace aspect
 
           mutable int totaln = 0;
           mutable double totaltime = 0;
+
+          /**
+           * We cache the evaluators that are necessary to evaluate the velocity
+           * gradients and compositions.
+           * By caching the evaluator, we can avoid recreating them
+           * every time we need it.
+           */
+          mutable std::unique_ptr<FEPointEvaluation<dim, dim>> evaluator;
       };
     }
 

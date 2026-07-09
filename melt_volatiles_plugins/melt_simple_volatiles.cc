@@ -85,9 +85,9 @@ namespace aspect
 
         const double depth = in.position[q](1); //this->get_geometry_model().depth(in.position[q]);
         const double xcord = in.position[q](0);
-        double volume_fraction = std::get<0>(volatile_model.equilibrium(composition, in.temperature[q], pressure, depth, rho_s, q, xcord));
+        //double volume_fraction = std::get<0>(volatile_model.equilibrium(composition, in.temperature[q], pressure, depth, rho_s, q, xcord));
 
-        melt_fractions[q] = volume_fraction;  
+        melt_fractions[q] = 0.;  
       }
     }
 

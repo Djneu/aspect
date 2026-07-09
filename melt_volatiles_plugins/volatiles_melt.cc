@@ -64,6 +64,38 @@ namespace aspect
           const std::shared_ptr<EnthalpyOutputs<dim>> enthalpy_out 
             = out.template get_additional_output_object<EnthalpyOutputs<dim>>();
 
+            // Get the velocity gradients of the current timestep $t+dtc$
+            // at the requested location in in.position.
+            if (in.current_cell.state() == IteratorState::valid && this->get_timestep_number() > 0)
+            {
+            std::vector<Point<dim>> quadrature_positions(in.n_evaluation_points());
+            for (unsigned int i = 0; i < in.n_evaluation_points(); ++i)
+              quadrature_positions[i] = this->get_mapping().transform_real_to_unit_cell(in.current_cell, in.position[i]);
+
+            // Get the current velocity gradients, which get
+            // updated in each nonlinear iteration.
+            // This means we use the rotation tensor W^(t+dtc), not W^(t).
+            std::vector<double> solution_values(this->get_fe().dofs_per_cell);
+            in.current_cell->get_dof_values(this->get_current_linearization_point(),
+                                            solution_values.begin(),
+                                            solution_values.end());
+
+            // Only create the evaluator the first time we get here.
+            if (!evaluator)
+              evaluator = std::make_unique<FEPointEvaluation<dim,dim>>(this->get_mapping(),
+                                                                        this->get_fe(),
+                                                                        update_gradients,
+                                                                        this->introspection().component_indices.velocities[0]);
+
+            // Initialize the evaluator for the velocity gradients.
+            evaluator->reinit(in.current_cell, quadrature_positions);
+            evaluator->evaluate(solution_values,
+                                EvaluationFlags::gradients);
+            }
+
+                          
+
+
           double reaction_time_step_size = 1.0;
           if (this->simulator_is_past_initialization())
           {
@@ -81,6 +113,11 @@ namespace aspect
               :
               101325.;
 
+              double div_v = 0;
+              if (in.current_cell.state() == IteratorState::valid && this->get_timestep_number() > 0)
+                div_v = trace(evaluator->get_gradient(q));
+
+              //std::cout<<"REACTIONS DIV: "<<div_v<<std::endl;
               std::vector<double> composition(this->n_compositional_fields());
               for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
                       composition[c] = in.composition[q][c];
@@ -93,7 +130,7 @@ namespace aspect
               // and solid and liquid reaction rates, ordered as dunite (background field), morb, cmorb, hmorb.
               // Note: At the moment compositions are hardcoded in assuming there is always 4 components.
               const double rho_s = out.densities[q]; //3200
-              auto [vfrac, melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates, enthalpy] = equilibrium(composition, temperature, pressure, ycord, rho_s, q, xcord);
+              auto [vfrac, melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates, enthalpy] = equilibrium(composition, temperature, pressure, ycord, rho_s, q, xcord, div_v);
 
               for (unsigned int c=0; c<in.composition[q].size(); ++c)
                 {
@@ -212,7 +249,7 @@ template <int dim>
                 double dunite_cl = std::max(0. ,(1 - morb_cl - cmorb_cl - hmorb_cl));
                 
                 // We should maybe double check that the liquid components sum to unity.
-                melt_out->fluid_viscosities[i] = viscosity_fluid*((pow(1.0, morb_cl))*(pow(10.0, dunite_cl))*(pow(0.1, hmorb_cl))*(pow(0.01, cmorb_cl)));
+                melt_out->fluid_viscosities[i] = viscosity_fluid; //*((pow(1.0, morb_cl))*(pow(10.0, dunite_cl))*(pow(0.1, hmorb_cl))*(pow(0.01, cmorb_cl)));
             
                 melt_out->permeabilities[i] = std::min(reference_permeability * Utilities::fixed_power<3>(porosity) * Utilities::fixed_power<2>(1.0-porosity), maximum_permeability);
 
@@ -230,7 +267,10 @@ template <int dim>
                 if(this->get_timestep_number() > 0)
                   viscosity = out.viscosities[i];
 
-                melt_out->compaction_viscosities[i] = compaction_viscosity_ratio * viscosity / std::max(porosity, porosity_threshold);
+                melt_out->compaction_viscosities[i] = 5e20 * 10/std::max(porosity,0.00025);
+                //5e20 / (porosity + 0.01);
+                //5e20 * 10/std::max(porosity,0.00025);
+                //compaction_viscosity_ratio * viscosity / std::max(porosity, porosity_threshold);
               }
           }
 
@@ -256,7 +296,8 @@ template <int dim>
                      const double ycord,
                      const double rho_s,
                      const int ep,
-                     const double x) const
+                     const double x,
+                     const double div_v) const
       {
         // Define component dependent parameters 
         std::vector<double> C_bar (n_components);
@@ -459,14 +500,14 @@ template <int dim>
           double Fmass_pred = Fmass_old + relax * (Fmass_new - Fmass_old);
           double enthalpy = 0.0;
 
-              if(ep ==1)
+              /*if(ep ==1)
               {
               double co2 = (Fmass_pred * c_l_pred[2] + (1.0 - Fmass_pred) * c_s_pred[2])*1e6*20/100;
               double h2o = (Fmass_pred * c_l_pred[3] + (1.0 - Fmass_pred) * c_s_pred[3])*1e6*5/100;
               double morb = (Fmass_pred * c_l_pred[1] + (1.0 - Fmass_pred) * c_s_pred[1]);
               double dun = (Fmass_pred * c_l_pred[0] + (1.0 - Fmass_pred) * c_s_pred[0]);
               std::cout<<"it: 0 | F_eq: "<<Fmass_new<<" "<<Fmass_old<<" "<<dun<<" "<<morb<<" "<<co2<<" "<<h2o<<std::endl;  
-              }   
+              }*/   
 
           // Iterate to find conserving reaction rates using batch melting.
           for (int iter = 0; iter < max_iter; ++iter)
@@ -535,14 +576,14 @@ else
                   max_error = std::max(max_error, std::abs(C_bar_pred - C_bar[i]));
               }
 
-              if(ep ==1)
+              /*if(ep ==1)
               {
               double co2 = (Fmass_pred * c_l_pred[2] + (1.0 - Fmass_pred) * c_s_pred[2])*1e6*20/100;
               double h2o = (Fmass_pred * c_l_pred[3] + (1.0 - Fmass_pred) * c_s_pred[3])*1e6*5/100;
               double morb = (Fmass_pred * c_l_pred[1] + (1.0 - Fmass_pred) * c_s_pred[1]);
               double dun = (Fmass_pred * c_l_pred[0] + (1.0 - Fmass_pred) * c_s_pred[0]);
               std::cout<<"it: "<<iter+1<<"| F: "<<Fmass_pred<<" "<<GammaSum<<" "<<dun<<" "<<morb<<" "<<co2<<" "<<h2o<<" "<<max_error<<std::endl;  
-              }               
+              }*/               
 
               if (max_error < tol)
                   break;
@@ -561,6 +602,22 @@ else
 
           // Find the updated average density.
           avg_rho_new = rho_s / (1 - melt_reaction_step * (1 - rho_s / rho_l));
+
+          if(div_v > 0.)
+          {
+            double Fmass_div = melt_reaction_step + div_v * reaction_time_step_size * (rho_l/avg_rho_new);
+            for (unsigned int i = 0; i < n_components; ++i)
+              {
+                  const double cl = std::max(0.0, std::min(1.0, C_bar[i] / (melt_reaction_step + (1 - melt_reaction_step) * K[i])));
+                  const double cs = std::max(0.0, std::min(1.0, C_bar[i] / (melt_reaction_step / K[i] + (1 - melt_reaction_step))));
+                  const double cl_div = std::max(0.0, std::min(1.0, C_bar[i] / (Fmass_div + (1 - Fmass_div) * K[i])));
+                  const double cs_div = std::max(0.0, std::min(1.0, C_bar[i] / (Fmass_div / K[i] + (1 - Fmass_div))));
+
+                  //solid_reaction_rates[i] += (cs_div - cs)/reaction_time_step_size;
+                  //liquid_reaction_rates[i] += (cl_div - cl)/reaction_time_step_size;
+              }
+
+          }
 
         // Correct for the change in avg_rho.
         //if(reaction_time_step_size > 0)
@@ -598,7 +655,7 @@ else
       double avg_rho_step = rho_s / (1 - Fmass_step * (1 - rho_s/rho_l));
 
       // Return values, with melt_fractions converted from mass fraction to volume fraction.
-      return {Fmass_new*(avg_rho_new/rho_l), melt_reaction_rate*(avg_rho_step/rho_l), solid_reaction_rates, liquid_reaction_rates, enthalpy};
+      return {Fmass_new*(avg_rho_new/rho_l), melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates, enthalpy};
       }
 
       template <int dim>

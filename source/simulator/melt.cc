@@ -728,10 +728,25 @@ namespace aspect
       std::vector<Tensor<1,dim>> fluid_velocity_values(n_q_points);
       const FEValuesExtractors::Vector ex_u_f = introspection.variable("fluid velocity").extractor_vector();
       scratch.finite_element_values[ex_u_f].get_function_values (this->get_solution(),fluid_velocity_values);
+      std::vector<Tensor<2,dim>> fluid_velocity_gradients(n_q_points);
+
+      scratch.finite_element_values[ex_u_f].get_function_gradients(
+          this->get_solution(),
+          fluid_velocity_gradients);
+
+      scratch.finite_element_values[ex_u_f].get_function_gradients(
+          this->get_solution(),
+          fluid_velocity_gradients);
+
+      std::vector<Tensor<2,dim>> solid_velocity_gradients(n_q_points);
+
+      scratch.finite_element_values[introspection.extractors.velocities]
+        .get_function_gradients(this->get_solution(),
+                                solid_velocity_gradients);
 
       // average divergence u over the cell (needed for porosity advection)
       double divergence_u = 0.0;
-      if (this->get_melt_handler().is_porosity(*scratch.advection_field))
+      //if (this->get_melt_handler().is_porosity(*scratch.advection_field))
         for (unsigned int q=0; q<n_q_points; ++q)
           divergence_u += scratch.current_velocity_divergences[q] * 1./n_q_points;
 
@@ -869,6 +884,31 @@ namespace aspect
           //std::cout<<"DIVU: "<<divergence_u<<std::endl;
           const double JxW = scratch.finite_element_values.JxW(q);
 
+          // Compute velocity divergence at this quadrature point
+          double div_v = 0.0;
+          double appropriate_density = 0.0;
+                    //const double div_v = trace(fluid_velocity_gradients[q]);
+          //const Tensor<2,dim> &grad_u_s = solid_velocity_gradients[q];
+          //const double div_u_s = trace(solid_velocity_gradients[q]);
+          if (scratch.advection_field->advection_method(this->introspection()) == Parameters<dim>::AdvectionFieldMethod::fem_melt_field && !(this->get_melt_handler().is_porosity(*scratch.advection_field)))
+          {
+              div_v = trace(fluid_velocity_gradients[q]);
+              //std::cout<<"Fluid: "<<div_v<<std::endl;
+              appropriate_density = 0.;
+          }
+          else if (scratch.advection_field->advection_method(this->introspection()) == Parameters<dim>::AdvectionFieldMethod::fem_field && !(this->get_melt_handler().is_porosity(*scratch.advection_field)))
+          {
+              div_v = trace(solid_velocity_gradients[q]);
+              //std::cout<<"Solid: "<<div_v<<" "<<divergence_u<<std::endl;
+              appropriate_density = 0.;
+          }
+
+
+          // Add dilution term to LHS (it multiplies the field value)
+          //const double dilution_LHS = (is_liquid_composition || is_solid_composition)
+          //                            ? div_v
+          //                            : 0.0;
+
           // do the actual assembly. note that we only need to loop over the advection
           // shape functions because these are the only contributions we compute here
           for (unsigned int i=0; i<advection_dofs_per_cell; ++i)
@@ -895,6 +935,7 @@ namespace aspect
                           + (factor * scratch.phi_field[i] * scratch.phi_field[j])) *
                        (density_c_P_melt)
                        + time_step * scratch.phi_field[i] * scratch.phi_field[j] * melt_transport_LHS
+                       + time_step * scratch.phi_field[i] * scratch.phi_field[j] * div_v * appropriate_density
                      ) * JxW;
                 }
             }
