@@ -73,9 +73,6 @@ namespace aspect
       std::vector<std::vector<double>> composition_values (this->n_compositional_fields(),std::vector<double> (quadrature_formula.size()));
 
       std::map<types::boundary_id, double> local_co2_fluxes;
-      std::map<types::boundary_id, double> local_h2o_fluxes;
-      std::map<types::boundary_id, double> local_morb_fluxes;
-      std::map<types::boundary_id, double> local_top_co2_fluxes;
 
       MaterialModel::MaterialModelInputs<dim> in(fe_face_values.n_quadrature_points, this->n_compositional_fields());
       MaterialModel::MaterialModelOutputs<dim> out(fe_face_values.n_quadrature_points, this->n_compositional_fields());
@@ -106,10 +103,22 @@ namespace aspect
                 // Set use_strain_rates to false since we don't need viscosity
                 in.reinit(fe_face_values, cell, this->introspection(), this->get_solution());
 
+                const types::boundary_id boundary_ind = cell->face(f)->boundary_id();
+
+                const bool face_on_free_surface =
+                    (is_free_surface.find(boundary_ind) != is_free_surface.end());  
+
                 this->get_material_model().evaluate(in, out);
 
                 const FEValuesExtractors::Vector ex_u_f = this->introspection().variable("fluid velocity").extractor_vector();
                 fe_face_values[ex_u_f].get_function_values (this->get_solution(), fluid_velocity_values);
+  
+                // Get mesh velocity on this face if the mesh deforms
+                std::vector<Tensor<1,dim>> mesh_velocity_values(fe_face_values.n_quadrature_points);
+                if (this->get_parameters().mesh_deformation_enabled)
+                  fe_face_values[this->introspection().extractors.velocities]
+                    .get_function_values(this->get_mesh_deformation_handler().get_mesh_velocity(),
+                                        mesh_velocity_values);
 
                 double local_co2_flux = 0;
                 for (unsigned int q=0; q<fe_face_values.n_quadrature_points; ++q)
@@ -117,16 +126,27 @@ namespace aspect
                   double cmorb_cl =  std::max(0.0, std::min(in.composition[q][ccl_idx],1.0));
                   double cmorb_cs =  std::max(0.0, std::min(in.composition[q][ccs_idx],1.0));
                   double Fvol =  std::max(0.0, std::min(in.composition[q][porosity_idx],1.0));
-
                   double rho_s = out.densities[q];
                   double rho_l = fluid_out->fluid_densities[q];
 
-                  local_co2_flux += (20./100 *  
-                    (
-                    (Fvol * cmorb_cl * rho_l * (fluid_velocity_values[q] * fe_face_values.normal_vector(q)))
-                    + ((1 - Fvol) * cmorb_cs * rho_s * (in.velocity[q] * fe_face_values.normal_vector(q)))
-                    )
-                    * fe_face_values.JxW(q));     
+                  if (face_on_free_surface)
+                    {
+                      // Solid follows the surface: no solid flux.
+                      // Melt crosses it at its velocity relative to the mesh.
+                      const Tensor<1,dim> u_f_rel = fluid_velocity_values[q] - mesh_velocity_values[q];
+                      local_co2_flux += 20./100. * Fvol * cmorb_cl * rho_l
+                                        * (u_f_rel * fe_face_values.normal_vector(q))
+                                        * fe_face_values.JxW(q);
+                    }
+                  else
+                    {
+                    local_co2_flux += (20./100 *  
+                      (
+                      (Fvol * cmorb_cl * rho_l * (fluid_velocity_values[q] * fe_face_values.normal_vector(q)))
+                      + ((1 - Fvol) * cmorb_cs * rho_s * (in.velocity[q] * fe_face_values.normal_vector(q)))
+                      )
+                      * fe_face_values.JxW(q));    
+                    } 
                   }                           
 
                 const types::boundary_id boundary_indicator
@@ -173,29 +193,18 @@ namespace aspect
            p = global_co2_boundary_fluxes.begin();
            p != global_co2_boundary_fluxes.end(); ++p, ++index)
            {
-
-             // If it is a free surface we don't calculate outward flux.
-            if (this->get_parameters().mesh_deformation_enabled == true)
-              if(is_free_surface.find(p->first) != is_free_surface.end()) 
-                 time_integrated_mass_flux += 0;
-              else
-                time_integrated_mass_flux += p->second * this->get_timestep() / year_in_seconds;
-            else
-              time_integrated_mass_flux += p->second * this->get_timestep() / year_in_seconds;
+            time_integrated_mass_flux += p->second * this->get_timestep() / in_years;
 
             // Find flux out top boundary, and convert back from ppm to kg/yr.
             // Do this regardless of whether it is a free surface.
             if(p->first == this->get_geometry_model().translate_symbolic_boundary_name_to_id ("top"))
             {
-              total_co2_degass += p->second * this->get_timestep() / year_in_seconds;
+              total_co2_degass += p->second * this->get_timestep() / in_years;
               top_co2_flux = p->second;
             }
            }
 
-
-      // Now we find the global volatile mass
-
-     // create a quadrature formula based on the compositional element alone.
+      // create a quadrature formula based on the compositional element alone.
       const Quadrature<dim> &quadrature_formula1 = this->introspection().quadratures.compositional_field_max;
       const unsigned int n_q_points = quadrature_formula1.size();
 

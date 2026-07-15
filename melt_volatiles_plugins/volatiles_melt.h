@@ -213,6 +213,9 @@ namespace aspect
 
           mutable int totaln = 0;
           mutable double totaltime = 0;
+          mutable double avg_it = 0;
+          mutable int max_it = 0;
+          mutable int calls = 0;
 
           /**
            * We cache the evaluators that are necessary to evaluate the velocity

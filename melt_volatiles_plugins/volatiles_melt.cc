@@ -267,7 +267,8 @@ template <int dim>
                 if(this->get_timestep_number() > 0)
                   viscosity = out.viscosities[i];
 
-                melt_out->compaction_viscosities[i] = 5e20 * 10/std::max(porosity,0.00025);
+                melt_out->compaction_viscosities[i] = compaction_viscosity_ratio * viscosity / std::max(porosity, porosity_threshold);
+                // 5e20 * 10/std::max(porosity,0.00025);
                 //5e20 / (porosity + 0.01);
                 //5e20 * 10/std::max(porosity,0.00025);
                 //compaction_viscosity_ratio * viscosity / std::max(porosity, porosity_threshold);
@@ -445,10 +446,6 @@ template <int dim>
           // Calculate new Cl and Cs values, and limit all between 0 and 1.
           Fmass_new = std::max(0.0, std::min(1.0, Fmass_new));
 
-          // Provide maximum limit to porosity.
-          //if(Fmass_new*(avg_rho/rho_l) > 0.3)
-          //  Fmass_new = 0.3 * (rho_l / avg_rho);
-
           //const double dcl = std::max(0.0, std::min(1.0, C_bar[0] / (Fmass_new + (1 - Fmass_new) * K[0])));
           const double mcl = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new + (1 - Fmass_new) * K[1])));
           const double ccl = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new + (1 - Fmass_new) * K[2])));     
@@ -491,14 +488,16 @@ template <int dim>
           std::vector<double> c_l_pred = c_l;
           std::vector<double> c_s_pred = c_s;
           const double reaction_rho = rho_s;
-          const double tau_r        = melting_time_scale; // + 2.0 * reaction_time_step_size;
+          const double tau_r        = melting_time_scale + 2.0 * reaction_time_step_size;
           const double R  =  reaction_rho/tau_r;
-          const int max_iter = 50;
-          const double tol   = 1e-9;
+          const int max_iter = 20;
+          const double tol   = 1e-6;
           // Better initial guess
-          const double relax = 0.5 * reaction_time_step_size / (melting_time_scale + reaction_time_step_size);
-          double Fmass_pred = Fmass_old + relax * (Fmass_new - Fmass_old);
+          const double alpha = 1.0 - std::exp(-reaction_time_step_size / tau_r);
+          double previous_error = std::numeric_limits<double>::max();
+          double Fmass_pred = Fmass_old + alpha * (Fmass_new - Fmass_old);
           double enthalpy = 0.0;
+          int final_it = 0;
 
               /*if(ep ==1)
               {
@@ -524,45 +523,42 @@ template <int dim>
                   GammaSum += Gamma[i];
               }
 
-              melt_reaction_rate = GammaSum / reaction_rho;
+              const double avg_rho_pred = rho_s / (1.0 - Fmass_pred * (1.0 - rho_s / rho_l));
+              const double Fmass_rate = GammaSum / avg_rho_pred;
 
-              // Compute rates — only liquid rate needs the near-zero correction
-              const double inv_solid_denom  = 1.0 / (std::max(1e-6, 1.0 - Fmass_pred) * reaction_rho);
-              const double inv_liquid_denom = 1.0 / (std::max(1e-6, Fmass_pred) * reaction_rho);
-
+              const double inv_solid_denom  = 1.0 / (std::max(1e-6, 1.0 - Fmass_pred) * avg_rho_pred);
+              const double inv_liquid_denom = 1.0 / (std::max(1e-6, Fmass_pred) * avg_rho_pred);
               for (unsigned int i = 0; i < n_components; ++i)
               {
                   solid_reaction_rates[i]  = -(Gamma[i] - c_s[i] * GammaSum) * inv_solid_denom;
-                  //liquid_reaction_rates[i] = (Gamma[i] - c_l[i] * GammaSum) * inv_liquid_denom;
                   liquid_reaction_rates[i] = (Fmass_pred < 1e-6)
                                             ? (c_leq[i] - c_l[i]) / reaction_time_step_size
                                             :  (Gamma[i] - c_l[i] * GammaSum) * inv_liquid_denom;
               }
 
               // Predict end state from initial value + rates
-             // Fmass_pred = Fmass_old + melt_reaction_rate * reaction_time_step_size;
+              double Fmass_pred_new = Fmass_old + Fmass_rate * reaction_time_step_size;
 
-double Fmass_pred_new = Fmass_old + melt_reaction_rate * reaction_time_step_size;
+              // Newton step
+              // Residual: how far predicted is from fixed point
+              double f = Fmass_pred - Fmass_pred_new;
 
-// Newton step
-// Residual: how far predicted is from fixed point
-double f = Fmass_pred - Fmass_pred_new;
+              // Derivative of GammaSum with respect to Fmass_pred
+              // GammaSum = R * sum(Fmass_new * c_leq[i] - Fmass_pred * c_l_pred[i])
+              // dGammaSum/dFmass_pred = -R * sum(c_l_pred[i])
+              double dGammaSum_dF = 0.0;
+              for (unsigned int i = 0; i < n_components; ++i)
+                  dGammaSum_dF -= R * c_l_pred[i];
 
-// Derivative of GammaSum with respect to Fmass_pred
-// GammaSum = R * sum(Fmass_new * c_leq[i] - Fmass_pred * c_l_pred[i])
-// dGammaSum/dFmass_pred = -R * sum(c_l_pred[i])
-double dGammaSum_dF = 0.0;
-for (unsigned int i = 0; i < n_components; ++i)
-    dGammaSum_dF -= R * c_l_pred[i];
+              // df/dFmass_pred = 1 - dGammaSum/dFmass_pred * dt / rho
+              double df = 1.0 - dGammaSum_dF * reaction_time_step_size / avg_rho_pred;
+              double step = -f / df;
 
-// df/dFmass_pred = 1 - dGammaSum/dFmass_pred * dt / rho
-double df = 1.0 - dGammaSum_dF * reaction_time_step_size / reaction_rho;
-
-// Newton update
-if (std::abs(df) > 1e-10)
-    Fmass_pred = Fmass_pred - f / df;
-else
-    Fmass_pred = Fmass_pred_new;
+              // Newton update
+              if (std::abs(df) > 1e-10)
+                  Fmass_pred = Fmass_pred + step;
+              else
+                  Fmass_pred = Fmass_pred_new;
 
               // Find the maximum error.
               double max_error = 0.0;
@@ -583,7 +579,10 @@ else
               double morb = (Fmass_pred * c_l_pred[1] + (1.0 - Fmass_pred) * c_s_pred[1]);
               double dun = (Fmass_pred * c_l_pred[0] + (1.0 - Fmass_pred) * c_s_pred[0]);
               std::cout<<"it: "<<iter+1<<"| F: "<<Fmass_pred<<" "<<GammaSum<<" "<<dun<<" "<<morb<<" "<<co2<<" "<<h2o<<" "<<max_error<<std::endl;  
-              }*/               
+              }*/
+
+              melt_reaction_rate = GammaSum / reaction_rho;
+              final_it = iter+1;
 
               if (max_error < tol)
                   break;
@@ -591,7 +590,16 @@ else
               if (iter == max_iter - 1)
                   std::cout << "Warning: reaction iteration did not converge, error: "
                             << max_error << std::endl;
+
           }
+
+            calls += 1;
+            avg_it += final_it;
+            if(final_it > max_it)
+                max_it = final_it;
+          
+            //if(ep ==1)
+            //  std::cout<<"Max it: "<<max_it<<" | avg_it: "<<avg_it/calls<<std::endl;
 
           // Normalise enthalpy outside the loop — only needs to be done once
           //if (GammaSum != 0)
@@ -602,51 +610,7 @@ else
 
           // Find the updated average density.
           avg_rho_new = rho_s / (1 - melt_reaction_step * (1 - rho_s / rho_l));
-
-          if(div_v > 0.)
-          {
-            double Fmass_div = melt_reaction_step + div_v * reaction_time_step_size * (rho_l/avg_rho_new);
-            for (unsigned int i = 0; i < n_components; ++i)
-              {
-                  const double cl = std::max(0.0, std::min(1.0, C_bar[i] / (melt_reaction_step + (1 - melt_reaction_step) * K[i])));
-                  const double cs = std::max(0.0, std::min(1.0, C_bar[i] / (melt_reaction_step / K[i] + (1 - melt_reaction_step))));
-                  const double cl_div = std::max(0.0, std::min(1.0, C_bar[i] / (Fmass_div + (1 - Fmass_div) * K[i])));
-                  const double cs_div = std::max(0.0, std::min(1.0, C_bar[i] / (Fmass_div / K[i] + (1 - Fmass_div))));
-
-                  //solid_reaction_rates[i] += (cs_div - cs)/reaction_time_step_size;
-                  //liquid_reaction_rates[i] += (cl_div - cl)/reaction_time_step_size;
-              }
-
-          }
-
-        // Correct for the change in avg_rho.
-        //if(reaction_time_step_size > 0)
-        //  melt_reaction_rate += Fvol_old * rho_l * (1.0 / avg_rho - 1.0 / avg_rho_new) / reaction_time_step_size;
-
-        if(ep == 1)
-        {
-          //std::cout<<Fmass_new<<std::endl;
-          double Fvol_new = Fmass_new*(avg_rho_new/rho_l);
-          //double cppm_eq = (Fmass_new * c_leq[2] + (1 - Fmass_new)*c_seq[2]) * 20/100 * 1e6;
-          //double Fmass_step = Fmass_old+melt_reaction_rate*reaction_time_step_size;
-          //double liquid_step = c_l[2]+liquid_reaction_rates[2]*reaction_time_step_size;
-          //double solid_step = c_s[2]+solid_reaction_rates[2]*reaction_time_step_size;
-          //double cppm_r = (Fmass_step * liquid_step + (1 - Fmass_step)*solid_step) * 20/100 * 1e6;
-          //double cmass = (Fvol_new * ccl * rho_l + (1 - Fvol_new)*ccs*rho_s) * 20/100;
-          //std::cout<<"EQ: "<<cppm_eq<<" | step: "<<cppm_r<<std::endl;
-          
-          //td::cout<<"Plugin end: "<<melt_reaction_rate*(avg_rho_new/rho_l)<<" new avg_rho: "<<avg_rho_new<<" old avg_rho: "<<avg_rho<<std::endl;
-          //std::cout<<"New: "<<Fmass_old<<" "<<Fmass_new<<" "<<cppm<<" "<<cmass<<" "<<melt_reaction_rate<<std::endl;
-
-          //std::cout<<"Plugin end: ppm | mass | liquid | solid | porosity | reaction_rate | old_avg_rho | new_avg_rho"<<std::endl;
-          //std::cout<<"Plugin end: "<<cppm<<" | "<<cmass<<" | "<<ccl<<" | "<<ccs<<" | "<<Fvol_new<<" | "<<melt_reaction_rate*(avg_rho_new/rho_l)<<" | "<<avg_rho<<" | "<<avg_rho_new<<std::endl;
-          //std::cout<<"Plugin end: "<<melt_reaction_rate*(avg_rho_new/rho_l)<<std::endl;
-          //std::cout<<"------------------"<<std::endl;
-        } 
       }   
-
-      // avg_rho_new is computed from equilibrium Fmass_new
-      avg_rho_new = rho_s / (1 - Fmass_new * (1 - rho_s/rho_l));
 
       // But the actual melt fraction after this substep is
       double Fmass_step = Fmass_old + melt_reaction_rate * reaction_time_step_size;
@@ -655,7 +619,7 @@ else
       double avg_rho_step = rho_s / (1 - Fmass_step * (1 - rho_s/rho_l));
 
       // Return values, with melt_fractions converted from mass fraction to volume fraction.
-      return {Fmass_new*(avg_rho_new/rho_l), melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates, enthalpy};
+      return {Fmass_new*(avg_rho_step/rho_l), melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates, enthalpy};
       }
 
       template <int dim>
