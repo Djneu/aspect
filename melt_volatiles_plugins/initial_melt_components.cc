@@ -114,7 +114,6 @@ namespace aspect
       {
         volatile_model.initialize_simulator (this->get_simulator());
         volatile_model.parse_parameters(prm);
-        prm.leave_subsection();
       }
       prm.leave_subsection();
 
