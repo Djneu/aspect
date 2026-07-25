@@ -662,6 +662,16 @@ namespace aspect
          * Flag to use orographic controls.
          */
         bool use_orographic_controls;
+
+        /**
+         * Whether to output the basement visualization.
+         */
+        bool output_basement;
+
+        /**
+         * Whether to output the basement visualization.
+         */
+        bool output_sealevel;
         /**
          * @}
          */

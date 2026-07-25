@@ -147,15 +147,16 @@ namespace aspect
        * Create a .VTK file for the FastScape surface within the FastScape folder of the
        * ASPECT output folder.
        */
-      void fastscape_named_vtk_(double *fp,
-                                const double *vexp,
+      void fastscape_named_vtk_(const double *vexp,
                                 unsigned int *astep,
                                 const char *c,
                                 const unsigned int *length,
                                 const double *model_height,
                                 const unsigned int *model_dim,
                                 const double *adjustment,
-                                const double *time);
+                                const double *time,
+                                const bool *output_basement,
+                                const bool *output_sealevel);
 #endif
 
       /**
@@ -994,15 +995,16 @@ namespace aspect
             // FastScape by default visualizes a field called HHHHH,
             // and the parameter this shows will be whatever is given as the first
             // position. extra_vtk_field is set to the river incision rate by default.
-            fastscape_named_vtk_(extra_vtk_field.data(),
-                                 &vexp,
+            fastscape_named_vtk_(&vexp,
                                  &initial_file_number,
                                  dirname_char,
                                  &dirname_length,
                                  &model_height,
                                  &model_dim,
                                  &ghost_node_adjustment,
-                                 &time_in_years_or_seconds);
+                                 &time_in_years_or_seconds,
+                                 &output_basement,
+                                 &output_sealevel);
 #else
             (void)extra_vtk_field;
             (void)vexp;
@@ -1093,15 +1095,16 @@ namespace aspect
             const std::string dirname = (this->get_output_directory() + "fastscape/");
             const char *dirname_char=dirname.c_str();
             const unsigned int dirname_length = dirname.length();
-            fastscape_named_vtk_(extra_vtk_field.data(),
-                                 &vexp,
+            fastscape_named_vtk_(&vexp,
                                  &output_file_number,
                                  dirname_char,
                                  &dirname_length,
                                  &model_height,
                                  &model_dim,
                                  &ghost_node_adjustment,
-                                 &time_in_years_or_seconds);
+                                 &time_in_years_or_seconds,
+                                 &output_basement,
+                                 &output_sealevel);
 #else
             (void)extra_vtk_field;
             (void)vexp;
@@ -1827,8 +1830,13 @@ namespace aspect
           prm.declare_entry("Additional output variables", "river incision rate",
                             Patterns::Selection("river incision rate|transport coefficient|uplift rate"),
                             "Select one additional Fastscape variable to output in the Fastcape vtk. "
-                            "Output are in units of per year. "
-                           );
+                            "Output are in units of per year. ");
+          prm.declare_entry ("Output basement visualization", "false",
+                             Patterns::Bool (),
+                             "Whether or not to visualize the FastScape basement.");
+          prm.declare_entry ("Output sea level visualization", "false",
+                             Patterns::Bool (),
+                             "Whether or not to visualize the FastScape sea level.");
 
           prm.enter_subsection ("Boundary conditions");
           {
@@ -2051,6 +2059,8 @@ namespace aspect
                                 (Utilities::split_string_list(prm.get ("Sediment rain rates")));
           sediment_rain_times = Utilities::string_to_double
                                 (Utilities::split_string_list(prm.get ("Sediment rain time intervals")));
+          output_basement = prm.get_bool("Output basement visualization");
+          output_sealevel = prm.get_bool("Output sea level visualization");
 
           if (!this->convert_output_to_years())
             {
