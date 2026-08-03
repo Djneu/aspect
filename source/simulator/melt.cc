@@ -720,11 +720,37 @@ namespace aspect
       const FEValuesExtractors::Vector ex_u_f = introspection.variable("fluid velocity").extractor_vector();
       scratch.finite_element_values[ex_u_f].get_function_values (this->get_solution(),fluid_velocity_values);
 
-      // average divergence u over the cell (needed for porosity advection)
+      // near where fluid_velocity_values is fetched, in MeltAdvectionSystem::execute
+      std::vector<double> compaction_pressure_values(n_q_points);
+      const FEValuesExtractors::Scalar ex_p_c = introspection.variable("compaction pressure").extractor_scalar();
+      scratch.finite_element_values[ex_p_c].get_function_values(this->get_solution(), compaction_pressure_values);
+
+      const double p_c_scale = Plugins::get_plugin_as_type<const MaterialModel::MeltInterface<dim>>(
+                                this->get_material_model()).p_c_scale(scratch.material_model_inputs,
+                                                                      scratch.material_model_outputs,
+                                                                      this->get_melt_handler(),
+                                                                      true);
+
       double divergence_u = 0.0;
       if (this->get_melt_handler().is_porosity(*scratch.advection_field))
         for (unsigned int q=0; q<n_q_points; ++q)
-          divergence_u += scratch.current_velocity_divergences[q] * 1./n_q_points;
+          {
+            const double xi = melt_outputs->compaction_viscosities[q];
+            // Physical solid-velocity divergence from the compaction relation:
+            //   div u_s = - p_c_scale * p_c / xi
+            // rather than the discrete FE velocity divergence, which carries
+            // discretization/solver noise in large or incompressible models.
+            const double div_u_phys = (xi > 0.0
+                                      ? - p_c_scale * compaction_pressure_values[q] / xi
+                                      : 0.0);
+            divergence_u += div_u_phys * 1./n_q_points;
+          }
+
+      // average divergence u over the cell (needed for porosity advection)
+      //double divergence_u = 0.0;
+      //if (this->get_melt_handler().is_porosity(*scratch.advection_field))
+      //  for (unsigned int q=0; q<n_q_points; ++q)
+      //    divergence_u += scratch.current_velocity_divergences[q] * 1./n_q_points;
 
       for (unsigned int q=0; q<n_q_points; ++q)
         {
@@ -898,6 +924,8 @@ namespace aspect
       internal::Assembly::Scratch::AdvectionSystem<dim> &scratch =
         dynamic_cast<internal::Assembly::Scratch::AdvectionSystem<dim>&> (scratch_base);
 
+      const Introspection<dim> &introspection = this->introspection();
+
       const unsigned int n_q_points = scratch.finite_element_values.n_quadrature_points;
       std::vector<double> residuals(n_q_points);
 
@@ -906,10 +934,39 @@ namespace aspect
                                                  scratch.heating_model_outputs);
 
       // average divergence u over the cell (needed for porosity advection)
+      //double divergence_u = 0.0;
+      //if (this->get_melt_handler().is_porosity(*scratch.advection_field))
+      //  for (unsigned int q=0; q<n_q_points; ++q)
+      //    divergence_u += scratch.current_velocity_divergences[q] * 1./n_q_points;
+
+       // near where fluid_velocity_values is fetched, in MeltAdvectionSystem::execute
+      std::vector<double> compaction_pressure_values(n_q_points);
+      const FEValuesExtractors::Scalar ex_p_c = introspection.variable("compaction pressure").extractor_scalar();
+      scratch.finite_element_values[ex_p_c].get_function_values(this->get_solution(), compaction_pressure_values);
+
+      const std::shared_ptr<MaterialModel::MeltOutputs<dim>> melt_outputs
+        = scratch.material_model_outputs.template get_additional_output_object<MaterialModel::MeltOutputs<dim>>();
+
+      const double p_c_scale = Plugins::get_plugin_as_type<const MaterialModel::MeltInterface<dim>>(
+                                this->get_material_model()).p_c_scale(scratch.material_model_inputs,
+                                                                      scratch.material_model_outputs,
+                                                                      this->get_melt_handler(),
+                                                                      true);
+
       double divergence_u = 0.0;
       if (this->get_melt_handler().is_porosity(*scratch.advection_field))
         for (unsigned int q=0; q<n_q_points; ++q)
-          divergence_u += scratch.current_velocity_divergences[q] * 1./n_q_points;
+          {
+            const double xi = melt_outputs->compaction_viscosities[q];
+            // Physical solid-velocity divergence from the compaction relation:
+            //   div u_s = - p_c_scale * p_c / xi
+            // rather than the discrete FE velocity divergence, which carries
+            // discretization/solver noise in large or incompressible models.
+            const double div_u_phys = (xi > 0.0
+                                      ? - p_c_scale * compaction_pressure_values[q] / xi
+                                      : 0.0);
+            divergence_u += div_u_phys * 1./n_q_points;
+          }        
 
       for (unsigned int q=0; q < n_q_points; ++q)
         {
@@ -958,10 +1015,11 @@ namespace aspect
                                                  :
                                                  0.0);
 
-              const double melt_transport_LHS =
-                (this->get_melt_handler().is_porosity(*scratch.advection_field)
-                 ?
-                 scratch.current_velocity_divergences[q]
+          const double melt_transport_LHS =
+            (this->get_melt_handler().is_porosity(*scratch.advection_field)
+             && this->get_melt_handler().is_melt_cell(scratch.material_model_inputs.current_cell)
+             ?
+                 divergence_u
                  + (this->get_material_model().is_compressible()
                     ?
                     scratch.material_model_outputs.compressibilities[q]
