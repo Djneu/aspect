@@ -142,12 +142,12 @@ namespace aspect
        */
       void fastscape_execute_step_();
 
-#ifdef ASPECT_HAVE_FASTSCAPE_NAMED_VTK
+//#ifdef ASPECT_HAVE_FASTSCAPE_VISUALIZATION
       /**
        * Create a .VTK file for the FastScape surface within the FastScape folder of the
        * ASPECT output folder.
        */
-      void fastscape_named_vtk_(const double *vexp,
+      void fastscape_write_visualization_(const double *vexp,
                                 unsigned int *astep,
                                 const char *c,
                                 const unsigned int *length,
@@ -157,7 +157,7 @@ namespace aspect
                                 const double *time,
                                 const bool *output_basement,
                                 const bool *output_sealevel);
-#endif
+//#endif
 
       /**
        * Copy the current FastScape topography.
@@ -986,8 +986,8 @@ namespace aspect
         // If it is the first timestep, write an initial VTK file.
         if (current_timestep == 1)
           {
-#ifdef ASPECT_HAVE_FASTSCAPE_NAMED_VTK
-            this->get_pcout() << "      Writing initial VTK..." << std::endl;
+//#ifdef ASPECT_HAVE_FASTSCAPE_VISUALIZATION
+            this->get_pcout() << "      Writing initial FastScape visualization..." << std::endl;
 
             const double time_in_years_or_seconds = 0;
             unsigned int initial_file_number = 0;
@@ -995,7 +995,7 @@ namespace aspect
             // FastScape by default visualizes a field called HHHHH,
             // and the parameter this shows will be whatever is given as the first
             // position. extra_vtk_field is set to the river incision rate by default.
-            fastscape_named_vtk_(&vexp,
+            fastscape_write_visualization_(&vexp,
                                  &initial_file_number,
                                  dirname_char,
                                  &dirname_length,
@@ -1005,17 +1005,17 @@ namespace aspect
                                  &time_in_years_or_seconds,
                                  &output_basement,
                                  &output_sealevel);
-#else
-            (void)extra_vtk_field;
-            (void)vexp;
-            (void)dirname_char;
-            (void)dirname_length;
-            (void)model_height;
-            (void)model_dim;
+//#else
+            //(void)extra_vtk_field;
+            //(void)vexp;
+            //(void)dirname_char;
+            //(void)dirname_length;
+            //(void)model_height;
+            //(void)model_dim;
 
-            this->get_pcout() << "      Not writing initial VTK because the FastScape library does not support this functionality."
-                              << std::endl;
-#endif
+            //this->get_pcout() << "      Not writing initial FastScape visualization because the FastScape library does not support this functionality."
+            //                  << std::endl;
+//#endif
           }
 
         for (unsigned int fastscape_iteration = 0; fastscape_iteration < fastscape_iterations; ++fastscape_iteration)
@@ -1073,8 +1073,8 @@ namespace aspect
 
         if (write_vtk)
           {
-#ifdef ASPECT_HAVE_FASTSCAPE_NAMED_VTK
-            this->get_pcout() << "      Writing FastScape VTK..." << std::endl;
+//#ifdef ASPECT_HAVE_FASTSCAPE_VISUALIZATION
+            this->get_pcout() << "      Writing FastScape visualization..." << std::endl;
 
             const double time_in_years_or_seconds = (this->convert_output_to_years() ?
                                                      this->get_time() / year_in_seconds :
@@ -1095,7 +1095,7 @@ namespace aspect
             const std::string dirname = (this->get_output_directory() + "fastscape/");
             const char *dirname_char=dirname.c_str();
             const unsigned int dirname_length = dirname.length();
-            fastscape_named_vtk_(&vexp,
+            fastscape_write_visualization_(&vexp,
                                  &output_file_number,
                                  dirname_char,
                                  &dirname_length,
@@ -1105,17 +1105,17 @@ namespace aspect
                                  &time_in_years_or_seconds,
                                  &output_basement,
                                  &output_sealevel);
-#else
-            (void)extra_vtk_field;
-            (void)vexp;
-            (void)dirname_char;
-            (void)dirname_length;
-            (void)model_height;
-            (void)model_dim;
+//#else
+            //(void)extra_vtk_field;
+            //(void)vexp;
+            //(void)dirname_char;
+            //(void)dirname_length;
+            //(void)model_height;
+            //(void)model_dim;
 
-            this->get_pcout() << "      Not writing FastScape VTK because the FastScape library does not support this functionality."
-                              << std::endl;
-#endif
+            //this->get_pcout() << "      Not writing FastScape visualization because the FastScape library does not support this functionality."
+            //                  << std::endl;
+//#endif
           }
       }
 
