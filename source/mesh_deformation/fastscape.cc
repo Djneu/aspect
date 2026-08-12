@@ -369,11 +369,15 @@ namespace aspect
           std::vector<double> velocity_z(fastscape_array_size);
           std::vector<double> bedrock_river_incision_rate_array(fastscape_array_size);
           std::vector<double> bedrock_transport_coefficient_array(fastscape_array_size);
+          std::vector<double> sand_transport_coefficient_array(fastscape_array_size);
+          std::vector<double> silt_transport_coefficient_array(fastscape_array_size);
           std::vector<double> elevation_old(fastscape_array_size);
 
           fill_fastscape_arrays(elevation,
                                 bedrock_transport_coefficient_array,
                                 bedrock_river_incision_rate_array,
+                                sand_transport_coefficient_array,
+                                silt_transport_coefficient_array,
                                 velocity_x,
                                 velocity_y,
                                 velocity_z,
@@ -513,8 +517,8 @@ namespace aspect
                                              &sand_efold_depth,
                                              &incoming_silt_fraction,
                                              &sand_silt_averaging_depth,
-                                             &silt_transport_coefficient,
-                                             &sand_transport_coefficient);
+                                             silt_transport_coefficient_array.data(),
+                                             sand_transport_coefficient_array.data());
 
           // Generate a combined array for kf and kd both onshore and offshore.
           // Onshore, kf and kd can have different values for bedrock and
@@ -578,16 +582,13 @@ namespace aspect
                   // The combined marine diffusion coefficient is an approximation
                   // of the actual diffusion, which is solved for both sediment
                   // types separately in Fastscape.
-                  const double marine_diffusion_coefficient = silt_fraction[i] * silt_transport_coefficient + (1. - silt_fraction[i]) * sand_transport_coefficient;
+                  const double marine_diffusion_coefficient = silt_fraction[i] * silt_transport_coefficient_array[i] + (1. - silt_fraction[i]) * sand_transport_coefficient_array[i];
                   combined_kd[i] = marine_diffusion_coefficient;
                 }
-              else if (elevation[i] < current_sea_level && !use_marine_component)
-                std::cout<<"Below sea level and not use marine component"<<std::endl;
               else
                 {
-                  std::cout<<"elevation[i]: "<<elevation[i]<<std::endl;
-                  std::cout<<"current_sea_level: "<<current_sea_level<<std::endl;
-                  std::cout<<"use_marine_component: "<<use_marine_component<<std::endl;
+                  combined_kf[i] = sediment_river_incision_rate;
+                  combined_kd[i] = sediment_transport_coefficient;
                   AssertThrow (false, ExcMessage ("Unexpected conditions reached while filling the kf and kd arrays in the FastScape interface."));
                 }
             }
@@ -712,7 +713,7 @@ namespace aspect
       const unsigned int n_chemical_compositional_fields = chemical_composition_idx.size();
 
       const types::boundary_id relevant_boundary = this->get_geometry_model().translate_symbolic_boundary_name_to_id ("top");
-      std::vector<std::vector<double>> local_aspect_values(dim+4, std::vector<double>());
+      std::vector<std::vector<double>> local_aspect_values(dim+6, std::vector<double>());
 
       // Get a quadrature rule that exists only on the corners, and increase the refinement if specified.
       const QIterated<dim-1> face_corners (QTrapezoid<1>(),
@@ -737,7 +738,7 @@ namespace aspect
                 fe_face_values.reinit(cell, face_no);
                 fe_face_values[this->introspection().extractors.velocities].get_function_values(this->get_solution(), vel);
 
-                if (use_compositional_erosion_bedrock)
+                if (use_compositional_erosion_bedrock || use_compositional_erosion_marine)
                   {
                     // Get compositional erosional parameters from compositional values, for chemical compositions + background mantle
                     for (unsigned int c=0; c<n_chemical_compositional_fields; ++c)
@@ -767,9 +768,12 @@ namespace aspect
 
                     double bedrock_river_incision_rate_at_point = numbers::signaling_nan<double>();
                     double bedrock_transport_coefficient_at_point = numbers::signaling_nan<double>();
-                    if (use_compositional_erosion_bedrock)
-                      {
-                        std::vector<double> composition_values(n_chemical_compositional_fields);
+                    double sand_transport_coefficient_at_point = numbers::signaling_nan<double>();
+                    double silt_transport_coefficient_at_point = numbers::signaling_nan<double>();
+
+                    std::vector<double> composition_values(n_chemical_compositional_fields);
+                    if (use_compositional_erosion_bedrock || use_compositional_erosion_marine)
+                      {  
                         double volume_fraction_sum = 0;
                         for (unsigned int c=0; c < n_chemical_compositional_fields; ++c)
                           {
@@ -778,8 +782,16 @@ namespace aspect
                           }
                         // Add background material fraction at the beginning
                         composition_values.insert(composition_values.begin(), std::max(0.0, 1.0 - volume_fraction_sum));
+                      }
+                    if (use_compositional_erosion_bedrock)
+                      { 
                         bedrock_river_incision_rate_at_point = MaterialModel::MaterialUtilities::average_value (composition_values, constant_bedrock_river_incision_rate, MaterialModel::MaterialUtilities::arithmetic);
                         bedrock_transport_coefficient_at_point = MaterialModel::MaterialUtilities::average_value (composition_values, constant_bedrock_transport_coefficient, MaterialModel::MaterialUtilities::arithmetic);
+                      }
+                    if (use_compositional_erosion_marine)
+                      {
+                        sand_transport_coefficient_at_point = MaterialModel::MaterialUtilities::average_value (composition_values, sand_transport_coefficient, MaterialModel::MaterialUtilities::arithmetic);
+                        silt_transport_coefficient_at_point = MaterialModel::MaterialUtilities::average_value (composition_values, silt_transport_coefficient, MaterialModel::MaterialUtilities::arithmetic);
                       }
 
                     // If we're in 2D, we want to take the values and apply them to every row of X points.
@@ -810,6 +822,8 @@ namespace aspect
 
                             local_aspect_values[dim+2].push_back(bedrock_river_incision_rate_at_point);
                             local_aspect_values[dim+3].push_back(bedrock_transport_coefficient_at_point);
+                            local_aspect_values[dim+4].push_back(sand_transport_coefficient_at_point);
+                            local_aspect_values[dim+5].push_back(silt_transport_coefficient_at_point);
                           }
                       }
                     // 3D case
@@ -837,6 +851,8 @@ namespace aspect
 
                         local_aspect_values[dim+2].push_back(bedrock_river_incision_rate_at_point);
                         local_aspect_values[dim+3].push_back(bedrock_transport_coefficient_at_point);
+                        local_aspect_values[dim+4].push_back(sand_transport_coefficient_at_point);
+                        local_aspect_values[dim+5].push_back(silt_transport_coefficient_at_point);
                       }
                   }
               }
@@ -849,12 +865,17 @@ namespace aspect
     void FastScape<dim>::fill_fastscape_arrays(std::vector<double> &elevation,
                                                std::vector<double> &bedrock_transport_coefficient_array,
                                                std::vector<double> &bedrock_river_incision_rate_array,
+                                               std::vector<double> &sand_transport_coefficient_array,
+                                               std::vector<double> &silt_transport_coefficient_array,
                                                std::vector<double> &velocity_x,
                                                std::vector<double> &velocity_y,
                                                std::vector<double> &velocity_z,
                                                std::vector<std::vector<double>> &local_aspect_values) const
     {
       const double time_scaling_factor = (this->convert_output_to_years() ? 1.0 : year_in_seconds);
+      const double current_sea_level = use_sea_level_function
+                                       ? sea_level_function.value(Point<1>())
+                                       : sea_level_constant_value;
 
       for (unsigned int i=0; i<local_aspect_values[1].size(); ++i)
         {
@@ -938,6 +959,8 @@ namespace aspect
           const int idx = global_to_local[i];
           double bedrock_river_incision_rate_local = numbers::signaling_nan<double>();
           double bedrock_transport_coefficient_local = numbers::signaling_nan<double>();
+          double sand_transport_coefficient_local = numbers::signaling_nan<double>();
+          double silt_transport_coefficient_local = numbers::signaling_nan<double>();
           if (use_compositional_erosion_bedrock)
             {
               AssertThrow(idx >= 0,
@@ -965,6 +988,28 @@ namespace aspect
           bedrock_river_incision_rate_array[i] = bedrock_river_incision_rate_local;
           bedrock_transport_coefficient_array[i] = bedrock_transport_coefficient_local;
 
+          if (use_compositional_erosion_marine)
+            {
+              AssertThrow(idx >= 0,
+                          ExcMessage("Missing data from ASPECT for fastscape mesh"));
+              AssertThrow(static_cast<unsigned int>(idx) < local_aspect_values[dim+2].size(),
+                          ExcMessage("ASPECT data out of bounds for fastscape mesh"));
+              sand_transport_coefficient_local = time_scaling_factor * local_aspect_values[dim+4][idx];
+              silt_transport_coefficient_local = time_scaling_factor * local_aspect_values[dim+5][idx];
+            }
+          else
+            {
+              sand_transport_coefficient_local = time_scaling_factor * sand_transport_coefficient[0]; //500.; //
+              silt_transport_coefficient_local = time_scaling_factor * silt_transport_coefficient[0]; //100.; //
+            }
+          sand_transport_coefficient_array[i] = sand_transport_coefficient_local;
+          silt_transport_coefficient_array[i] = silt_transport_coefficient_local;
+          if (elevation[i] < current_sea_level)
+          {
+            sand_transport_coefficient_array[i] = std::exp(-lambda_decay_coefficient * (current_sea_level - elevation[i]))*sand_transport_coefficient_local;
+            silt_transport_coefficient_array[i] = std::exp(-lambda_decay_coefficient * (current_sea_level - elevation[i]))*silt_transport_coefficient_local;
+          }
+          
           if (elevation[i] == std::numeric_limits<double>::max() && !is_ghost_node(i,false) || std::isnan(elevation[i]))
             {
               fastscape_mesh_filled = false;
@@ -2091,11 +2136,18 @@ namespace aspect
             prm.declare_entry("Depth averaging thickness", "1e2",
                               Patterns::Double(),
                               "Depth averaging for the sand-silt equation. Units: ${m}$");
-            prm.declare_entry("Sand transport coefficient", "2.5e2",
+            prm.declare_entry("Submarine diffusion decay coefficient", "0.0",
                               Patterns::Double(),
+                              "The dacay coefficient to compute depth-dependent sand and silt transport coefficient. Units: ${m}$");
+            prm.declare_entry("Allow compositional erosion for marine", "false",
+                              Patterns::Bool (),
+                              "Whether to allow chemical compositions to have different erosional parameters for marine, "
+                              "including river incision rate and diffusivity.");
+            prm.declare_entry("Sand transport coefficient", "2.5e2",
+                              Patterns::List(Patterns::Double(0.)),
                               "Transport coefficient (diffusivity) for sand. Units: ${m^2/yr}$");
             prm.declare_entry("Silt transport coefficient", "2.5e2",
-                              Patterns::Double(),
+                              Patterns::List(Patterns::Double(0.)),
                               "Transport coefficient (diffusivity) for silt. Units: ${m^2/yr}$ ");
           }
           prm.leave_subsection();
@@ -2316,13 +2368,17 @@ namespace aspect
             silt_efold_depth = prm.get_double("Silt e-folding depth");
             incoming_silt_fraction = prm.get_double("Silt fraction");
             sand_silt_averaging_depth = prm.get_double("Depth averaging thickness");
-            sand_transport_coefficient = prm.get_double("Sand transport coefficient");
-            silt_transport_coefficient = prm.get_double("Silt transport coefficient");
-            if (!this->convert_output_to_years())
-              {
-                sand_transport_coefficient *= year_in_seconds;
-                silt_transport_coefficient *= year_in_seconds;
-              }
+            lambda_decay_coefficient = prm.get_double("Submarine diffusion decay coefficient");
+
+            use_compositional_erosion_marine = prm.get_bool("Allow compositional erosion for marine");
+            std::vector<std::string> chemical_field_names = this->introspection().chemical_composition_field_names();
+            chemical_field_names.insert(chemical_field_names.begin(),"background");
+            Utilities::MapParsing::Options options(chemical_field_names, "");
+            options.list_of_allowed_keys = chemical_field_names;
+            options.property_name = "Sand transport coefficient";
+            sand_transport_coefficient = Utilities::MapParsing::parse_map_to_double_array(prm.get(options.property_name), options);
+            options.property_name = "Silt transport coefficient";
+            silt_transport_coefficient = Utilities::MapParsing::parse_map_to_double_array(prm.get(options.property_name), options);
           }
           prm.leave_subsection();
         }
