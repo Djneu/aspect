@@ -773,7 +773,7 @@ namespace aspect
 
                     std::vector<double> composition_values(n_chemical_compositional_fields);
                     if (use_compositional_erosion_bedrock || use_compositional_erosion_marine)
-                      {  
+                      {
                         double volume_fraction_sum = 0;
                         for (unsigned int c=0; c < n_chemical_compositional_fields; ++c)
                           {
@@ -784,7 +784,7 @@ namespace aspect
                         composition_values.insert(composition_values.begin(), std::max(0.0, 1.0 - volume_fraction_sum));
                       }
                     if (use_compositional_erosion_bedrock)
-                      { 
+                      {
                         bedrock_river_incision_rate_at_point = MaterialModel::MaterialUtilities::average_value (composition_values, constant_bedrock_river_incision_rate, MaterialModel::MaterialUtilities::arithmetic);
                         bedrock_transport_coefficient_at_point = MaterialModel::MaterialUtilities::average_value (composition_values, constant_bedrock_transport_coefficient, MaterialModel::MaterialUtilities::arithmetic);
                       }
@@ -890,6 +890,23 @@ namespace aspect
             velocity_y[index] = 0;
           else
             velocity_y[index] = local_aspect_values[3][i];
+
+          if (use_compositional_erosion_bedrock)
+            {
+              bedrock_river_incision_rate_array[index] = time_scaling_factor * local_aspect_values[dim+2][i];
+              bedrock_transport_coefficient_array[index] = time_scaling_factor * local_aspect_values[dim+3][i];
+            }
+
+          if (use_compositional_erosion_marine)
+            {
+              sand_transport_coefficient_array[index] = time_scaling_factor * local_aspect_values[dim+4][i];
+              silt_transport_coefficient_array[index] = time_scaling_factor * local_aspect_values[dim+5][i];
+            }
+          else
+            {
+              sand_transport_coefficient_array[index] = time_scaling_factor * sand_transport_coefficient[0];
+              silt_transport_coefficient_array[index] = time_scaling_factor * silt_transport_coefficient[0];
+            }
         }
 
       for (unsigned int p=1; p<Utilities::MPI::n_mpi_processes(this->get_mpi_communicator()); ++p)
@@ -928,17 +945,33 @@ namespace aspect
               else
                 velocity_y[index] = local_aspect_values[3][i];
 
+              if (use_compositional_erosion_bedrock)
+                {
+                  bedrock_river_incision_rate_array[index] = time_scaling_factor * local_aspect_values[dim+2][i];
+                  bedrock_transport_coefficient_array[index] = time_scaling_factor * local_aspect_values[dim+3][i];
+                }
+
+              if (use_compositional_erosion_marine)
+                {
+                  sand_transport_coefficient_array[index] = time_scaling_factor * local_aspect_values[dim+4][i];
+                  silt_transport_coefficient_array[index] = time_scaling_factor * local_aspect_values[dim+5][i];
+                }
+              else
+                {
+                  sand_transport_coefficient_array[index] = time_scaling_factor * sand_transport_coefficient[0];
+                  silt_transport_coefficient_array[index] = time_scaling_factor * silt_transport_coefficient[0];
+                }
+              if (elevation[i] < current_sea_level)
+                {
+                  const double decay_factor = std::exp(-lambda_decay_coefficient * (current_sea_level - elevation[i]));
+                  sand_transport_coefficient_array[index] *= decay_factor;
+                  silt_transport_coefficient_array[index] *= decay_factor;
+                }
+
             }
         }
 
       bool fastscape_mesh_filled = true;
-
-      std::vector<int> global_to_local(bedrock_transport_coefficient_array.size(),-1);
-      for (unsigned int i = 0; i < local_aspect_values[1].size(); ++i)
-        {
-          const int global_index = local_aspect_values[1][i];
-          global_to_local[global_index] = i;
-        }
 
       // Initialize the bedrock river incision rate and transport coefficient,
       // and check that there are no empty mesh points due to
@@ -956,60 +989,19 @@ namespace aspect
           const double x = grid_extent[0].first + (ix - use_ghost_nodes) * fastscape_dx;
           const double y = grid_extent[1].first + (iy - use_ghost_nodes) * fastscape_dy;
 
-          const int idx = global_to_local[i];
-          double bedrock_river_incision_rate_local = numbers::signaling_nan<double>();
-          double bedrock_transport_coefficient_local = numbers::signaling_nan<double>();
-          double sand_transport_coefficient_local = numbers::signaling_nan<double>();
-          double silt_transport_coefficient_local = numbers::signaling_nan<double>();
-          if (use_compositional_erosion_bedrock)
+          if (!use_kf_distribution_function)
             {
-              AssertThrow(idx >= 0,
-                          ExcMessage("Missing data from ASPECT for fastscape mesh"));
-              AssertThrow(static_cast<unsigned int>(idx) < local_aspect_values[dim+2].size(),
-                          ExcMessage("ASPECT data out of bounds for fastscape mesh"));
-              bedrock_river_incision_rate_local = time_scaling_factor * local_aspect_values[dim+2][idx];
-              bedrock_transport_coefficient_local = time_scaling_factor * local_aspect_values[dim+3][idx];
+              bedrock_river_incision_rate_array[i] = time_scaling_factor * constant_bedrock_river_incision_rate[0];
             }
           else
+            bedrock_river_incision_rate_array[i] = time_scaling_factor * kf_distribution_function.value(Point<2>(x, y));
+          if (!use_kd_distribution_function)
             {
-              if (!use_kf_distribution_function)
-                {
-                  bedrock_river_incision_rate_local = time_scaling_factor * constant_bedrock_river_incision_rate[0];
-                }
-              else
-                bedrock_river_incision_rate_local = time_scaling_factor * kf_distribution_function.value(Point<2>(x, y));
-              if (!use_kd_distribution_function)
-                {
-                  bedrock_transport_coefficient_local = time_scaling_factor * constant_bedrock_transport_coefficient[0];
-                }
-              else
-                bedrock_transport_coefficient_local = time_scaling_factor * kd_distribution_function.value(Point<2>(x, y));
+              bedrock_transport_coefficient_array[i] = time_scaling_factor * constant_bedrock_transport_coefficient[0];
             }
-          bedrock_river_incision_rate_array[i] = bedrock_river_incision_rate_local;
-          bedrock_transport_coefficient_array[i] = bedrock_transport_coefficient_local;
+          else
+            bedrock_transport_coefficient_array[i] = time_scaling_factor * kd_distribution_function.value(Point<2>(x, y));
 
-          if (use_compositional_erosion_marine)
-            {
-              AssertThrow(idx >= 0,
-                          ExcMessage("Missing data from ASPECT for fastscape mesh"));
-              AssertThrow(static_cast<unsigned int>(idx) < local_aspect_values[dim+2].size(),
-                          ExcMessage("ASPECT data out of bounds for fastscape mesh"));
-              sand_transport_coefficient_local = time_scaling_factor * local_aspect_values[dim+4][idx];
-              silt_transport_coefficient_local = time_scaling_factor * local_aspect_values[dim+5][idx];
-            }
-          else
-            {
-              sand_transport_coefficient_local = time_scaling_factor * sand_transport_coefficient[0]; //500.; //
-              silt_transport_coefficient_local = time_scaling_factor * silt_transport_coefficient[0]; //100.; //
-            }
-          sand_transport_coefficient_array[i] = sand_transport_coefficient_local;
-          silt_transport_coefficient_array[i] = silt_transport_coefficient_local;
-          if (elevation[i] < current_sea_level)
-          {
-            sand_transport_coefficient_array[i] = std::exp(-lambda_decay_coefficient * (current_sea_level - elevation[i]))*sand_transport_coefficient_local;
-            silt_transport_coefficient_array[i] = std::exp(-lambda_decay_coefficient * (current_sea_level - elevation[i]))*silt_transport_coefficient_local;
-          }
-          
           if (elevation[i] == std::numeric_limits<double>::max() && !is_ghost_node(i,false) || std::isnan(elevation[i]))
             {
               fastscape_mesh_filled = false;
