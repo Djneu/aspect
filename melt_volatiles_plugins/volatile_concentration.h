@@ -27,6 +27,8 @@
 
 #include <deal.II/numerics/data_postprocessor.h>
 
+#include <deal.II/numerics/data_out.h>
+
 
 namespace aspect
 {

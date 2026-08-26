@@ -18,7 +18,7 @@
   <http://www.gnu.org/licenses/>.
 */
 
-#include "volatile_concentration.h"
+#include <aspect/postprocess/visualization/volatile_concentration.h>
 #include <aspect/melt.h>
 #include <deal.II/base/parameter_handler.h>
 #include <aspect/simulator.h>
@@ -105,26 +105,18 @@ namespace aspect
         AssertThrow(fluid_out != nullptr,
                     ExcMessage("Need MeltOutputs from the material model for computing the melt properties."));
 
-const MaterialModel::MeltInterface<dim> *melt_iface =
-  dynamic_cast<const MaterialModel::MeltInterface<dim> *>(&this->get_material_model());
-
-        std::cout << "melt_iface ptr = " << melt_iface << std::endl;
-
-        std::cout<<"HERE-test"<<std::endl;
         const double p_c_scale = Plugins::get_plugin_as_type<const MaterialModel::MeltInterface<dim>>(this->get_material_model()).p_c_scale(in,
                                  out,
                                  this->get_melt_handler(),
                                  true);
 
-        std::cout<<"HERE-2"<<std::endl;
         // Fetch compaction pressure at all q-points (component from introspection).
-       // const unsigned int p_c_component = this->introspection().variable("compaction pressure").first_component_index;
-        std::cout<<"HERE-1"<<std::endl;
+         const unsigned int p_c_component = this->introspection().variable("compaction pressure").first_component_index;
         // Cell-averaged, melt-cell-gated divergence, matching melt.cc.
         double divergence_u = 0.0;
         double div_u2 = 0.0;
-        /*const bool is_melt_cell = (p_c_scale > 0.0);
-        std::cout<<"HERE"<<std::endl;
+        const bool is_melt_cell = (p_c_scale > 0.0);
+
         if (is_melt_cell)
           for (unsigned int q=0; q<n_quadrature_points; ++q)
             {
@@ -140,9 +132,7 @@ const MaterialModel::MeltInterface<dim> *melt_iface =
                 div_at_q += input_data.solution_gradients[q][u_component][d];
               }
             div_u2 += div_at_q * 1./n_quadrature_points;
-            }*/
-
-            std::cout<<"HERE2"<<std::endl;
+            }
 
           for (unsigned int q=0; q<n_quadrature_points; ++q)
             {
@@ -188,7 +178,11 @@ const MaterialModel::MeltInterface<dim> *melt_iface =
               computed_quantities[q](4) = (Fmass * morb_cl + (1 - Fmass)*morb_cs) * 100/100 * 1e6;
               computed_quantities[q](5) = (Fvol * morb_cl * rho_l + (1 - Fvol)*morb_cs*rho_s) * 100/100;
 
-              computed_quantities[q](6) = divergence_u;
+
+              const double xi = fluid_out->compaction_viscosities[q];
+              const double p_c = input_data.solution_values[q][p_c_component];
+              const double div_u_phys = (xi > 0.0 ? - p_c_scale * p_c / xi : 0.0);
+              computed_quantities[q](6) = div_u_phys;
               computed_quantities[q](7) = div_u2;
 
 

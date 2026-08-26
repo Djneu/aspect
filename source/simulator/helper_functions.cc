@@ -717,7 +717,6 @@ namespace aspect
     // overall vector, so that they form a contiguous range starting
     // at zero. The assertion checks this, but this could easily be
     // generalized if the Stokes block were not starting at zero.
-#if DEAL_II_VERSION_GTE(9,6,0)
     Assert (introspection.block_indices.velocities == 0,
             ExcNotImplemented());
     if (parameters.use_direct_stokes_solver == false)
@@ -728,9 +727,6 @@ namespace aspect
     stokes_dofs.add_range (0, vec.size());
     const AffineConstraints<double> stokes_hanging_node_constraints
       = hanging_node_constraints.get_view (stokes_dofs);
-#else
-    const AffineConstraints<double> &stokes_hanging_node_constraints = hanging_node_constraints;
-#endif
 
     stokes_hanging_node_constraints.distribute(vec);
   }
@@ -859,6 +855,14 @@ namespace aspect
             const unsigned int n_local_pressure_dofs = (parameters.include_melt_transport ?
                                                         finite_element.base_element(introspection.variable("fluid pressure").base_index).dofs_per_cell
                                                         : finite_element.base_element(introspection.base_elements.pressure).dofs_per_cell);
+
+            const unsigned int total_pressure_component = (parameters.include_melt_transport ?
+                                                           introspection.variable("total pressure").first_component_index
+                                                           : numbers::invalid_unsigned_int);
+            const unsigned int n_local_p_t_dofs = (parameters.include_melt_transport ?
+                                                   finite_element.base_element(introspection.variable("total pressure").base_index).dofs_per_cell
+                                                   : numbers::invalid_unsigned_int);
+
             std::vector<types::global_dof_index> local_dof_indices (finite_element.dofs_per_cell);
             for (const auto &cell : dof_handler.active_cell_iterators())
               if (cell->is_locally_owned())
@@ -875,6 +879,17 @@ namespace aspect
                       // distributed_vector but copy from the unchanged vector.
                       distributed_vector(local_dof_indices[support_point_index]) = vector(local_dof_indices[support_point_index]) + pressure_adjustment;
                     }
+
+                  if (parameters.include_melt_transport)
+                    for (unsigned int j=0; j<n_local_p_t_dofs; ++j)
+                      {
+                        // Adjust the total pressure by the same amount as the fluid pressure
+                        unsigned int support_point_index
+                          = finite_element.component_to_system_index(total_pressure_component,
+                                                                     /*dof index within component=*/ j);
+                        // same as above
+                        distributed_vector(local_dof_indices[support_point_index]) = vector(local_dof_indices[support_point_index]) + pressure_adjustment;
+                      }
                 }
             distributed_vector.compress(VectorOperation::insert);
           }
@@ -952,6 +967,13 @@ namespace aspect
                                                         finite_element.base_element(introspection.variable("fluid pressure").base_index).dofs_per_cell
                                                         : finite_element.base_element(introspection.base_elements.pressure).dofs_per_cell);
 
+            const unsigned int total_pressure_component = (parameters.include_melt_transport ?
+                                                           introspection.variable("total pressure").first_component_index
+                                                           : numbers::invalid_unsigned_int);
+            const unsigned int n_local_p_t_dofs = (parameters.include_melt_transport ?
+                                                   finite_element.base_element(introspection.variable("total pressure").base_index).dofs_per_cell
+                                                   : numbers::invalid_unsigned_int);
+
             // We may touch the same DoF multiple times, so we need to copy the
             // vector before modifying it to have access to the original value.
             LinearAlgebra::BlockVector vector_backup;
@@ -984,6 +1006,20 @@ namespace aspect
                         vector(local_dof_indices[local_dof_index])
                           = vector_backup(local_dof_indices[local_dof_index]) - pressure_adjustment;
                     }
+
+                  if (parameters.include_melt_transport)
+                    for (unsigned int j=0; j<n_local_p_t_dofs; ++j)
+                      {
+                        // Adjust the total pressure by the same amount as the fluid pressure
+                        const unsigned int local_dof_index
+                          = finite_element.component_to_system_index(total_pressure_component,
+                                                                     /*dof index within component=*/ j);
+                        // same as above
+                        if (vector.has_ghost_elements() ||
+                            dof_handler.locally_owned_dofs().is_element(local_dof_indices[local_dof_index]))
+                          vector(local_dof_indices[local_dof_index])
+                            = vector_backup(local_dof_indices[local_dof_index]) - pressure_adjustment;
+                      }
                 }
             vector.compress(VectorOperation::insert);
           }
@@ -1098,8 +1134,6 @@ namespace aspect
         // a direct solver or we have melt with p_f and p_c in the same block).
         // Luckily we don't need to go over DoFs on each cell, because we
         // have IndexSets to help us:
-
-        // we need to operate only on p_f not on p_c
         const IndexSet &idxset = parameters.include_melt_transport ?
                                  introspection.index_sets.locally_owned_fluid_pressure_dofs
                                  :
@@ -1117,11 +1151,44 @@ namespace aspect
         // are already distributed to the right hand side in
         // current_constraints.distribute.
         const double global_int_rhs = Utilities::MPI::sum(int_rhs, mpi_communicator);
-        const double correction = - global_int_rhs / global_volume;
+        // TODO: we do not know the correct sign here for the case of melt
+        double correction = - global_int_rhs / global_volume;
 
-        for (unsigned int i=0; i < idxset.n_elements(); ++i)
+        std::cout << "p_f RHS correction: " << correction << std::endl;
+
+        IndexSet &H_idxset = parameters.include_melt_transport ?
+                             introspection.index_sets.locally_owned_melt_pressure_dofs
+                             :
+                             introspection.index_sets.locally_owned_pressure_dofs;
+        H_idxset.subtract_set(idxset);
+
+        // In the case of melt, we have another contribution,
+        // which comes from the velocity constraints on the RHS of the
+        // total pressure equation.
+        if (parameters.include_melt_transport)
           {
-            types::global_dof_index idx = idxset.nth_index_in_set(i);
+            int_rhs = 0.0;
+            for (unsigned int i=0; i < H_idxset.n_elements(); ++i)
+              {
+                types::global_dof_index idx = H_idxset.nth_index_in_set(i);
+                int_rhs += vector(idx);
+              }
+
+            const double global_int_divu = Utilities::MPI::sum(int_rhs, mpi_communicator);
+            // TODO: we do not know the correct sign here for the case of melt
+            // The implemented signs are what I beliwve is correct from the equations,
+            // but the size of the terms seems to indicated that one of the two terms
+            // should have the opposite sign.
+            correction += global_int_divu / global_volume;
+
+            std::cout << "p_t RHS correction: " << global_int_divu / global_volume << std::endl;
+          }
+
+        std::cout << "Final correction: " << correction << std::endl;
+
+        for (unsigned int i=0; i < H_idxset.n_elements(); ++i)
+          {
+            types::global_dof_index idx = H_idxset.nth_index_in_set(i);
             vector(idx) += correction * pressure_shape_function_integrals(idx);
           }
 
@@ -1233,7 +1300,14 @@ namespace aspect
         const double residual_u = system_matrix.block(0,1).residual (residual.block(0),
                                                                      linearized_stokes_variables.block(1),
                                                                      system_rhs.block(0));
-        const double residual_p = system_rhs.block(pressure_block_index).l2_norm();
+
+        double residual_p = 0.0;
+        if (parameters.include_melt_transport)
+          residual_p = system_matrix.block(1,1).residual (residual.block(1),
+                                                          linearized_stokes_variables.block(1),
+                                                          system_rhs.block(1));
+        else
+          residual_p = system_rhs.block(pressure_block_index).l2_norm();
         return std::sqrt(residual_u*residual_u+residual_p*residual_p);
       }
   }
@@ -1688,16 +1762,14 @@ namespace aspect
     SUNDIALS::ARKode<VectorType>::AdditionalData data;
     data.initial_time = time;
     data.final_time = time + time_step;
-    data.initial_step_size = 1.e-3 * time_step; //0.001
+    data.initial_step_size = 0.001 * time_step;
     data.output_period = time_step;
-    data.minimum_step_size = 1.e-6 * time_step; //1e-6
+    data.minimum_step_size = 1.e-6 * time_step;
 
     // Both tolerances are added, but the composition might become 0.
     // We therefore set the absolute tolerance to a very small value.
-    data.relative_tolerance = 1e-4;
-    data.absolute_tolerance = 1e-10;  //1e-10
-    data.maximum_non_linear_iterations = 300;
-    data.maximum_order = 5;
+    data.relative_tolerance = 1e-6;
+    data.absolute_tolerance = 1e-10;
 
     SUNDIALS::ARKode<VectorType> ode(data);
 

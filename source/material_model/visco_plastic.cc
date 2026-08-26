@@ -260,6 +260,9 @@ namespace aspect
               std::vector<double>::const_iterator max_composition = std::max_element(volume_fractions.begin(), volume_fractions.end());
               plastic_yielding = isostrain_viscosities.composition_yielding[std::distance(volume_fractions.begin(), max_composition)];
 
+              //if(!plastic_yielding)
+              //  out.viscosities[i] = out.viscosities[i]*10;
+
               // Compute viscosity derivatives if they are requested
               if (const std::shared_ptr<MaterialModel::MaterialModelDerivatives<dim>> derivatives =
                     out.template get_additional_output_object<MaterialModel::MaterialModelDerivatives<dim>>())

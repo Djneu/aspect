@@ -22,6 +22,10 @@
 #include <aspect/melt.h>
 #include <deal.II/base/parameter_handler.h>
 #include <aspect/simulator.h>
+#include <aspect/utilities.h>
+#include <aspect/material_model/interface.h>
+
+#include <deal.II/numerics/data_out.h>
 
 
 namespace aspect
@@ -50,6 +54,8 @@ namespace aspect
         solution_names.emplace_back("h20_mass");
         solution_names.emplace_back("morb_ppm");
         solution_names.emplace_back("morb_mass");
+        solution_names.emplace_back("div_u_phys");
+        solution_names.emplace_back("div_u_solution");
         return solution_names;
       }
 
@@ -59,7 +65,7 @@ namespace aspect
       VolatilesConcentration<dim>::
       get_data_component_interpretation () const
       {
-        std::vector<DataComponentInterpretation::DataComponentInterpretation> interpretation(6,
+        std::vector<DataComponentInterpretation::DataComponentInterpretation> interpretation(8,
             DataComponentInterpretation::component_is_scalar);
 
         return interpretation;
@@ -71,7 +77,7 @@ namespace aspect
       VolatilesConcentration<dim>::
       get_needed_update_flags () const
       {
-        return update_values | update_quadrature_points;
+        return update_gradients | update_values  | update_quadrature_points;
       }
 
       template <int dim>
@@ -80,19 +86,63 @@ namespace aspect
       evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
                             std::vector<Vector<double>> &computed_quantities) const
       {
+        AssertThrow(this->include_melt_transport()==true,
+                    ExcMessage("'Include melt transport' has to be on when using melt transport postprocessors."));
+
         const unsigned int n_quadrature_points = input_data.solution_values.size();
         Assert (computed_quantities.size() == n_quadrature_points,    ExcInternalError());
-        //Assert (computed_quantities[0].size() == 1,                   ExcInternalError());
-        Assert (input_data.solution_values[0].size() == this->introspection().n_components,           ExcInternalError());
+        Assert (input_data.solution_values[0].size() == this->introspection().n_components,   ExcInternalError());
 
-        MaterialModel::MaterialModelInputs<dim> in(input_data, this->introspection());
-        MaterialModel::MaterialModelOutputs<dim> out(in.n_evaluation_points(), this->n_compositional_fields());
+        // Set use_strain_rates to true since the compaction viscosity might also depend on the strain rate.
+        MaterialModel::MaterialModelInputs<dim> in(input_data,
+                                                   this->introspection());
+        MaterialModel::MaterialModelOutputs<dim> out(n_quadrature_points, this->n_compositional_fields());
         MeltHandler<dim>::create_material_model_outputs(out);
-        const std::shared_ptr<MaterialModel::MeltOutputs<dim>> fluid_out
-                  = out.template get_additional_output_object<MaterialModel::MeltOutputs<dim>>();
 
         this->get_material_model().evaluate(in, out);
-        
+        const std::shared_ptr<MaterialModel::MeltOutputs<dim>> fluid_out
+          = out.template get_additional_output_object<MaterialModel::MeltOutputs<dim>>();
+        AssertThrow(fluid_out != nullptr,
+                    ExcMessage("Need MeltOutputs from the material model for computing the melt properties."));
+
+const MaterialModel::MeltInterface<dim> *melt_iface =
+  dynamic_cast<const MaterialModel::MeltInterface<dim> *>(&this->get_material_model());
+
+        std::cout << "melt_iface ptr = " << melt_iface << std::endl;
+
+        std::cout<<"HERE-test"<<std::endl;
+        const double p_c_scale = Plugins::get_plugin_as_type<const MaterialModel::MeltInterface<dim>>(this->get_material_model()).p_c_scale(in,
+                                 out,
+                                 this->get_melt_handler(),
+                                 true);
+
+        std::cout<<"HERE-2"<<std::endl;
+        // Fetch compaction pressure at all q-points (component from introspection).
+       // const unsigned int p_c_component = this->introspection().variable("compaction pressure").first_component_index;
+        std::cout<<"HERE-1"<<std::endl;
+        // Cell-averaged, melt-cell-gated divergence, matching melt.cc.
+        double divergence_u = 0.0;
+        double div_u2 = 0.0;
+        /*const bool is_melt_cell = (p_c_scale > 0.0);
+        std::cout<<"HERE"<<std::endl;
+        if (is_melt_cell)
+          for (unsigned int q=0; q<n_quadrature_points; ++q)
+            {
+              const double xi = fluid_out->compaction_viscosities[q];
+              const double p_c = input_data.solution_values[q][p_c_component];
+              const double div_u_phys = (xi > 0.0 ? - p_c_scale * p_c / xi : 0.0);
+              divergence_u += div_u_phys * 1./n_quadrature_points;
+
+            double div_at_q = 0.0;
+            for (unsigned int d=0; d<dim; ++d)
+              {
+                const unsigned int u_component = this->introspection().component_indices.velocities[d];
+                div_at_q += input_data.solution_gradients[q][u_component][d];
+              }
+            div_u2 += div_at_q * 1./n_quadrature_points;
+            }*/
+
+            std::cout<<"HERE2"<<std::endl;
 
           for (unsigned int q=0; q<n_quadrature_points; ++q)
             {
@@ -113,7 +163,10 @@ namespace aspect
 
               // We track the volume fraction of melt, convert to mass fraction here.
               const double avg_rho = Fvol*rho_l + (1 - Fvol)*rho_s;
-              const double Fmass = Fvol*rho_l/avg_rho;                                           
+              const double Fmass = Fvol*rho_l/avg_rho;     
+              
+              // request update_gradients in get_needed_update_flags(), then:
+              //
 
               // Compute ppm of different compositions. Here we use the C_bar calculated from the mass fraction,
               // and multiply it by the weight percent that is co2 or h2o, and then apply a scaling factor.
@@ -134,6 +187,9 @@ namespace aspect
               // MORB content.
               computed_quantities[q](4) = (Fmass * morb_cl + (1 - Fmass)*morb_cs) * 100/100 * 1e6;
               computed_quantities[q](5) = (Fvol * morb_cl * rho_l + (1 - Fvol)*morb_cs*rho_s) * 100/100;
+
+              computed_quantities[q](6) = divergence_u;
+              computed_quantities[q](7) = div_u2;
 
 
         }

@@ -966,7 +966,7 @@ namespace aspect
                                       ? - p_c_scale * compaction_pressure_values[q] / xi
                                       : 0.0);
             divergence_u += div_u_phys * 1./n_q_points;
-          }        
+          }    
 
       for (unsigned int q=0; q < n_q_points; ++q)
         {

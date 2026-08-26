@@ -425,6 +425,10 @@ namespace aspect
                                                                j,
                                                                MaterialModel::MaterialUtilities::PhaseUtilities::logarithmic
                                                              );
+
+            //if(output_parameters.composition_yielding[j] = false)    
+            //    effective_viscosity = 5e20;
+                                                                    
             output_parameters.composition_viscosities[j] = std::min(std::max(effective_viscosity, minimum_viscosity_for_composition), maximum_viscosity_for_composition);
 
             // Compute the dilation terms if necessary.

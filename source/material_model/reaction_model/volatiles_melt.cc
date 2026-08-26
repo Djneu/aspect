@@ -314,7 +314,14 @@ template <int dim>
         // Now that things are ordered, find the bulk composition for each component.
         for (unsigned int i=0; i<n_components; ++i)
             C_bar[i] = Fmass_old*c_l[i] + (1-Fmass_old)*c_s[i];
-      
+
+        //std::cout<<"C1: "<<C_bar[0]<<" "<<C_bar[1]<<" "<<C_bar[2]<<" "<<C_bar[3]<<std::endl;
+        C_bar[1] = 0.25;
+        C_bar[2] = 0.0005;
+        C_bar[3] = 0.0;
+        C_bar[0] = 1 - 0.25 - 0.0005;
+        //std::cout<<"C2: "<<C_bar[0]<<" "<<C_bar[1]<<" "<<C_bar[2]<<" "<<C_bar[3]<<std::endl;
+
         // Define parameters that will be returned.
         double Fmass_new = 0.0;
         small_vector<double> solid_reaction_rates (n_components, 0.0);
@@ -413,7 +420,7 @@ template <int dim>
           small_vector<double> c_leq = {dcl, mcl, ccl, hcl};
           small_vector<double> c_seq = {dcs, mcs, ccs, hcs};
 
-          if (Fmass_new < 1e-6 && Fmass_old < 1e-6)
+          /*if (Fmass_new < 1e-6 && Fmass_old < 1e-6)
           {
               // No melt exists and none should — no reaction needed
               for (unsigned int i = 0; i < n_components; ++i)
@@ -431,7 +438,7 @@ template <int dim>
                   c_leq[i] = c_l[i];  // liquid drains at current composition
                   c_seq[i] = C_bar[i]; // solid absorbs everything
               }
-          }
+          }*/
       
 
           // Set up parameters needed to calculate reaction rates.
@@ -472,9 +479,11 @@ template <int dim>
               for (unsigned int i = 0; i < n_components; ++i)
               {
                   solid_reaction_rates[i]  = -(Gamma[i] - c_s[i] * GammaSum) * inv_solid_denom;
-                  liquid_reaction_rates[i] = (Fmass_pred < 1e-6)
-                                            ? (c_leq[i] - c_l[i]) / reaction_time_step_size
-                                            :  (Gamma[i] - c_l[i] * GammaSum) * inv_liquid_denom;
+                  liquid_reaction_rates[i] = (Gamma[i] - c_l[i] * GammaSum) * inv_liquid_denom;
+                  
+                  //(Fmass_pred < 1e-6)
+                  //                          ? (c_leq[i] - c_l[i]) / reaction_time_step_size
+                  //                          :  (Gamma[i] - c_l[i] * GammaSum) * inv_liquid_denom;
               }
 
               // Predict end state from initial value + rates
@@ -530,9 +539,9 @@ template <int dim>
               if (max_error < tol)
                   break;
 
-              if (iter == max_iter - 1)
-                  std::cout << "Warning: reaction iteration did not converge, error: "
-                            << max_error << std::endl;
+              //if (iter == max_iter - 1)
+              //    std::cout << "Warning: reaction iteration did not converge, error: "
+              //              << max_error << std::endl;
           }
 
           // If we only want to return the composition for the initial conditions,
@@ -542,6 +551,8 @@ template <int dim>
             {
               solid_reaction_rates[i] = c_seq[i];
               liquid_reaction_rates[i] = c_leq[i];
+               if(Fmass_new < 1e-6)
+                  Fmass_new = Fmass_new = std::numeric_limits<double>::quiet_NaN();
             }
       }   
 
@@ -728,14 +739,14 @@ template <int dim>
       // Ensure composition stays between 1 and 0.
       double final_reaction_rate = reaction_rate;
 
-      if (old_value > 1.0 || old_value + reaction_rate * time_step > 1.0)
+      /*if (old_value > 1.0 || old_value + reaction_rate * time_step > 1.0)
         final_reaction_rate = (1.0 - old_value) / time_step;
       else if (old_value < 0.0 || old_value + reaction_rate * time_step < 0.0)
         final_reaction_rate = -old_value / time_step;
 
       if(use_extraction_patch)
         if(depth <  extraction_depth && x < extraction_width)
-              final_reaction_rate = 0.0;
+              final_reaction_rate = 0.0;*/
 
       return final_reaction_rate;
     }
@@ -769,7 +780,8 @@ template <int dim>
         double P1 = 1.8e9; double P2 = 2.1e9;
 
         // High pressure parameters for cmorb
-        double T2 = 1238; double A2 = 10e-9; double B2=4e-18;
+        //double T2 = 1238; double A2 = 10e-9; double B2=4e-18;
+        double T2 = 893; double A2 = 4e9; double B2=3.7;
         for (unsigned int i=0; i<n_components; ++i) 
         {
             Ac[i] = Ai[i];
@@ -779,7 +791,7 @@ template <int dim>
             Rc[i] = Ri[i];
         }
 
-      if(pressure >= P2)
+      /*if(pressure >= P2)
        {
           Ac[2] = A2;
           Bc[2] = B2;
@@ -790,7 +802,7 @@ template <int dim>
           Ac[2] = linear_interpolation(pressure, P1, P2, Ai[2], A2);
           Bc[2] = linear_interpolation(pressure, P1, P2, Bi[2], B2);
           Tc[2] = linear_interpolation(pressure, P1, P2, T0i[2], T2);
-       }
+       }*/
 
       }        
 
