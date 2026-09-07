@@ -94,6 +94,7 @@ namespace aspect
               const double rho_s = out.densities[q]; //3200
               const double rho_l = rho_s - fluid_density_difference;
               auto [vfrac, melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates, enthalpy] = equilibrium(composition, temperature, pressure, rho_s, q, 0.);
+              const double current_porosity = in.composition[q][porosity_idx];
 
               for (unsigned int c=0; c<in.composition[q].size(); ++c)
                 {
@@ -101,6 +102,52 @@ namespace aspect
                   if (reaction_rate_out != nullptr && in.requests_property(MaterialProperties::reaction_rates) ||
                       reaction_rate_out != nullptr && in.requests_property(MaterialProperties::additional_outputs))
                   {
+                    reaction_rate_out->reaction_rates[q][c] = 0.0;
+
+                    if (depth < degass_depth)
+                    {
+                      const double extraction_timescale = reaction_time_step_size; //1000 * year_in_seconds;
+                      double porosity_extraction_rate = -current_porosity / extraction_timescale;
+                      const double new_porosity = current_porosity + porosity_extraction_rate * reaction_time_step_size;
+                      
+                      // Make sure this doesn't cause porosity to shoot negative.
+                      if (new_porosity < 0.0)
+                        porosity_extraction_rate = -current_porosity / reaction_time_step_size;
+
+                      // Reaction rate to extract porosity
+                      reaction_rate_out->reaction_rates[q][porosity_idx] = porosity_extraction_rate;
+
+                      // The bulk of the solid mass directly depends on the porosity. As porosity decreases, this would increase.
+                      // Here, we alter solid concentrations to try and conserve the original bulk mass.
+                      // cs that keeps (1-phi)*cs invariant across the discrete Euler step:
+                      const double factor = std::max(1.0 - current_porosity, 1e-12) / std::max(1.0 - new_porosity, 1e-12);
+
+                      reaction_rate_out->reaction_rates[q][ccs_idx] = in.composition[q][ccs_idx] * (factor - 1.0) / reaction_time_step_size;
+                      reaction_rate_out->reaction_rates[q][mcs_idx] = in.composition[q][mcs_idx] * (factor - 1.0) / reaction_time_step_size;
+                      reaction_rate_out->reaction_rates[q][hcs_idx] = in.composition[q][hcs_idx] * (factor - 1.0) / reaction_time_step_size;
+
+                      // Because we do not want to change the melt composition during extraction, we disallow further reactions.
+                      reaction_rate_out->reaction_rates[q][ccl_idx] = 0.0;
+                      reaction_rate_out->reaction_rates[q][mcl_idx] = 0.0;
+                      reaction_rate_out->reaction_rates[q][hcl_idx] = 0.0;
+                      
+
+                      if(this->introspection().compositional_name_exists("degassed_carbon"))
+                      {
+                          const double idx = this->introspection().compositional_index_for_name("degassed_carbon");
+                        const double old_degassed = in.composition[q][idx];
+                        double degassed_rate = -porosity_extraction_rate * rho_l * in.composition[q][ccl_idx] * 20/100.0;
+
+                        // If the field is already negative, or the rate would push it below zero,
+                        // set the rate to bring it exactly to zero this step.
+                        if (old_degassed + degassed_rate * reaction_time_step_size < 0.0)
+                          degassed_rate = -old_degassed / reaction_time_step_size;
+
+                        reaction_rate_out->reaction_rates[q][idx] = degassed_rate;
+                      }
+                    }
+                    else
+                    {
                     if (c == porosity_idx)
                     {
                           reaction_rate_out->reaction_rates[q][c] = get_reaction_rate(in.composition[q][c], 
@@ -164,53 +211,8 @@ namespace aspect
                                                       reaction_time_step_size,
                                                       depth,
                                                       xcord);
-                    }
-                    // Case if we are below the extraction pressure and want to remove melt.
-                    else if (depth < degass_depth)
-                    {
-                      const double extraction_timescale = reaction_time_step_size; //1000 * year_in_seconds;
-                      const double current_porosity = in.composition[q][porosity_idx];
-                      double porosity_extraction_rate = -current_porosity / extraction_timescale;
-                      const double new_porosity = current_porosity + porosity_extraction_rate * reaction_time_step_size;
-                      
-                      // Make sure this doesn't cause porosity to shoot negative.
-                      if (new_porosity < 0.0)
-                        porosity_extraction_rate = -current_porosity / reaction_time_step_size;
-
-                      // Reaction rate to extract porosity
-                      reaction_rate_out->reaction_rates[q][porosity_idx] = porosity_extraction_rate;
-
-                      // The bulk of the solid mass directly depends on the porosity. As porosity decreases, this would increase.
-                      // Here, we alter solid concentrations to try and conserve the original bulk mass.
-                      // cs that keeps (1-phi)*cs invariant across the discrete Euler step:
-                      const double factor = std::max(1.0 - current_porosity, 1e-12) / std::max(1.0 - new_porosity, 1e-12);
-
-                      reaction_rate_out->reaction_rates[q][ccs_idx] = in.composition[q][ccs_idx] * (factor - 1.0) / reaction_time_step_size;
-                      reaction_rate_out->reaction_rates[q][mcs_idx] = in.composition[q][mcs_idx] * (factor - 1.0) / reaction_time_step_size;
-                      reaction_rate_out->reaction_rates[q][hcs_idx] = in.composition[q][hcs_idx] * (factor - 1.0) / reaction_time_step_size;
-
-                      // Because we do not want to change the melt composition during extraction, we disallow further reactions.
-                      reaction_rate_out->reaction_rates[q][ccl_idx] = 0.0;
-                      reaction_rate_out->reaction_rates[q][mcl_idx] = 0.0;
-                      reaction_rate_out->reaction_rates[q][hcl_idx] = 0.0;
-                      
-
-                      if(this->introspection().compositional_name_exists("degassed_carbon"))
-                      {
-                          const double idx = this->introspection().compositional_index_for_name("degassed_carbon");
-                        const double old_degassed = in.composition[q][idx];
-                        double degassed_rate = -porosity_extraction_rate * rho_l * in.composition[q][ccl_idx] * 20/100.0;
-
-                        // If the field is already negative, or the rate would push it below zero,
-                        // set the rate to bring it exactly to zero this step.
-                        if (old_degassed + degassed_rate * reaction_time_step_size < 0.0)
-                          degassed_rate = -old_degassed / reaction_time_step_size;
-
-                        reaction_rate_out->reaction_rates[q][idx] = degassed_rate;
-                      }
-                    }
-                    else
-                      reaction_rate_out->reaction_rates[q][c] = 0.0;
+                    }               
+                  }
                   }
                 }
 
@@ -825,7 +827,7 @@ template <int dim>
             Rc[i] = Ri[i];
         }
 
-      if(pressure >= P2)
+      /*if(pressure >= P2)
        {
           Ac[2] = A2;
           Bc[2] = B2;
@@ -836,7 +838,7 @@ template <int dim>
           Ac[2] = linear_interpolation(pressure, P1, P2, Ai[2], A2);
           Bc[2] = linear_interpolation(pressure, P1, P2, Bi[2], B2);
           Tc[2] = linear_interpolation(pressure, P1, P2, T0i[2], T2);
-       }
+       }*/
 
       }        
 
