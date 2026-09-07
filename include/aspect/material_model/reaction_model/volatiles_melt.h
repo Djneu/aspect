@@ -204,6 +204,7 @@ namespace aspect
           double extraction_depth;
           double extraction_width;
           double use_extraction_patch;
+          double degass_depth;
           bool use_simons_law;
 
           mutable int totaln = 0;

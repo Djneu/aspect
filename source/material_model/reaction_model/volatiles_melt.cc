@@ -92,6 +92,7 @@ namespace aspect
               // and solid and liquid reaction rates, ordered as dunite (background field), morb, cmorb, hmorb.
               // Note: At the moment compositions are hardcoded in assuming there is always 4 components.
               const double rho_s = out.densities[q]; //3200
+              const double rho_l = rho_s - fluid_density_difference;
               auto [vfrac, melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates, enthalpy] = equilibrium(composition, temperature, pressure, rho_s, q, 0.);
 
               for (unsigned int c=0; c<in.composition[q].size(); ++c)
@@ -144,6 +145,7 @@ namespace aspect
                                                           reaction_time_step_size,
                                                           depth,
                                                           xcord);
+
                     }
                     else if (c == hcs_idx)
                     {
@@ -162,6 +164,50 @@ namespace aspect
                                                       reaction_time_step_size,
                                                       depth,
                                                       xcord);
+                    }
+                    // Case if we are below the extraction pressure and want to remove melt.
+                    else if (depth < degass_depth)
+                    {
+                      const double extraction_timescale = reaction_time_step_size; //1000 * year_in_seconds;
+                      const double current_porosity = in.composition[q][porosity_idx];
+                      double porosity_extraction_rate = -current_porosity / extraction_timescale;
+                      const double new_porosity = current_porosity + porosity_extraction_rate * reaction_time_step_size;
+                      
+                      // Make sure this doesn't cause porosity to shoot negative.
+                      if (new_porosity < 0.0)
+                        porosity_extraction_rate = -current_porosity / reaction_time_step_size;
+
+                      // Reaction rate to extract porosity
+                      reaction_rate_out->reaction_rates[q][porosity_idx] = porosity_extraction_rate;
+
+                      // The bulk of the solid mass directly depends on the porosity. As porosity decreases, this would increase.
+                      // Here, we alter solid concentrations to try and conserve the original bulk mass.
+                      // cs that keeps (1-phi)*cs invariant across the discrete Euler step:
+                      const double factor = std::max(1.0 - current_porosity, 1e-12) / std::max(1.0 - new_porosity, 1e-12);
+
+                      reaction_rate_out->reaction_rates[q][ccs_idx] = in.composition[q][ccs_idx] * (factor - 1.0) / reaction_time_step_size;
+                      reaction_rate_out->reaction_rates[q][mcs_idx] = in.composition[q][mcs_idx] * (factor - 1.0) / reaction_time_step_size;
+                      reaction_rate_out->reaction_rates[q][hcs_idx] = in.composition[q][hcs_idx] * (factor - 1.0) / reaction_time_step_size;
+
+                      // Because we do not want to change the melt composition during extraction, we disallow further reactions.
+                      reaction_rate_out->reaction_rates[q][ccl_idx] = 0.0;
+                      reaction_rate_out->reaction_rates[q][mcl_idx] = 0.0;
+                      reaction_rate_out->reaction_rates[q][hcl_idx] = 0.0;
+                      
+
+                      if(this->introspection().compositional_name_exists("degassed_carbon"))
+                      {
+                          const double idx = this->introspection().compositional_index_for_name("degassed_carbon");
+                        const double old_degassed = in.composition[q][idx];
+                        double degassed_rate = -porosity_extraction_rate * rho_l * in.composition[q][ccl_idx] * 20/100.0;
+
+                        // If the field is already negative, or the rate would push it below zero,
+                        // set the rate to bring it exactly to zero this step.
+                        if (old_degassed + degassed_rate * reaction_time_step_size < 0.0)
+                          degassed_rate = -old_degassed / reaction_time_step_size;
+
+                        reaction_rate_out->reaction_rates[q][idx] = degassed_rate;
+                      }
                     }
                     else
                       reaction_rate_out->reaction_rates[q][c] = 0.0;
@@ -923,6 +969,9 @@ template <int dim>
               prm.declare_entry ("Use simons law", "false",
                              Patterns::Bool (),
                              "Whether to use fractional or batch melting.");
+              prm.declare_entry ("Depth to degass", "30e3",
+                                Patterns::Double (),
+                                "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
             }
             prm.leave_subsection();
           }
@@ -999,6 +1048,7 @@ template <int dim>
             melt_bulk_modulus_derivative = prm.get_double ("Melt bulk modulus derivative");
             reference_permeability     = prm.get_double ("Reference permeability");
             maximum_permeability     = prm.get_double ("Maximum permeability");
+            degass_depth     = prm.get_double ("Depth to degass");
             }
             prm.leave_subsection();
         }
