@@ -62,6 +62,11 @@ namespace aspect
       unsigned int d_idx = 0;
       if(track_degass)
         d_idx = this->introspection().compositional_index_for_name("degassed_carbon");
+
+      bool track_free = this->introspection().compositional_name_exists("free_carbon");
+      unsigned int f_idx = 0;
+      if(track_free)
+        f_idx = this->introspection().compositional_index_for_name("free_carbon");
       
 
       // create a quadrature formula based on the temperature element alone.
@@ -226,10 +231,12 @@ namespace aspect
       std::vector<double> ccl_values(n_q_points);
       std::vector<double> ccs_values(n_q_points);
       std::vector<double> d_values(n_q_points);
+      std::vector<double> f_values(n_q_points);
       double local_co2_compositional_integrals = 0.0;
       double local_fluid_compositional_integrals = 0.0;
       double local_solid_compositional_integrals = 0.0;
       double local_degassed_compositional_integrals = 0.0;
+      double local_free_compositional_integrals = 0.0;
 
       MaterialModel::MaterialModelInputs<dim> in_fe(fe_values.n_quadrature_points, this->n_compositional_fields());
       MaterialModel::MaterialModelOutputs<dim> out_fe(fe_values.n_quadrature_points, this->n_compositional_fields());
@@ -262,6 +269,10 @@ namespace aspect
             if(track_degass)
               fe_values[this->introspection().extractors.compositional_fields[d_idx]].get_function_values (this->get_solution(),
                   d_values);
+
+            if(track_free)
+              fe_values[this->introspection().extractors.compositional_fields[f_idx]].get_function_values (this->get_solution(),
+                  f_values);
                 
             /*for (unsigned int q=0; q<n_q_points; ++q)
             {
@@ -303,6 +314,9 @@ for (unsigned int q = 0; q < n_q_points; ++q)
 
     if(track_degass)
       local_degassed_compositional_integrals += in_fe.composition[q][d_idx] * fe_values.JxW(q);
+
+    if(track_free)
+      local_free_compositional_integrals += in_fe.composition[q][f_idx] * fe_values.JxW(q);
 }
           }
 
@@ -322,10 +336,14 @@ for (unsigned int q = 0; q < n_q_points; ++q)
       const double global_degassed_compositional_integrals =
       Utilities::MPI::sum (local_degassed_compositional_integrals,
                            this->get_mpi_communicator());
+
+      const double global_free_compositional_integrals =
+      Utilities::MPI::sum (local_free_compositional_integrals,
+                           this->get_mpi_communicator());
       
       // Positive indicates outward flow, so to see the total amount of mass we have had,
       // we add that to the value.
-      double conserve_co2 = global_co2_compositional_integrals + time_integrated_mass_flux + global_degassed_compositional_integrals;
+      double conserve_co2 = global_co2_compositional_integrals + time_integrated_mass_flux + global_degassed_compositional_integrals + global_free_compositional_integrals;
 
       // Co2
       statistics.add_value("Total co2 mass flow",time_integrated_mass_flux);
@@ -359,6 +377,10 @@ for (unsigned int q = 0; q < n_q_points; ++q)
       statistics.add_value("Global co2 degass mass",global_degassed_compositional_integrals);
       statistics.set_precision ("Global co2 degass mass", 7);
       statistics.set_scientific ("Global co2 degass mass", true);
+
+      statistics.add_value("Global co2 free mass",global_free_compositional_integrals);
+      statistics.set_precision ("Global co2 free mass", 7);
+      statistics.set_scientific ("Global co2 free mass", true);
       
 
       return std::pair<std::string, std::string> ("Writing volatile statistics",

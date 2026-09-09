@@ -95,59 +95,14 @@ namespace aspect
               const double rho_l = rho_s - fluid_density_difference;
               auto [vfrac, melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates, enthalpy] = equilibrium(composition, temperature, pressure, rho_s, q, 0.);
               const double current_porosity = in.composition[q][porosity_idx];
+              const double current_cmorb_cl = in.composition[q][ccl_idx];
+              const double current_cmorb_cs = in.composition[q][ccs_idx];
 
               for (unsigned int c=0; c<in.composition[q].size(); ++c)
                 {
-                
                   if (reaction_rate_out != nullptr && in.requests_property(MaterialProperties::reaction_rates) ||
                       reaction_rate_out != nullptr && in.requests_property(MaterialProperties::additional_outputs))
                   {
-                    reaction_rate_out->reaction_rates[q][c] = 0.0;
-
-                    if (depth < degass_depth)
-                    {
-                      const double extraction_timescale = reaction_time_step_size; //1000 * year_in_seconds;
-                      double porosity_extraction_rate = -current_porosity / extraction_timescale;
-                      const double new_porosity = current_porosity + porosity_extraction_rate * reaction_time_step_size;
-                      
-                      // Make sure this doesn't cause porosity to shoot negative.
-                      if (new_porosity < 0.0)
-                        porosity_extraction_rate = -current_porosity / reaction_time_step_size;
-
-                      // Reaction rate to extract porosity
-                      reaction_rate_out->reaction_rates[q][porosity_idx] = porosity_extraction_rate;
-
-                      // The bulk of the solid mass directly depends on the porosity. As porosity decreases, this would increase.
-                      // Here, we alter solid concentrations to try and conserve the original bulk mass.
-                      // cs that keeps (1-phi)*cs invariant across the discrete Euler step:
-                      const double factor = std::max(1.0 - current_porosity, 1e-12) / std::max(1.0 - new_porosity, 1e-12);
-
-                      reaction_rate_out->reaction_rates[q][ccs_idx] = in.composition[q][ccs_idx] * (factor - 1.0) / reaction_time_step_size;
-                      reaction_rate_out->reaction_rates[q][mcs_idx] = in.composition[q][mcs_idx] * (factor - 1.0) / reaction_time_step_size;
-                      reaction_rate_out->reaction_rates[q][hcs_idx] = in.composition[q][hcs_idx] * (factor - 1.0) / reaction_time_step_size;
-
-                      // Because we do not want to change the melt composition during extraction, we disallow further reactions.
-                      reaction_rate_out->reaction_rates[q][ccl_idx] = 0.0;
-                      reaction_rate_out->reaction_rates[q][mcl_idx] = 0.0;
-                      reaction_rate_out->reaction_rates[q][hcl_idx] = 0.0;
-                      
-
-                      if(this->introspection().compositional_name_exists("degassed_carbon"))
-                      {
-                          const double idx = this->introspection().compositional_index_for_name("degassed_carbon");
-                        const double old_degassed = in.composition[q][idx];
-                        double degassed_rate = -porosity_extraction_rate * rho_l * in.composition[q][ccl_idx] * 20/100.0;
-
-                        // If the field is already negative, or the rate would push it below zero,
-                        // set the rate to bring it exactly to zero this step.
-                        if (old_degassed + degassed_rate * reaction_time_step_size < 0.0)
-                          degassed_rate = -old_degassed / reaction_time_step_size;
-
-                        reaction_rate_out->reaction_rates[q][idx] = degassed_rate;
-                      }
-                    }
-                    else
-                    {
                     if (c == porosity_idx)
                     {
                           reaction_rate_out->reaction_rates[q][c] = get_reaction_rate(in.composition[q][c], 
@@ -211,10 +166,99 @@ namespace aspect
                                                       reaction_time_step_size,
                                                       depth,
                                                       xcord);
-                    }               
+
+                    }      
+                    else  
+                      reaction_rate_out->reaction_rates[q][c] = 0.0;
                   }
                   }
-                }
+
+                 // Here we apply other reactions, either overwriting the previous ones or adding to them.
+                 if (reaction_rate_out != nullptr && in.requests_property(MaterialProperties::reaction_rates) ||
+                      reaction_rate_out != nullptr && in.requests_property(MaterialProperties::additional_outputs))
+                  {
+                    // Approximate temperature of the dolomite reaction. Linear slope based on Schmidt et al., 2024, Fig. 7
+                    const double T_ledge = 1100 + 238.1 * (pressure/1e9 - 2.1) + 273;
+                    const double P_ledge = 2.1e9;
+                    if (pressure < P_ledge && temperature > T_ledge && depth > degass_depth) 
+                    {
+                      if(this->introspection().compositional_name_exists("free_carbon"))
+                      {
+                        const unsigned int idx = this->introspection().compositional_index_for_name("free_carbon");
+
+                        const double c_floor = 2.5e-5; // Approximately 5 ppm per component.
+
+                        // Desired: strip all cMORB above the floor.
+                        double strip_cl = std::max(0.0, current_cmorb_cl - c_floor) / reaction_time_step_size;
+                        double strip_cs = std::max(0.0, current_cmorb_cs - c_floor) / reaction_time_step_size;
+
+                        // Clamp values so that, including the ongoing reaction, we can not drop below the 5 ppm floor.
+                        const double max_strip_cl = (current_cmorb_cl - c_floor) / reaction_time_step_size + reaction_rate_out->reaction_rates[q][ccl_idx];
+                        const double max_strip_cs = (current_cmorb_cs - c_floor) / reaction_time_step_size + reaction_rate_out->reaction_rates[q][ccs_idx];
+
+                        strip_cl = std::clamp(strip_cl, 0.0, std::max(0.0, max_strip_cl));
+                        strip_cs = std::clamp(strip_cs, 0.0, std::max(0.0, max_strip_cs));
+
+                        reaction_rate_out->reaction_rates[q][ccl_idx] += -strip_cl;
+                        reaction_rate_out->reaction_rates[q][ccs_idx] += -strip_cs;
+
+                        // Track exactly the CO2 removed.
+                        const double co2_from_liquid = strip_cl * current_porosity         * rho_l;
+                        const double co2_from_solid  = strip_cs * (1.0 - current_porosity) * rho_s;
+
+                        // Add removed co2 to free_carbon field. This way we can see where we have free carbon,
+                        // which will be moved with melt velocity, but it no longer affects the solidus.
+                        reaction_rate_out->reaction_rates[q][idx] += 0.20 * (co2_from_liquid + co2_from_solid);
+                      }
+                    }
+                    else if (depth < degass_depth)
+                    {
+                      const double extraction_timescale = reaction_time_step_size; //1000 * year_in_seconds;
+                      double porosity_extraction_rate = -current_porosity / extraction_timescale;
+                      const double new_porosity = current_porosity + porosity_extraction_rate * reaction_time_step_size;
+                      
+                      // Make sure this doesn't cause porosity to shoot negative.
+                      if (new_porosity < 0.0)
+                        porosity_extraction_rate = -current_porosity / reaction_time_step_size;
+
+                      // Reaction rate to extract porosity
+                      reaction_rate_out->reaction_rates[q][porosity_idx] = porosity_extraction_rate;
+
+                      // The bulk of the solid mass directly depends on the porosity. As porosity decreases, this would increase.
+                      // Here, we alter solid concentrations to try and conserve the original bulk mass.
+                      // cs that keeps (1-phi)*cs invariant across the discrete Euler step:
+                      const double factor = std::max(1.0 - current_porosity, 1e-12) / std::max(1.0 - new_porosity, 1e-12);
+
+                      reaction_rate_out->reaction_rates[q][ccs_idx] = in.composition[q][ccs_idx] * (factor - 1.0) / reaction_time_step_size;
+                      reaction_rate_out->reaction_rates[q][mcs_idx] = in.composition[q][mcs_idx] * (factor - 1.0) / reaction_time_step_size;
+                      reaction_rate_out->reaction_rates[q][hcs_idx] = in.composition[q][hcs_idx] * (factor - 1.0) / reaction_time_step_size;
+
+                      // Because we do not want to change the melt composition during extraction, we disallow further reactions.
+                      reaction_rate_out->reaction_rates[q][ccl_idx] = 0.0;
+                      reaction_rate_out->reaction_rates[q][mcl_idx] = 0.0;
+                      reaction_rate_out->reaction_rates[q][hcl_idx] = 0.0;
+                      
+
+                      if(this->introspection().compositional_name_exists("degassed_carbon"))
+                      {
+                          const double idx = this->introspection().compositional_index_for_name("degassed_carbon");
+                        const double old_degassed = in.composition[q][idx];
+                        double degassed_rate = -porosity_extraction_rate * rho_l * in.composition[q][ccl_idx] * 20/100.0;
+
+                        // If the field is already negative, or the rate would push it below zero,
+                        // set the rate to bring it exactly to zero this step.
+                        if (old_degassed + degassed_rate * reaction_time_step_size < 0.0)
+                          degassed_rate = -old_degassed / reaction_time_step_size;
+
+                        // Now, if it exists, also convert free_co2 to degassed_co2.
+                        const unsigned int fidx = this->introspection().compositional_index_for_name("free_carbon");
+                        const double free_to_degassed = -in.composition[q][fidx]/reaction_time_step_size;
+
+                        reaction_rate_out->reaction_rates[q][idx] = degassed_rate + free_to_degassed;
+                      }
+                    }
+                  }
+                  
 
                 if (enthalpy_out != nullptr)
                   enthalpy_out->enthalpies_of_fusion[q] = enthalpy;    
