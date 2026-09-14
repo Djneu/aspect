@@ -25,6 +25,7 @@
 #include <aspect/postprocess/visualization.h>
 #include <ctime>
 #include <aspect/simulator.h>
+#include <filesystem>
 
 namespace aspect
 {
