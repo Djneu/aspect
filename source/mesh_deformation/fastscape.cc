@@ -961,12 +961,12 @@ namespace aspect
                   sand_transport_coefficient_array[index] = time_scaling_factor * sand_transport_coefficient[0];
                   silt_transport_coefficient_array[index] = time_scaling_factor * silt_transport_coefficient[0];
                 }
-              if (elevation[i] < current_sea_level)
-                {
-                  const double decay_factor = std::exp(-lambda_decay_coefficient * (current_sea_level - elevation[i]));
-                  sand_transport_coefficient_array[index] *= decay_factor;
-                  silt_transport_coefficient_array[index] *= decay_factor;
-                }
+              //if (elevation[i] < current_sea_level)
+              //  {
+              //    const double decay_factor = std::exp(-lambda_decay_coefficient * (current_sea_level - elevation[i]));
+              //    sand_transport_coefficient_array[index] *= decay_factor;
+              //    silt_transport_coefficient_array[index] *= decay_factor;
+              //  }
 
             }
         }
@@ -977,6 +977,10 @@ namespace aspect
       // and check that there are no empty mesh points due to
       // an improperly set maximum_surface_refinement_level, additional_refinement_levels,
       // and surface_refinement_difference
+      
+      if(this->get_timestep_number () > 1)
+           fastscape_copy_h_(elevation.data());
+
 
       const unsigned int fastscape_array_size = fastscape_nx*fastscape_ny;
       for (unsigned int i=0; i<fastscape_array_size; ++i)
@@ -988,6 +992,13 @@ namespace aspect
           // Physical coordinates of the cell center in Cartesian 2D
           const double x = grid_extent[0].first + (ix - use_ghost_nodes) * fastscape_dx;
           const double y = grid_extent[1].first + (iy - use_ghost_nodes) * fastscape_dy;
+
+	   if (elevation[i] < current_sea_level)
+                {
+                  const double decay_factor = std::exp(-lambda_decay_coefficient * (current_sea_level - elevation[i]));
+                  sand_transport_coefficient_array[i] *= decay_factor;
+                  silt_transport_coefficient_array[i] *= decay_factor;
+                }
 
           if (!use_kf_distribution_function)
             {
