@@ -1,0 +1,467 @@
+/*
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+
+  This file is part of ASPECT.
+
+  ASPECT is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+
+  ASPECT is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with ASPECT; see the file LICENSE.  If not see
+  <http://www.gnu.org/licenses/>.
+*/
+
+
+#include <aspect/postprocess/volatile_flux_statistics.h>
+#include <aspect/utilities.h>
+#include <aspect/geometry_model/interface.h>
+
+#include <deal.II/base/quadrature_lib.h>
+#include <deal.II/fe/fe_values.h>
+#include <aspect/mesh_deformation/free_surface.h>
+#include <aspect/melt.h>
+
+
+namespace aspect
+{
+  namespace Postprocess
+  {
+    template <int dim>
+    std::pair<std::string,std::string>
+    VolatileFluxStatistics<dim>::execute (TableHandler &statistics)
+    {
+      const std::string unit = (this->convert_output_to_years())
+                               ?
+                               "kg/yr"
+                               :
+                               "kg/s";
+      const double in_years = (this->convert_output_to_years())
+                              ?
+                              year_in_seconds
+                              :
+                              1.0;
+
+      // Get ID for all fields. Should I do this once here or do it in the main function?
+      AssertThrow(this->introspection().compositional_name_exists("porosity"), ExcMessage("A porosity field is needed to use the co2 plugin."));
+      const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
+    
+      AssertThrow(this->introspection().compositional_name_exists("cmorb_cl"), ExcMessage("A cmorb_cl field is needed to use the co2 plugin."));
+      const unsigned int ccl_idx = this->introspection().compositional_index_for_name("cmorb_cl");
+
+      AssertThrow(this->introspection().compositional_name_exists("cmorb_cs"), ExcMessage("A cmorb_cs field is needed to use the co2 plugin."));
+      const unsigned int ccs_idx = this->introspection().compositional_index_for_name("cmorb_cs");
+
+      bool track_degass = this->introspection().compositional_name_exists("degassed_carbon");
+      unsigned int d_idx = 0;
+      if(track_degass)
+        d_idx = this->introspection().compositional_index_for_name("degassed_carbon");
+
+      bool track_free = this->introspection().compositional_name_exists("free_carbon");
+      unsigned int f_idx = 0;
+      if(track_free)
+        f_idx = this->introspection().compositional_index_for_name("free_carbon");
+      
+
+      // create a quadrature formula based on the temperature element alone.
+      const Quadrature<dim-1> &quadrature_formula = this->introspection().face_quadratures.velocities;
+
+      FEFaceValues<dim> fe_face_values (this->get_mapping(),
+                                        this->get_fe(),
+                                        quadrature_formula,
+                                        update_values            | update_gradients |
+                                        update_normal_vectors    |
+                                        update_quadrature_points | update_JxW_values);
+
+      
+      std::vector<Tensor<1,dim>> fluid_velocity_values(quadrature_formula.size());
+      std::vector<std::vector<double>> composition_values (this->n_compositional_fields(),std::vector<double> (quadrature_formula.size()));
+
+      std::map<types::boundary_id, double> local_co2_fluxes;
+
+      MaterialModel::MaterialModelInputs<dim> in(fe_face_values.n_quadrature_points, this->n_compositional_fields());
+      MaterialModel::MaterialModelOutputs<dim> out(fe_face_values.n_quadrature_points, this->n_compositional_fields());
+      
+      MeltHandler<dim>::create_material_model_outputs(out);
+
+      in.requested_properties = MaterialModel::MaterialProperties::density;
+      const std::shared_ptr<MaterialModel::MeltOutputs<dim>> fluid_out
+                  = out.template get_additional_output_object<MaterialModel::MeltOutputs<dim>>();
+
+       // Get the boundary indicators of those boundaries with
+      // a free surface.
+      std::set<types::boundary_id> is_free_surface;
+      if (this->get_parameters().mesh_deformation_enabled == true)
+        is_free_surface = this->get_mesh_deformation_handler().get_free_surface_boundary_indicators();
+
+      // for every surface face on which it makes sense to compute a
+      // mass flux and that is owned by this processor,
+      // integrate the normal mass flux given by the formula
+      //   j =  \rho * v * n
+      for (const auto &cell : this->get_dof_handler().active_cell_iterators())
+        if (cell->is_locally_owned())
+          for (const unsigned int f : cell->face_indices())
+            if (cell->at_boundary(f))
+              {                
+                fe_face_values.reinit (cell, f);
+
+                // Set use_strain_rates to false since we don't need viscosity
+                in.reinit(fe_face_values, cell, this->introspection(), this->get_solution());
+
+                const types::boundary_id boundary_ind = cell->face(f)->boundary_id();
+
+                const bool face_on_free_surface =
+                    (is_free_surface.find(boundary_ind) != is_free_surface.end());  
+
+                this->get_material_model().evaluate(in, out);
+
+                const FEValuesExtractors::Vector ex_u_f = this->introspection().variable("fluid velocity").extractor_vector();
+                fe_face_values[ex_u_f].get_function_values (this->get_solution(), fluid_velocity_values);
+  
+                // Get mesh velocity on this face if the mesh deforms
+                std::vector<Tensor<1,dim>> mesh_velocity_values(fe_face_values.n_quadrature_points);
+                if (this->get_parameters().mesh_deformation_enabled)
+                  fe_face_values[this->introspection().extractors.velocities]
+                    .get_function_values(this->get_mesh_deformation_handler().get_mesh_velocity(),
+                                        mesh_velocity_values);
+
+                double local_co2_flux = 0;
+                for (unsigned int q=0; q<fe_face_values.n_quadrature_points; ++q)
+                  {
+                  double cmorb_cl =  std::max(0.0, std::min(in.composition[q][ccl_idx],1.0));
+                  double cmorb_cs =  std::max(0.0, std::min(in.composition[q][ccs_idx],1.0));
+                  double Fvol =  std::max(0.0, std::min(in.composition[q][porosity_idx],1.0));
+                  double rho_s = out.densities[q];
+                  double rho_l = fluid_out->fluid_densities[q];
+
+                  if (face_on_free_surface)
+                    {
+                      // Solid follows the surface: no solid flux.
+                      // Melt crosses it at its velocity relative to the mesh.
+                      const Tensor<1,dim> u_f_rel = fluid_velocity_values[q] - mesh_velocity_values[q];
+                      local_co2_flux += 20./100. * Fvol * cmorb_cl * rho_l
+                                        * (u_f_rel * fe_face_values.normal_vector(q))
+                                        * fe_face_values.JxW(q);
+                    }
+                  else
+                    {
+                    local_co2_flux += (20./100 *  
+                      (
+                      (Fvol * cmorb_cl * rho_l * (fluid_velocity_values[q] * fe_face_values.normal_vector(q)))
+                      + ((1 - Fvol) * cmorb_cs * rho_s * (in.velocity[q] * fe_face_values.normal_vector(q)))
+                      )
+                      * fe_face_values.JxW(q));    
+                    } 
+                  }                           
+
+                const types::boundary_id boundary_indicator
+                  = cell->face(f)->boundary_id();
+                local_co2_fluxes[boundary_indicator] += local_co2_flux * in_years;                
+              }
+
+      
+
+      // now communicate to get the global values
+      std::map<types::boundary_id, double> global_co2_boundary_fluxes;
+      {
+        // first collect local values in the same order in which they are listed
+        // in the set of boundary indicators
+        const std::set<types::boundary_id>
+        boundary_indicators
+          = this->get_geometry_model().get_used_boundary_indicators ();
+
+        std::vector<double> local_co2_values;
+        std::vector<double> local_top_co2_values;
+        local_co2_values.reserve(boundary_indicators.size());
+        for (const auto p : boundary_indicators)
+          local_co2_values.push_back (local_co2_fluxes[p]);
+
+        // then collect contributions from all processors
+        std::vector<double> global_co2_values (local_co2_values.size());
+        Utilities::MPI::sum (local_co2_values, this->get_mpi_communicator(), global_co2_values);
+
+        // and now take them apart into the global map again
+        unsigned int index = 0;
+        for (std::set<types::boundary_id>::const_iterator
+             p = boundary_indicators.begin();
+             p != boundary_indicators.end(); ++p, ++index)
+              global_co2_boundary_fluxes[*p] = global_co2_values[index];
+
+      }
+
+      // now add all of the computed mass fluxes to the statistics object
+      // and create a single string that can be output to the screen
+      std::ostringstream screen_text;
+      unsigned int index = 0;
+      double top_co2_flux = 0;
+      for (std::map<types::boundary_id, double>::const_iterator
+           p = global_co2_boundary_fluxes.begin();
+           p != global_co2_boundary_fluxes.end(); ++p, ++index)
+           {
+            time_integrated_mass_flux += p->second * this->get_timestep() / in_years;
+
+            // Find flux out top boundary, and convert back from ppm to kg/yr.
+            // Do this regardless of whether it is a free surface.
+            if(p->first == this->get_geometry_model().translate_symbolic_boundary_name_to_id ("top"))
+            {
+              total_co2_degass += p->second * this->get_timestep() / in_years;
+              top_co2_flux = p->second;
+            }
+           }
+
+      // create a quadrature formula based on the compositional element alone.
+      const Quadrature<dim> &quadrature_formula1 = this->introspection().quadratures.compositional_field_max;
+      const unsigned int n_q_points = quadrature_formula1.size();
+
+      FEValues<dim> fe_values (this->get_mapping(),
+                               this->get_fe(),
+                               quadrature_formula1,
+                               update_values   |
+                               update_quadrature_points |
+                               update_gradients |
+                               update_JxW_values);
+
+      std::vector<double> Fvol_values(n_q_points);
+      std::vector<double> ccl_values(n_q_points);
+      std::vector<double> ccs_values(n_q_points);
+      std::vector<double> d_values(n_q_points);
+      std::vector<double> f_values(n_q_points);
+      double local_co2_compositional_integrals = 0.0;
+      double local_fluid_compositional_integrals = 0.0;
+      double local_solid_compositional_integrals = 0.0;
+      double local_degassed_compositional_integrals = 0.0;
+      double local_free_compositional_integrals = 0.0;
+
+      MaterialModel::MaterialModelInputs<dim> in_fe(fe_values.n_quadrature_points, this->n_compositional_fields());
+      MaterialModel::MaterialModelOutputs<dim> out_fe(fe_values.n_quadrature_points, this->n_compositional_fields());
+      
+      MeltHandler<dim>::create_material_model_outputs(out_fe);
+
+      in_fe.requested_properties = MaterialModel::MaterialProperties::density;
+      const std::shared_ptr<MaterialModel::MeltOutputs<dim>> fluid_out_fe
+                = out_fe.template get_additional_output_object<MaterialModel::MeltOutputs<dim>>();
+
+
+      // compute the integral quantities by quadrature
+      for (const auto &cell : this->get_dof_handler().active_cell_iterators())
+        if (cell->is_locally_owned())
+          {
+            fe_values.reinit (cell);
+
+            // Set use_strain_rates to false since we don't need viscosity
+            in_fe.reinit(fe_values, cell, this->introspection(), this->get_solution());
+
+            this->get_material_model().evaluate(in_fe, out_fe);            
+
+            fe_values[this->introspection().extractors.compositional_fields[porosity_idx]].get_function_values (this->get_solution(),
+                Fvol_values);
+            fe_values[this->introspection().extractors.compositional_fields[ccl_idx]].get_function_values (this->get_solution(),
+                ccl_values);
+            fe_values[this->introspection().extractors.compositional_fields[ccs_idx]].get_function_values (this->get_solution(),
+                ccs_values);
+
+            if(track_degass)
+              fe_values[this->introspection().extractors.compositional_fields[d_idx]].get_function_values (this->get_solution(),
+                  d_values);
+
+            if(track_free)
+              fe_values[this->introspection().extractors.compositional_fields[f_idx]].get_function_values (this->get_solution(),
+                  f_values);
+                
+            /*for (unsigned int q=0; q<n_q_points; ++q)
+            {
+              double rho_s = out_fe.densities[q];
+              double rho_l = fluid_out_fe->fluid_densities[q];
+
+              double ccl = std::max(0.0, std::min(1.0, ccl_values[q]));
+              double ccs = std::max(0.0, std::min(1.0, ccs_values[q]));
+              double Fvol = std::max(0.0, std::min(1.0, Fvol_values[q]));
+
+              double liquid_mass = Fvol * ccl * rho_l * 20/100 * fe_values.JxW(q);
+              double solid_mass = (1-Fvol) * ccs * rho_s * 20/100 * fe_values.JxW(q);
+              //std::cout<<rho_l<<" "<<rho_s<<std::endl;
+
+              local_co2_compositional_integrals += liquid_mass + solid_mass;
+              local_fluid_compositional_integrals += liquid_mass;
+              local_solid_compositional_integrals += solid_mass;
+            }*/
+
+  // Replace separate get_function_values calls with reading from in_fe.composition
+// which is already populated by in_fe.reinit
+for (unsigned int q = 0; q < n_q_points; ++q)
+{
+    const double rho_s = out_fe.densities[q];
+    const double rho_l = fluid_out_fe->fluid_densities[q];
+
+    // Read from in_fe.composition instead of separate get_function_values
+    const double Fvol = std::max(0.0, std::min(1.0, in_fe.composition[q][porosity_idx]));
+    const double ccl  = std::max(0.0, std::min(1.0, in_fe.composition[q][ccl_idx]));
+    const double ccs  = std::max(0.0, std::min(1.0, in_fe.composition[q][ccs_idx]));
+
+    double liquid_mass = Fvol * ccl * rho_l * 20.0/100.0 * fe_values.JxW(q);
+    double solid_mass  = (1.0 - Fvol) * ccs * rho_s * 20.0/100.0 * fe_values.JxW(q);
+
+
+    local_co2_compositional_integrals += liquid_mass + solid_mass;
+    local_fluid_compositional_integrals += liquid_mass;
+    local_solid_compositional_integrals += solid_mass;
+
+    if(track_degass)
+      local_degassed_compositional_integrals += in_fe.composition[q][d_idx] * fe_values.JxW(q);
+
+    if(track_free)
+      local_free_compositional_integrals += in_fe.composition[q][f_idx] * fe_values.JxW(q);
+}
+          }
+
+      // compute the sum over all processors
+      const double global_co2_compositional_integrals =
+      Utilities::MPI::sum (local_co2_compositional_integrals,
+                           this->get_mpi_communicator());
+
+      const double global_liquid_compositional_integrals =
+      Utilities::MPI::sum (local_fluid_compositional_integrals,
+                           this->get_mpi_communicator());
+
+      const double global_solid_compositional_integrals =
+      Utilities::MPI::sum (local_solid_compositional_integrals,
+                           this->get_mpi_communicator());
+
+      const double global_degassed_compositional_integrals =
+      Utilities::MPI::sum (local_degassed_compositional_integrals,
+                           this->get_mpi_communicator());
+
+      const double global_free_compositional_integrals =
+      Utilities::MPI::sum (local_free_compositional_integrals,
+                           this->get_mpi_communicator());
+      
+      // Positive indicates outward flow, so to see the total amount of mass we have had,
+      // we add that to the value.
+      double conserve_co2 = global_co2_compositional_integrals + time_integrated_mass_flux + global_degassed_compositional_integrals + global_free_compositional_integrals;
+
+      // Co2
+      statistics.add_value("Total co2 mass flow",time_integrated_mass_flux);
+      statistics.set_precision ("Total co2 mass flow", 7);
+      statistics.set_scientific ("Total co2 mass flow", true);
+
+      statistics.add_value("Global co2 mass",global_co2_compositional_integrals);
+      statistics.set_precision ("Global co2 mass", 7);
+      statistics.set_scientific ("Global co2 mass", true);
+
+      statistics.add_value("Total co2",conserve_co2);
+      statistics.set_precision ("Total co2", 7);
+      statistics.set_scientific ("Total co2", true);
+
+      statistics.add_value("Co2 degass rate",top_co2_flux);
+      statistics.set_precision ("Co2 degass rate", 7);
+      statistics.set_scientific ("Co2 degass rate", true);
+
+      statistics.add_value("Total Co2 degass",total_co2_degass);
+      statistics.set_precision ("Total Co2 degass", 7);
+      statistics.set_scientific ("Total Co2 degass", true);
+
+      statistics.add_value("Global co2 solid mass",global_solid_compositional_integrals);
+      statistics.set_precision ("Global co2 solid mass", 7);
+      statistics.set_scientific ("Global co2 solid mass", true);
+
+      statistics.add_value("Global co2 liquid mass",global_liquid_compositional_integrals);
+      statistics.set_precision ("Global co2 liquid mass", 7);
+      statistics.set_scientific ("Global co2 liquid mass", true);
+
+      statistics.add_value("Global co2 degass mass",global_degassed_compositional_integrals);
+      statistics.set_precision ("Global co2 degass mass", 7);
+      statistics.set_scientific ("Global co2 degass mass", true);
+
+      statistics.add_value("Global co2 free mass",global_free_compositional_integrals);
+      statistics.set_precision ("Global co2 free mass", 7);
+      statistics.set_scientific ("Global co2 free mass", true);
+      
+
+      return std::pair<std::string, std::string> ("Writing volatile statistics",
+                                                screen_text.str());
+
+    }
+
+    template <int dim>
+    template <class Archive>
+    void VolatileFluxStatistics<dim>::serialize (Archive &ar, const unsigned int)
+    {
+      ar &time_integrated_mass_flux
+      & total_co2_degass;
+    }
+
+
+    template <int dim>
+    void
+    VolatileFluxStatistics<dim>::save (std::map<std::string, std::string> &status_strings) const
+    {
+      std::ostringstream os;
+
+      // Serialize into a stringstream. Put the following into a code
+      // block of its own to ensure the destruction of the 'oa'
+      // archive triggers a flush() on the stringstream so we can
+      // query the completed string below.
+      {
+        aspect::oarchive oa (os);
+        oa << (*this);
+      }
+
+      status_strings["co2"] = os.str();
+    }
+
+
+    template <int dim>
+    void
+    VolatileFluxStatistics<dim>::load (const std::map<std::string, std::string> &status_strings)
+    {
+      // see if something was saved
+      if (status_strings.find("co2") != status_strings.end())
+        {
+          std::istringstream is (status_strings.find("co2")->second);
+          aspect::iarchive ia (is);
+          ia >> (*this);
+        }
+    }
+  }
+}
+
+
+// explicit instantiations
+namespace aspect
+{
+  namespace Postprocess
+  {
+    ASPECT_REGISTER_POSTPROCESSOR(VolatileFluxStatistics,
+                                  "volatile statistics",
+                                  "A postprocessor that computes some statistics about "
+                                  "the mass flux across boundaries. For each boundary "
+                                  "indicator (see your geometry description for which boundary "
+                                  "indicators are used), the mass flux is computed in outward "
+                                  "direction, i.e., from the domain to the outside, using the "
+                                  "formula $\\int_{\\Gamma_i} \\rho \\mathbf v \\cdot \\mathbf n$ "
+                                  "where $\\Gamma_i$ is the part of the boundary with indicator $i$, "
+                                  "$\\rho$ is the density as reported by the material model, "
+                                  "$\\mathbf v$ is the velocity, and $\\mathbf n$ is the outward normal. "
+                                  "\n\n"
+                                  "As stated, this postprocessor computes the \\textit{outbound} mass "
+                                  "flux. If you "
+                                  "are interested in the opposite direction, for example from "
+                                  "the core into the mantle when the domain describes the "
+                                  "mantle, then you need to multiply the result by -1."
+                                  "\n\n"
+                                  ":::{note}\n"
+                                  "In geodynamics, the term ``mass flux'' is often understood "
+                                  "to be the quantity $\\rho \\mathbf v$, which is really a mass "
+                                  "flux \\textit{density}, i.e., a vector-valued field. In contrast "
+                                  "to this, the current postprocessor only computes the integrated "
+                                  "flux over each part of the boundary. Consequently, the units of "
+                                  "the quantity computed here are $\\frac{kg}{s}$.\n"
+                                  ":::")
+  }
+}

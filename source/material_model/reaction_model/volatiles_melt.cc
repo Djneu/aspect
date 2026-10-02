@@ -1,0 +1,1223 @@
+/*
+  Copyright (C) 2024 by the authors of the ASPECT code.
+
+  This file is part of ASPECT.
+
+  ASPECT is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+
+  ASPECT is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with ASPECT; see the file LICENSE.  If not see
+  <http://www.gnu.org/licenses/>.
+*/
+
+#include <aspect/material_model/reaction_model/volatiles_melt.h>
+#include <aspect/utilities.h>
+#include <aspect/gravity_model/interface.h>
+#include <aspect/adiabatic_conditions/interface.h>
+#include <deal.II/base/parameter_handler.h>
+#include <chrono>
+
+#include <aspect/simulator.h>
+
+namespace aspect
+{
+  namespace MaterialModel
+  {
+    namespace ReactionModel
+    {
+
+
+      template <int dim>
+      VolatilesMelt<dim>::VolatilesMelt()
+        = default;
+
+      template <int dim>
+      double
+      VolatilesMelt<dim>::
+      reference_darcy_coefficient () const
+      {
+        // 0.01 = 1% melt
+        // Darcy coefficient should vary with melt viscosity.
+        return reference_permeability * Utilities::fixed_power<3>(0.01) / viscosity_fluid;
+      }
+
+      template <int dim>
+      void
+      VolatilesMelt<dim>::
+      calculate_reaction_rate_outputs(const typename Interface<dim>::MaterialModelInputs &in,
+                                      typename Interface<dim>::MaterialModelOutputs &out) const
+      {
+          // Reaction rates needed for operator splitting. This model doesn't consider a case
+          // where there is no operator splitting that uses reaction terms instead.
+          const std::shared_ptr<ReactionRateOutputs<dim>>
+          reaction_rate_out = out.template get_additional_output_object<ReactionRateOutputs<dim>>();
+
+          // Enthalpy outputs for the latent heat mel plugin.
+          const std::shared_ptr<EnthalpyOutputs<dim>> enthalpy_out 
+            = out.template get_additional_output_object<EnthalpyOutputs<dim>>();
+
+          double reaction_time_step_size = 1.0;
+          if (this->simulator_is_past_initialization())
+          {
+            const unsigned int number_of_reaction_steps = std::max(static_cast<unsigned int>(this->get_timestep() / this->get_parameters().reaction_time_step),
+                                                                  std::max(this->get_parameters().reaction_steps_per_advection_step,1U));
+            reaction_time_step_size = this->get_timestep() / static_cast<double>(number_of_reaction_steps);
+          }
+
+          for (unsigned int q=0; q<in.n_evaluation_points(); ++q)
+            {
+              const double temperature = in.temperature[q];
+              const double pressure = this->get_adiabatic_conditions().pressure(in.position[q]) > 101325.
+              ? 
+              this->get_adiabatic_conditions().pressure(in.position[q])
+              :
+              101325.;
+
+              std::vector<double> composition(this->n_compositional_fields());
+              for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
+                      composition[c] = in.composition[q][c];
+
+              const double xcord = in.position[q](0);
+              const double depth = this->get_geometry_model().depth(in.position[q]);
+
+              // Ignore melt fraction, get melt reaction rate (volume)
+              // and solid and liquid reaction rates, ordered as dunite (background field), morb, cmorb, hmorb.
+              // Note: At the moment compositions are hardcoded in assuming there is always 4 components.
+              const double rho_s = out.densities[q]; //3200
+              const double rho_l = rho_s - fluid_density_difference;
+              auto [vfrac, melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates, enthalpy] = equilibrium(composition, temperature, pressure, rho_s, q, 0.);
+              const double current_porosity = in.composition[q][porosity_idx];
+              const double current_cmorb_cl = in.composition[q][ccl_idx];
+              //const double current_cmorb_cs = in.composition[q][ccs_idx];
+
+              for (unsigned int c=0; c<in.composition[q].size(); ++c)
+                {
+                  if (reaction_rate_out != nullptr && in.requests_property(MaterialProperties::reaction_rates) ||
+                      reaction_rate_out != nullptr && in.requests_property(MaterialProperties::additional_outputs))
+                  {
+                    if (c == porosity_idx)
+                    {
+                          reaction_rate_out->reaction_rates[q][c] = get_reaction_rate(in.composition[q][c], 
+                                                                                      melt_reaction_rate, 
+                                                                                      reaction_time_step_size,
+                                                                                      depth,
+                                                                                      xcord);
+                    }
+                    else if (c == mcs_idx)
+                    {
+                          // solid morb reaction rate, between zero and 1. Because the components 
+                          reaction_rate_out->reaction_rates[q][c] = get_reaction_rate(in.composition[q][c], 
+                                                          solid_reaction_rates[1], 
+                                                          reaction_time_step_size,
+                                                          depth,
+                                                          xcord);
+
+                    }
+                    else if (c == mcl_idx)
+                    {
+                          // liquid morb reaction rate.
+                          reaction_rate_out->reaction_rates[q][c] = get_reaction_rate(in.composition[q][c], 
+                                                          liquid_reaction_rates[1], 
+                                                          reaction_time_step_size,
+                                                          depth,
+                                                          xcord);
+                    }
+                    else if (c == ccs_idx)
+                    {
+                          // solid cmorb reaction rate.
+                          reaction_rate_out->reaction_rates[q][c] = get_reaction_rate(in.composition[q][c], 
+                                                          solid_reaction_rates[2], 
+                                                          reaction_time_step_size,
+                                                          depth,
+                                                          xcord);                            
+                    }
+                    else if (c == ccl_idx)
+                    {
+                          // liquid cmorb reaction rate.
+                          reaction_rate_out->reaction_rates[q][c] = get_reaction_rate(in.composition[q][c], 
+                                                          liquid_reaction_rates[2], 
+                                                          reaction_time_step_size,
+                                                          depth,
+                                                          xcord);
+
+                    }
+                    else if (c == hcs_idx)
+                    {
+                          // solid cmorb reaction rate.
+                          reaction_rate_out->reaction_rates[q][c] = get_reaction_rate(in.composition[q][c], 
+                                                          solid_reaction_rates[3], 
+                                                          reaction_time_step_size,
+                                                          depth,
+                                                          xcord);
+                    }
+                    else if (c == hcl_idx)
+                    {
+                      // liquid cmorb reaction rate.
+                      reaction_rate_out->reaction_rates[q][c] = get_reaction_rate(in.composition[q][c], 
+                                                      liquid_reaction_rates[3], 
+                                                      reaction_time_step_size,
+                                                      depth,
+                                                      xcord);
+
+                    }      
+                    else  
+                      reaction_rate_out->reaction_rates[q][c] = 0.0;
+                  }
+                  }
+
+                 // Here we apply other reactions, either overwriting the previous ones or adding to them.
+                 if (reaction_rate_out != nullptr && in.requests_property(MaterialProperties::reaction_rates) ||
+                      reaction_rate_out != nullptr && in.requests_property(MaterialProperties::additional_outputs))
+                  {
+                    // Approximate temperature of the dolomite reaction. Linear slope based on Schmidt et al., 2024, Fig. 7
+                    const double T_ledge = 1000 + 273; //238.1 * (pressure/1e9 - 2.1) + 273;
+                    const double P_ledge = 1.85e9;
+                    const double current_cmorb_cs = in.composition[q][ccs_idx];
+                    const double current_cmorb_cl = in.composition[q][ccl_idx];
+                    if (pressure < P_ledge + 1e8 && temperature > T_ledge && depth > degass_depth) 
+                    {
+                      if(this->introspection().compositional_name_exists("free_carbon"))
+                      {
+                        const unsigned int idx = this->introspection().compositional_index_for_name("free_carbon");
+                        
+
+                        const double c_floor = 0.000125; //2.5e-5; // Approximately 5 ppm per component.
+
+                        // Strip all cMORB above the floor.                       
+                        double strip_cs = 0.0; //(current_cmorb_cs - c_floor) / reaction_time_step_size;
+                        
+                        if(current_cmorb_cs > c_floor)
+                          strip_cs = std::max(0.0, (current_cmorb_cs - c_floor)) / reaction_time_step_size;
+
+                        //reaction_rate_out->reaction_rates[q][ccs_idx] = -strip_cs;
+
+                        // Decarbonation over a pressure interval (all pressures in Pa)
+                        const double dP_ramp = 1e8;                       // 0.1 GPa ≈ 3 km ≈ 6 nodes
+                        const double P_bot   = P_ledge + 0.5 * dP_ramp;   // deeper: no decarbonation
+                        const double P_top   = P_ledge - 0.5 * dP_ramp;   // shallower: fully decarbonated
+
+                        // f = 0 at P >= P_bot, rises linearly to 1 at P <= P_top
+                        const double f = std::clamp((P_bot - in.pressure[q]) / dP_ramp, 0.0, 1.0);
+
+                        // carbon the solid can retain: c_max (no loss) at P_bot, c_floor at P_top
+                        const double c_target = c_floor + (1.0 - f) * (current_cmorb_cs - c_floor);
+
+                        const double c      = in.composition[q][ccs_idx];
+                        const double excess = std::max(0.0, c - c_target);
+                        const double strip  = excess / reaction_time_step_size;
+
+                        reaction_rate_out->reaction_rates[q][ccs_idx]      = -strip;
+
+
+
+                        // if(in.position[q](0) < 1e3 && in.position[q](1) <= 59e3 && in.position[q](1) >= 10e3)
+                        //  std::cout<<in.position[q](1)<<" | "<<current_cmorb_cl<<" | "<<c_floor<<" | "<<strip_rate<<std::endl;
+                        //std::max(0.0, current_cmorb_cs - c_floor) / reaction_time_step_size;
+                        //if(in.position[q](0) == 0 && in.position[q](1) == 57e3)
+                       //   std::cout<<"57: "<<current_cmorb_cs<<" "<<-strip_cs<<" "<<reaction_time_step_size<<std::endl;
+
+                       // if(in.position[q](0) == 0 && in.position[q](1) == 57.5e3)
+                       //   std::cout<<"575: "<<current_cmorb_cs<<" "<<-strip_cs<<" "<<reaction_time_step_size<<std::endl;
+                        //double strip_cl = std::max(c_floor, current_cmorb_cl - c_floor) / reaction_time_step_size; 
+
+                        //strip_cl = std::clamp(strip_cl, 0.0, std::max(0.0, max_strip_cl));
+                        //strip_cs = std::clamp(strip_cs, 0.0, std::max(0.0, max_strip_cs));
+
+                        //reaction_rate_out->reaction_rates[q][ccl_idx] += -strip_cl;
+
+                        // Track exactly the CO2 removed.
+                        //const double co2_from_liquid = 0.0; //strip_cl * current_porosity         * rho_l;
+                       // const double co2_from_solid  = strip_cs * (1.0 - current_porosity) * rho_s;
+
+                        // Add removed co2 to free_carbon field. This way we can see where we have free carbon,
+                        // which will be moved with melt velocity, but it no longer affects the solidus.
+                        //reaction_rate_out->reaction_rates[q][idx] = 0.20 * (co2_from_liquid + co2_from_solid);
+                      }
+                    }
+                    else if (depth < degass_depth && this->introspection().compositional_name_exists("degassed_carbon"))
+                    {
+                      // Rate of carbon degassing from the melt.
+                      double degassed_rate = 0.0;
+                      // Rate of carbon degassing from available free carbon.
+                      double free_to_degassed = 0.0;
+                      const double extraction_timescale = reaction_time_step_size; //1000 * year_in_seconds;
+                      const double idx = this->introspection().compositional_index_for_name("degassed_carbon");
+
+                      if(current_porosity > 1e-8)
+                      {
+                        double porosity_extraction_rate = -current_porosity / extraction_timescale;
+                        const double new_porosity = current_porosity + porosity_extraction_rate * reaction_time_step_size;
+                        
+                        // Make sure this doesn't cause porosity to shoot negative.
+                        if (new_porosity < 0.0)
+                          porosity_extraction_rate = -current_porosity / reaction_time_step_size;
+
+                        // Reaction rate to extract porosity
+                        reaction_rate_out->reaction_rates[q][porosity_idx] = porosity_extraction_rate;
+
+                        // The bulk of the solid mass directly depends on the porosity. As porosity decreases, this would increase.
+                        // Here, we alter solid concentrations to try and conserve the original bulk mass.
+                        // cs that keeps (1-phi)*cs invariant across the discrete Euler step:
+                        const double factor = std::max(1.0 - current_porosity, 1e-12) / std::max(1.0 - new_porosity, 1e-12);
+
+                        reaction_rate_out->reaction_rates[q][ccs_idx] = in.composition[q][ccs_idx] * (factor - 1.0) / reaction_time_step_size;
+                        reaction_rate_out->reaction_rates[q][mcs_idx] = in.composition[q][mcs_idx] * (factor - 1.0) / reaction_time_step_size;
+                        reaction_rate_out->reaction_rates[q][hcs_idx] = in.composition[q][hcs_idx] * (factor - 1.0) / reaction_time_step_size;
+
+                        // Because we do not want to change the melt composition during extraction, we disallow further reactions.
+                        reaction_rate_out->reaction_rates[q][ccl_idx] = 0.0;
+                        reaction_rate_out->reaction_rates[q][mcl_idx] = 0.0;
+                        reaction_rate_out->reaction_rates[q][hcl_idx] = 0.0;
+                      
+                        const double old_degassed = in.composition[q][idx];
+                        degassed_rate = -porosity_extraction_rate * rho_l * in.composition[q][ccl_idx] * 20/100.0;
+
+                          // If the field is already negative, or the rate would push it below zero,
+                          // set the rate to bring it exactly to zero this step.
+                        if (old_degassed + degassed_rate * reaction_time_step_size < 0.0)
+                          degassed_rate = -old_degassed / reaction_time_step_size;
+                      }
+
+                        // Now, if it exists, also convert free_co2 to degassed_co2. This is already a mass
+                        // term so we use the current composition directly.                       
+                        if(this->introspection().compositional_name_exists("free_carbon"))
+                        {
+                          const unsigned int fidx = this->introspection().compositional_index_for_name("free_carbon");
+                          free_to_degassed = in.composition[q][fidx]/reaction_time_step_size;
+                          reaction_rate_out->reaction_rates[q][fidx] = -free_to_degassed;
+                        }
+
+                        // The final degassed co2 is a combination from the melt and the free co2.
+                        reaction_rate_out->reaction_rates[q][idx] = degassed_rate + free_to_degassed;
+                        
+                        
+                      }
+                    }
+                  
+                if (enthalpy_out != nullptr)
+                  enthalpy_out->enthalpies_of_fusion[q] = enthalpy;    
+
+                out.entropy_derivative_pressure[q]    = 0.0;
+                out.entropy_derivative_temperature[q] = 0.0;
+            }
+      }
+
+template <int dim>
+      void
+      VolatilesMelt<dim>::
+      calculate_fluid_outputs(const typename Interface<dim>::MaterialModelInputs &in,
+                              typename Interface<dim>::MaterialModelOutputs &out) const
+      {
+        const std::shared_ptr<MeltOutputs<dim>> melt_out
+          = out.template get_additional_output_object<MeltOutputs<dim>>();
+
+        // Next, find fluid outputs.
+        if (melt_out != nullptr)
+          {
+            for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
+              {
+                double porosity = std::max(0.0, std::min(in.composition[i][porosity_idx],1.0));
+                double morb_cl =  std::max(0.0, std::min(in.composition[i][mcl_idx],1.0));
+                double cmorb_cl =  std::max(0.0, std::min(in.composition[i][ccl_idx],1.0));
+                double hmorb_cl =  std::max(0.0, std::min(in.composition[i][hcl_idx],1.0));
+
+                // Near the surface we sometimes get liquid values above one.
+                // here we force them to 1 and assume there is no dunite.
+                double comp_sum = morb_cl + cmorb_cl + hmorb_cl;
+                if(comp_sum > 1)
+                {
+                  morb_cl = morb_cl/comp_sum;
+                  cmorb_cl = cmorb_cl/comp_sum;
+                  hmorb_cl = hmorb_cl/comp_sum;
+                }
+
+                double dunite_cl = std::max(0. ,(1 - morb_cl - cmorb_cl - hmorb_cl));
+                
+                // We should maybe double check that the liquid components sum to unity.
+                melt_out->fluid_viscosities[i] = viscosity_fluid*((pow(1.0, morb_cl))*(pow(10.0, dunite_cl))*(pow(0.1, hmorb_cl))*(pow(0.01, cmorb_cl)));
+            
+                melt_out->permeabilities[i] = std::min(reference_permeability * Utilities::fixed_power<3>(porosity) * Utilities::fixed_power<2>(1.0-porosity), maximum_permeability);
+
+                // At the moment we don't include compressibility.
+                melt_out->fluid_densities[i] = out.densities[i] - fluid_density_difference;
+                melt_out->fluid_density_gradients[i] = 0.;
+
+                // limit porosity to disaggregation threshold
+                porosity = std::min(0.3, porosity);
+                const double porosity_threshold = 0.01 * std::pow(this->get_melt_handler().melt_parameters.melt_scaling_factor_threshold, 1./3.);
+
+                // At the moment we use a defined reference solid viscosity. At some point should we use the model viscosity?
+                // In this case, it probably shouldn't include changes related to the porosity. Move viscosity calculation below this?
+                double viscosity = xi_0;
+                if(this->get_timestep_number() > 0)
+                  viscosity = out.viscosities[i];
+
+                melt_out->compaction_viscosities[i] = compaction_viscosity_ratio * viscosity / std::max(porosity, porosity_threshold);
+              }
+          }
+
+        // Find new viscosity.
+        if (this->include_melt_transport() && in.requests_property(MaterialProperties::viscosity))
+        {
+          for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
+            {
+              // cutoff for viscosity at 30%
+              const double porosity = std::min(0.3, std::max(in.composition[i][porosity_idx],0.0));
+              out.viscosities[i] = std::max(out.viscosities[i] * std::exp(- alpha_phi * porosity),1e17);
+            }
+        }
+      }
+
+
+      template <int dim>
+      std::tuple<double, double, small_vector<double>, small_vector<double>, double>
+      VolatilesMelt<dim>::
+      equilibrium (std::vector<double> &composition, 
+                     const double temperature, 
+                     const double pressure,
+                     const double rho_s,
+                     const int ep,
+                     const bool return_composition) const
+      {
+        // Define component dependent parameters 
+        small_vector<double> C_bar (n_components);
+
+        // Get the compositional values, and limit between 0 and 1.
+        double morb_cl =  std::max(0.0, std::min(composition[mcl_idx],1.0));
+        double morb_cs =  std::max(0.0, std::min(composition[mcs_idx],1.0));
+        double cmorb_cl =  std::max(0.0, std::min(composition[ccl_idx],1.0));
+        double cmorb_cs =  std::max(0.0, std::min(composition[ccs_idx],1.0));
+        double hmorb_cl =  std::max(0.0, std::min(composition[hcl_idx],1.0));
+        double hmorb_cs =  std::max(0.0, std::min(composition[hcs_idx],1.0));
+        double Fvol_old =  std::max(0.0, std::min(composition[porosity_idx],1.0));
+        const double rho_l = rho_s - fluid_density_difference;
+
+
+        //if (pressure < P_ledge && temperature > T_ledge && return_composition) 
+        //  cmorb_cs = 0.000125;
+
+        double reaction_time_step_size = 1.0;
+        if (this->simulator_is_past_initialization())
+        {
+          const unsigned int number_of_reaction_steps = std::max(static_cast<unsigned int>(this->get_timestep() / this->get_parameters().reaction_time_step),
+                                                                 std::max(this->get_parameters().reaction_steps_per_advection_step,1U));
+          reaction_time_step_size = this->get_timestep() / static_cast<double>(number_of_reaction_steps);
+        }
+
+        // Near the surface we sometimes get liquid values above one.
+        // here we force them to 1 and assume there is no dunite
+        // Would there be a better way to do this?
+        double comp_sum = morb_cl + cmorb_cl + hmorb_cl;
+        if(comp_sum > 1)
+        {
+          morb_cl = morb_cl/comp_sum;
+          cmorb_cl = cmorb_cl/comp_sum;
+          hmorb_cl = hmorb_cl/comp_sum;
+        }
+
+        comp_sum = morb_cs + cmorb_cs + hmorb_cs;
+        if(comp_sum > 1)
+        {
+          morb_cs = morb_cs/comp_sum;
+          cmorb_cs = cmorb_cs/comp_sum;
+          hmorb_cs = hmorb_cs/comp_sum;
+        }
+
+        // Find dunite and make sure it isn't below zero.
+        double dunite = std::max(0. ,(1 - morb_cs - cmorb_cs - hmorb_cs)); 
+        double dunite_l = std::max(0. ,(1 - morb_cl - cmorb_cl - hmorb_cl));    
+          
+        small_vector<double> c_s = {dunite, morb_cs, cmorb_cs, hmorb_cs};
+        small_vector<double> c_l = {dunite_l, morb_cl, cmorb_cl, hmorb_cl};
+
+        double avg_rho = Fvol_old*rho_l + (1. - Fvol_old)*rho_s;
+        double avg_rho_new = avg_rho; // Will be updated later.
+        double Fmass_old = Fvol_old*rho_l/avg_rho;
+
+        /*if(ep == 1)
+        {
+          double cppm = (Fmass_old * cmorb_cl + (1 - Fmass_old)*cmorb_cs) * 20/100 * 1e6;
+          double cmass = (Fmass_old * cmorb_cl * rho_l + (1 - Fmass_old)*cmorb_cs*rho_s) * 20/100;
+          std::cout<<"Old: "<<cppm<<" "<<cmass<<std::endl;
+        }*/
+   
+        // Now that things are ordered, find the bulk composition for each component.
+        for (unsigned int i=0; i<n_components; ++i)
+            C_bar[i] = Fmass_old*c_l[i] + (1-Fmass_old)*c_s[i];
+      
+        // Define parameters that will be returned.
+        double Fmass_new = 0.0;
+        small_vector<double> solid_reaction_rates (n_components, 0.0);
+        small_vector<double> liquid_reaction_rates (n_components, 0.0);
+        double melt_reaction_rate = 0.0;
+        double enthalpy = 0.0;
+
+        small_vector<double> T0 (n_components);
+        small_vector<double> A (n_components);
+        small_vector<double> B (n_components);
+        small_vector<double> L (n_components);
+        small_vector<double> R (n_components);
+
+        initialize_component_values(A, B, L, T0, R, pressure);
+
+        // Calculate the equilibrium values and reaction rates
+        // if we are below the maximum solidus pressure.
+        if(pressure < pressure_max)
+        {
+          double T_solidus = T_solidus_liquidus(pressure, C_bar, true, A, B, L, T0, R);
+          const double T_liquidus = T_solidus_liquidus(pressure, C_bar, false, A, B, L, T0, R);
+
+          small_vector<double> Tm = melting_temperatures(pressure, A, B, T0);
+          small_vector<double> K = partition_coefficients(pressure, std::max(T_solidus,std::min(T_liquidus,temperature)), A, B, L, T0, R);
+          
+          // Calculate equilibrium melt fraction.
+          Fmass_new = Fmass_old;
+          int n      =  0;       
+          const double r_tol = 1e-5;
+          const int its_tol   = 100;
+          double residual = 0.;
+          for (unsigned int i=0; i<n_components; ++i)
+            residual += C_bar[i]/(Fmass_old + (1-Fmass_old)*K[i]) - C_bar[i]/(Fmass_old/K[i] + (1-Fmass_old));
+
+          if(temperature <= T_solidus)
+            Fmass_new = 0;
+          else if(temperature >= T_liquidus)
+            Fmass_new = 1;
+          else
+          {
+            while (abs(residual) > r_tol) 
+            {
+              double dr_df = 0;
+              double term1 = 0;
+              double term2 = 0;
+              for (unsigned int i=0; i<n_components; ++i)
+              {
+                double numerator1 = C_bar[i] * (1.0 - K[i]);
+                double denominator1 = std::pow((Fmass_new + (1.0 - Fmass_new) * K[i]), 2);
+                term1 += numerator1 / denominator1;
+
+                double numerator2 = C_bar[i] * (1.0 / K[i] - 1.0);
+                double denominator2 = std::pow((Fmass_new / K[i] + (1.0 - Fmass_new)), 2);
+                term2 += numerator2 / denominator2;
+              }
+
+              dr_df = -term1+term2;
+
+              double a = 1;
+              while (((Fmass_new - a*residual/dr_df) < -1e-16) || (Fmass_new - a*residual/dr_df > 1-1e-16))
+              {
+                a = a/2;
+                if (a<1e-6)
+                    AssertThrow(false, ExcMessage("a too small."));
+              }
+
+              Fmass_new = Fmass_new - a*residual/dr_df;
+
+              residual = 0.;
+              for (unsigned int i=0; i<n_components; ++i)
+                residual += C_bar[i]/(Fmass_new + (1-Fmass_new)*K[i]) - C_bar[i]/(Fmass_new/K[i] + (1-Fmass_new));
+
+              n = n+1;
+              if (n==its_tol)
+                AssertThrow(false, ExcMessage("No convergence"));
+            }
+          }
+
+          // Calculate new Cl and Cs values, and limit all between 0 and 1.
+          Fmass_new = std::max(0.0, std::min(1.0, Fmass_new));
+
+          //Find equilibrium liquid values.
+          double mcl = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new + (1 - Fmass_new) * K[1])));
+          double ccl = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new + (1 - Fmass_new) * K[2])));     
+          double hcl = std::max(0.0, std::min(1.0, C_bar[3] / (Fmass_new + (1 - Fmass_new) * K[3])));
+          
+          // Solid values, these aren't actually used for the reaction rates.
+          double mcs = std::max(0.0, std::min(1.0, C_bar[1] / (Fmass_new / K[1] + (1 - Fmass_new))));
+          double ccs = std::max(0.0, std::min(1.0, C_bar[2] / (Fmass_new / K[2] + (1 - Fmass_new))));
+          double hcs = std::max(0.0, std::min(1.0, C_bar[3] / (Fmass_new / K[3] + (1 - Fmass_new))));
+
+          // Find dunite and make sure it isn't below zero.
+          double dcs = std::max(0. ,(1 - mcs - ccs - hcs)); 
+          double dcl = std::max(0. ,(1 - mcl - ccl - hcl)); 
+        
+          small_vector<double> c_leq = {dcl, mcl, ccl, hcl};
+          small_vector<double> c_seq = {dcs, mcs, ccs, hcs};
+
+          if (Fmass_new < 1e-6 && Fmass_old < 1e-6)
+          {
+              // No melt exists and none should — no reaction needed
+              for (unsigned int i = 0; i < n_components; ++i)
+              {
+                  c_leq[i] = c_l[i];
+                  c_seq[i] = c_s[i];
+              }
+          }
+          else if (Fmass_new < 1e-6 && Fmass_old >= 1e-6)
+          {
+              // Freezing case — existing melt should solidify
+              // c_leq drives toward zero melt, c_seq absorbs the composition
+              for (unsigned int i = 0; i < n_components; ++i)
+              {
+                  c_leq[i] = c_l[i];  // liquid drains at current composition
+                  c_seq[i] = C_bar[i]; // solid absorbs everything
+              }
+          }
+      
+
+          // Set up parameters needed to calculate reaction rates.
+          small_vector<double> Gamma (n_components);
+          small_vector<double> c_l_pred = c_l;
+          small_vector<double> c_s_pred = c_s;
+          const double reaction_rho = rho_s;
+          const double tau_r        = melting_time_scale + 2.0 * reaction_time_step_size;
+          const double R  =  reaction_rho/tau_r;
+          const int max_iter = 20;
+          const double tol   = 1e-6;
+          // Better initial guess
+          const double alpha = 1.0 - std::exp(-reaction_time_step_size / tau_r);
+          double previous_error = std::numeric_limits<double>::max();
+          double Fmass_pred = Fmass_old + alpha * (Fmass_new - Fmass_old);
+          double enthalpy = 0.0;
+
+          // Iterate to find conserving reaction rates using batch melting.
+          for (int iter = 0; iter < max_iter; ++iter)
+          {
+              double GammaSum = 0.0;
+              enthalpy = 0.0;
+
+              // Compute Gamma using fixed equilibrium target
+              // but evaluated at predicted end state
+              for (unsigned int i = 0; i < n_components; ++i)
+              {
+                  Gamma[i]  = R * (Fmass_new * c_leq[i] - Fmass_pred * c_l_pred[i]);
+                  enthalpy += Gamma[i] * L[i] / T0[i] * temperature;
+                  GammaSum += Gamma[i];
+              }
+
+              const double avg_rho_pred = rho_s / (1.0 - Fmass_pred * (1.0 - rho_s / rho_l));
+              const double Fmass_rate = GammaSum / avg_rho_pred;
+
+              const double inv_solid_denom  = 1.0 / (std::max(1e-6, 1.0 - Fmass_pred) * avg_rho_pred);
+              const double inv_liquid_denom = 1.0 / (std::max(1e-6, Fmass_pred) * avg_rho_pred);
+              for (unsigned int i = 0; i < n_components; ++i)
+              {
+                  solid_reaction_rates[i]  = -(Gamma[i] - c_s[i] * GammaSum) * inv_solid_denom;
+                  liquid_reaction_rates[i] = (Fmass_pred < 1e-6)
+                                            ? (c_leq[i] - c_l[i]) / reaction_time_step_size
+                                            :  (Gamma[i] - c_l[i] * GammaSum) * inv_liquid_denom;
+              }
+
+              // Predict end state from initial value + rates
+              double Fmass_pred_new = Fmass_old + Fmass_rate * reaction_time_step_size;
+
+              // Newton step
+              // Residual: how far predicted is from fixed point
+              double f = Fmass_pred - Fmass_pred_new;
+
+              // Derivative of GammaSum with respect to Fmass_pred
+              // GammaSum = R * sum(Fmass_new * c_leq[i] - Fmass_pred * c_l_pred[i])
+              // dGammaSum/dFmass_pred = -R * sum(c_l_pred[i])
+              double dGammaSum_dF = 0.0;
+              for (unsigned int i = 0; i < n_components; ++i)
+                  dGammaSum_dF -= R * c_l_pred[i];
+
+              // df/dFmass_pred = 1 - dGammaSum/dFmass_pred * dt / rho
+              double df = 1.0 - dGammaSum_dF * reaction_time_step_size / avg_rho_pred;
+              double step = -f / df;
+
+              // Newton update
+              if (std::abs(df) > 1e-10)
+                  Fmass_pred = Fmass_pred + step;
+              else
+                  Fmass_pred = Fmass_pred_new;
+
+              // Find the maximum error.
+              double max_error = 0.0;
+              for (unsigned int i = 0; i < n_components; ++i)
+              {
+                  c_l_pred[i] = c_l[i] + liquid_reaction_rates[i] * reaction_time_step_size;
+                  c_s_pred[i] = c_s[i] + solid_reaction_rates[i]  * reaction_time_step_size;
+
+                  double C_bar_pred = Fmass_pred * c_l_pred[i] 
+                                    + (1.0 - Fmass_pred) * c_s_pred[i];
+                  max_error = std::max(max_error, std::abs(C_bar_pred - C_bar[i]));
+              }
+
+              /*if(ep ==1)
+              {
+              double co2 = (Fmass_pred * c_l_pred[2] + (1.0 - Fmass_pred) * c_s_pred[2])*1e6*20/100;
+              double h2o = (Fmass_pred * c_l_pred[3] + (1.0 - Fmass_pred) * c_s_pred[3])*1e6*5/100;
+              double morb = (Fmass_pred * c_l_pred[1] + (1.0 - Fmass_pred) * c_s_pred[1]);
+              double dun = (Fmass_pred * c_l_pred[0] + (1.0 - Fmass_pred) * c_s_pred[0]);
+              std::cout<<"it: "<<iter+1<<"| F: "<<Fmass_pred<<" "<<GammaSum<<" "<<dun<<" "<<morb<<" "<<co2<<" "<<h2o<<" "<<max_error<<std::endl;  
+              }*/
+
+              melt_reaction_rate = GammaSum / reaction_rho;
+
+              if(GammaSum != 0)
+                enthalpy = enthalpy/GammaSum; 
+
+              if (max_error < tol)
+                  break;
+
+              if (iter == max_iter - 1)
+                  std::cout << "Warning: reaction iteration did not converge, error: "
+                            << max_error << std::endl;
+          }
+
+          // If we only want to return the composition for the initial conditions,
+          // overwrite the solid and liquid vectors with the actual values. 
+          if(return_composition)
+          {
+            for (unsigned int i=0; i<n_components; ++i)
+            {
+              solid_reaction_rates[i] = c_seq[i];
+              liquid_reaction_rates[i] = c_leq[i];
+            }
+
+            // If we are in the lithosphere below the ledge, we assume any initial melt
+            // has aleady occured and either mixed with the mantle or propagated upward
+            // and enriched the lithosphere. So we remove it and reduce the co2 content to its
+            // depleted value.
+            const double T_ledge = 1000; // + 238.1 * (pressure/1e9 - 2.1) + 273;
+            const double P_ledge = 1.9e9;
+            if(pressure > P_ledge && C_bar[2] > 0.001 && Fmass_new > 1e-6)
+            {
+              // Remove all melt and associated carbon.
+                Fmass_new = 0.0; 
+                liquid_reaction_rates[2] = 0.0;
+
+                // Stripping all carbon in the melt should essentially put the current carbon content on the solidus,
+                // to ensure no further melting occurs we slightly reduce the solid content so the carbon is
+                // just stable.
+                solid_reaction_rates[2] = solid_reaction_rates[2]*0.99; 
+            }
+
+                    // Approximate temperature of the dolomite reaction. Linear slope based on Schmidt et al., 2024, Fig. 7
+            // If this is the initial component step, any areas where this is true reduce 
+            // content to 20 ppm, which we considered depleted.
+            if(pressure < P_ledge && T_ledge > 1000)
+            {
+              // Remove all melt and associated carbon.
+                
+                liquid_reaction_rates[2] = 0.000125;
+
+                // Stripping all carbon in the melt should essentially put the current carbon content on the solidus,
+                // to ensure no further melting occurs we slightly reduce the solid content so the carbon is
+                // just stable.
+                solid_reaction_rates[2] = 0.000125; 
+            }
+          }
+      }   
+
+      avg_rho_new = rho_s / (1 - Fmass_new * (1 - rho_s/rho_l));
+
+      // Return values, with melt_fractions converted from mass fraction to volume fraction.
+      // In the case of return_composition, we should return the Fvol but needs to be tested.
+      if(return_composition)
+        return {Fmass_new*(avg_rho_new/rho_l), 0., solid_reaction_rates, liquid_reaction_rates, 0.};
+      else
+        return {Fmass_new*(avg_rho_new/rho_l), melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates, enthalpy};
+      }
+
+      template <int dim>
+      double
+      VolatilesMelt<dim>::
+      T_solidus_liquidus (const double pressure, 
+                          const small_vector<double> &composition, 
+                          bool compute_solidus,
+                          const small_vector<double> &A,
+                          const small_vector<double> &B,
+                          const small_vector<double> &L,
+                          const small_vector<double> &T0,
+                          const small_vector<double> &R) const
+      {
+        // TODO: Exclude invalid compositions (that do not sum up to 1)?
+        const small_vector<double> Tm = melting_temperatures(pressure, A, B, T0);
+
+
+        // Set starting guess for Tsol
+        const double minTm = *std::min_element(Tm.begin(), Tm.end());
+        const double maxTm = *std::max_element(Tm.begin(), Tm.end());
+        double mean_Tm = 0.0;
+
+        for (unsigned int i=0; i<n_components; ++i) 
+        {
+            double comp = composition[i];
+            if (n_components == 0)
+                comp = 1 - composition[i+1]; 
+
+            mean_Tm += comp * Tm[i];
+        }
+
+        double T_solidus = std::max(minTm, std::min(maxTm, mean_Tm));
+
+        small_vector<double> K = partition_coefficients(pressure, T_solidus, A, B, L, T0, R);
+
+        const double tolerance = 1e-10;
+        const unsigned int max_iterations = 200;
+        double residual = compute_residual(composition, K, compute_solidus);
+
+        //auto start = std::chrono::high_resolution_clock::now();
+        unsigned int n = 0;
+        while (std::abs(residual) > tolerance && n < max_iterations)
+        {
+            // Adaptive perturbation
+            const double eps_T = std::max(1e-6, 1e-6 * std::abs(T_solidus));
+
+            // Central difference derivative
+            K = partition_coefficients(pressure, T_solidus + eps_T, A, B, L, T0, R);
+            double residual_plus = compute_residual(composition, K, compute_solidus);
+
+            K = partition_coefficients(pressure, T_solidus - eps_T, A, B, L, T0, R);
+            double residual_minus = compute_residual(composition, K, compute_solidus);
+
+            const double dresidualdT = (residual_plus - residual_minus) / (2.0 * eps_T);
+
+            if (std::abs(dresidualdT) < 1e-14) {
+                std::cerr << "Derivative vanished, aborting Newton at iteration " << n << std::endl;
+                break;
+            }
+
+            // Newton step with optional damping
+            double delta_T = -residual / dresidualdT;
+            T_solidus += 0.8 * delta_T;  // 0.8 damping factor
+
+            // Recompute residual
+            K = partition_coefficients(pressure, T_solidus, A, B, L, T0, R);
+            residual = compute_residual(composition, K, compute_solidus);
+
+            ++n;
+        }
+
+        if (n == max_iterations) {
+            std::cerr << "!!! Newton solver did not converge after "
+                      << n << " iterations. Final residual = " << residual << " !!!" << std::endl;
+        }
+
+          // Dasgupta & Hirschmann (2006) carbonated peridotite solidus, cubic in P (GPa).
+          // We use this as a minimum for our solidus.
+          if(compute_solidus)
+          {
+          const double A0 = 830.3808 + 273.15;  // constant term, K
+          const double A1 = 73.7991;            // K / GPa
+          const double A2 = -2.2084;            // K / GPa^2
+          const double A3 = 0.0238;             // K / GPa^3
+
+          const double P_GPa = pressure / 1e9;  // pressure is in Pa; convert once
+
+          const double minimum_solidus = A0
+                                      + A1 * P_GPa
+                                      + A2 * P_GPa * P_GPa
+                                      + A3 * P_GPa * P_GPa * P_GPa;
+                                
+          if(T_solidus < minimum_solidus)
+            T_solidus = minimum_solidus;            
+          }
+
+        //auto tend = std::chrono::high_resolution_clock::now();
+        //std::chrono::duration<double> elapsed = tend - start;
+        //totaln = totaln + n;
+        //totaltime = totaltime + elapsed.count();
+        //std::cout<<n<<" "<<T_solidus<<" "<<elapsed.count()<<" "<<totaln<<" "<<totaltime<<std::endl;
+        return T_solidus;
+    }
+
+    template <int dim>
+    small_vector<double>
+    VolatilesMelt<dim>::melting_temperatures(const double pressure,
+                                             const small_vector<double> &A,
+                                             const small_vector<double> &B,
+                                             const small_vector<double> &T0) const
+    {
+        small_vector<double> Tm (n_components);
+
+        const double Pmax = 6e9;
+        if(use_simons_law)
+        {
+          for (unsigned int i=0; i<n_components; ++i)
+            Tm[i]  =  T0[i] * std::pow(1.0 + pressure/A[i], 1.0/B[i]);
+        }
+        else
+        {
+          if (pressure <= Pmax)
+            for (unsigned int i=0; i<n_components; ++i) 
+              Tm[i]  =  T0[i] + A[i] * pressure + B[i] * pressure * pressure;
+          else
+          {
+            // safeguard: continue melting point with linear slope above Pmax
+            const double dP = 1e7;
+            for (unsigned int i=0; i<n_components; ++i) 
+            {
+              const double T0_at_Pmax = T0[i] + A[i] * Pmax + B[i] * Pmax * Pmax;
+              const double dTdP = ((A[i]*Pmax + B[i]*Pmax*Pmax) - (A[i]*(Pmax-1e7) + B[i]*(Pmax-1e7)*(Pmax-1e7)))/dP;
+              Tm[i] = T0_at_Pmax + dTdP * (pressure-Pmax);
+            }
+          }
+        }
+
+        return Tm;
+    }
+
+
+    template <int dim>
+    small_vector<double>
+    VolatilesMelt<dim>::partition_coefficients(const double pressure, 
+                                                const double temperature,
+                                                const small_vector<double> &A,
+                                                const small_vector<double> &B,
+                                                const small_vector<double> &L,
+                                                const small_vector<double> &T0,
+                                                const small_vector<double> &R) const
+    {
+        small_vector<double> K (n_components);
+        const small_vector<double> Tm = melting_temperatures(pressure, A, B, T0);
+
+        // Parameterization after Rudge, Bercovici, & Spiegelman (2010)
+        for (unsigned int i=0; i<n_components; ++i) 
+        {
+            // L/T gives the change in entropy.
+            const double Ls = L[i]/T0[i]*temperature;
+            K[i] = std::exp(Ls/R[i] * (1./temperature - 1./Tm[i]));
+        }
+
+        return K;
+    }
+
+    template <int dim>
+    double 
+    VolatilesMelt<dim>::compute_residual (const small_vector<double> &composition,
+                      const small_vector<double> &K,
+                      const bool compute_solidus) const
+    {
+      double residual = -1.;
+      for (unsigned int i=0; i<n_components; ++i) 
+        if (compute_solidus)
+          residual += composition[i]/K[i]; // solidus
+        else
+          residual += composition[i]*K[i]; // liquidus
+
+      return residual;
+    }
+
+    template <int dim>
+    double
+    VolatilesMelt<dim>::
+    get_reaction_rate (const double old_value,
+                                     const double reaction_rate,
+                                     const double time_step,
+                                     const double depth,
+                                     const double x) const
+    {
+      // Ensure composition stays between 1 and 0.
+      double final_reaction_rate = reaction_rate;
+
+      if (old_value > 1.0 || old_value + reaction_rate * time_step > 1.0)
+        final_reaction_rate = (1.0 - old_value) / time_step;
+      else if (old_value < 0.0 || old_value + reaction_rate * time_step < 0.0)
+        final_reaction_rate = -old_value / time_step;
+
+      if(use_extraction_patch)
+        if(depth <  extraction_depth && x < extraction_width)
+              final_reaction_rate = 0.0;
+
+      return 0.0; //final_reaction_rate;
+    }
+
+    template <int dim>
+    double
+    VolatilesMelt<dim>::linear_interpolation(double P,
+                                                 double P1,
+                                                 double P2,
+                                                 double v1,
+                                                 double v2) const
+    {
+      // Linear interpolation
+      double t = (P - P1) / (P2 - P1);
+      double value = v1 + t * (v2 - v1);
+
+      // Clamp so that we don't extrapolate beyond val1–val2
+      return std::clamp(value, std::min(v1, v2), std::max(v1, v2));
+
+    }
+
+      template <int dim>
+      void
+      VolatilesMelt<dim>::initialize_component_values (small_vector<double> &Ac,
+                                                          small_vector<double> &Bc,
+                                                          small_vector<double> &Lc,
+                                                          small_vector<double> &Tc,
+                                                          small_vector<double> &Rc,
+                                                          const double pressure) const
+      {
+        double P1 = 1.8e9; double P2 = 2.1e9;
+
+        // High pressure parameters for cmorb
+        double T2 = 1238; double A2 = 10e-9; double B2=4e-18;
+        for (unsigned int i=0; i<n_components; ++i) 
+        {
+            Ac[i] = Ai[i];
+            Bc[i] = Bi[i];
+            Lc[i] = Li[i];
+            Tc[i] = T0i[i];
+            Rc[i] = Ri[i];
+        }
+
+      /*if(pressure >= P2)
+       {
+          Ac[2] = A2;
+          Bc[2] = B2;
+          Tc[2] = T2;
+       }
+       else if (pressure < P2 && pressure > P1)
+       {
+          Ac[2] = linear_interpolation(pressure, P1, P2, Ai[2], A2);
+          Bc[2] = linear_interpolation(pressure, P1, P2, Bi[2], B2);
+          Tc[2] = linear_interpolation(pressure, P1, P2, T0i[2], T2);
+       }*/
+
+      }        
+
+
+      template <int dim>
+      void
+      VolatilesMelt<dim>::declare_parameters (ParameterHandler &prm)
+      {
+        prm.enter_subsection("Reaction model");
+          {
+          prm.enter_subsection("Volatiles model");
+          {
+              prm.declare_entry ("T0", "1085.7",
+                                 Patterns::List(Patterns::Double (0.)),
+                                 "Constant parameter in the quadratic "
+                                 "function that approximates the solidus "
+                                 "of peridotite. "
+                                 "Units: \\si{\\degreeCelsius}.");
+              prm.declare_entry ("A", "1.329e-7",
+                                 Patterns::List(Patterns::Double ()),
+                                 "Prefactor of the linear pressure term "
+                                 "in the quadratic function that approximates "
+                                 "the solidus of peridotite. "
+                                 "\\si{\\degreeCelsius\\per\\pascal}.");
+              prm.declare_entry ("B", "-5.1e-18",
+                                 Patterns::List(Patterns::Double ()),
+                                 "Prefactor of the quadratic pressure term "
+                                 "in the quadratic function that approximates "
+                                 "the solidus of peridotite. "
+                                 "\\si{\\degreeCelsius\\per\\pascal\\squared}.");
+              prm.declare_entry ("L", "1475.0",
+                                 Patterns::List(Patterns::Double (0.)),
+                                 "Constant parameter in the quadratic "
+                                 "function that approximates the lherzolite "
+                                 "liquidus used for calculating the fraction "
+                                 "of peridotite-derived melt. "
+                                 "Units: \\si{\\degreeCelsius}.");
+              prm.declare_entry ("R", "8.0e-8",
+                                 Patterns::List(Patterns::Double (0.)),
+                                 "Prefactor of the linear pressure term "
+                                 "in the quadratic function that approximates "
+                                 "the  lherzolite liquidus used for "
+                                 "calculating the fraction of peridotite-"
+                                 "derived melt. "
+                                 "\\si{\\degreeCelsius\\per\\pascal}.");
+              prm.declare_entry ("Number of components", "3",
+                                 Patterns::Integer(),
+                                 "Prefactor of the linear pressure term "
+                                 "in the quadratic function that approximates "
+                                 "the  lherzolite liquidus used for "
+                                 "calculating the fraction of peridotite-"
+                                 "derived melt. "
+                                 "\\si{\\degreeCelsius\\per\\pascal}.");            
+
+              prm.declare_entry ("Fluid density difference", "500",
+                    Patterns::List(Patterns::Double (0.)),
+                    "Constant parameter in the quadratic "
+                    "function that approximates the solidus "
+                    "of peridotite. "
+                    "Units: \\si{\\degreeCelsius}.");
+              prm.declare_entry ("Melting time scale for operator splitting", "1e2",
+                    Patterns::Double (0.),
+                    "Because the operator splitting scheme is used, the porosity field can not "
+                    "be set to a new equilibrium melt fraction instantly, but the model has to "
+                    "provide a melting time scale instead. This time scale defines how fast melting "
+                    "happens, or more specifically, the parameter defines the time after which "
+                    "the deviation of the porosity from the equilibrium melt fraction will be "
+                    "reduced to a fraction of $1/e$. So if the melting time scale is small compared "
+                    "to the time step size, the reaction will be so fast that the porosity is very "
+                    "close to the equilibrium melt fraction after reactions are computed. Conversely, "
+                    "if the melting time scale is large compared to the time step size, almost no "
+                    "melting and freezing will occur."
+                    "\n\n"
+                    "Also note that the melting time scale has to be larger than or equal to the reaction "
+                    "time step used in the operator splitting scheme, otherwise reactions can not be "
+                    "computed. "
+                    "Units: yr or s, depending on the ``Use years in output instead of seconds'' parameter.");
+              prm.declare_entry ("Reference bulk viscosity", "1e22",
+                                Patterns::Double (0.),
+                                "The value of the constant bulk viscosity $\\xi_0$ of the solid matrix. "
+                                "This viscosity may be modified by both temperature and porosity "
+                                "dependencies. Units: \\si{\\pascal\\second}.");
+              prm.declare_entry ("Reference melt viscosity", "10.",
+                                Patterns::Double (0.),
+                                "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
+              prm.declare_entry ("Exponential melt weakening factor", "27.",
+                                Patterns::Double (0.),
+                                "The porosity dependence of the viscosity. Units: dimensionless.");
+              prm.declare_entry ("Thermal bulk viscosity exponent", "0.0",
+                                Patterns::Double (0.),
+                                "The temperature dependence of the bulk viscosity. Dimensionless exponent. "
+                                "See the general documentation "
+                                "of this model for a formula that states the dependence of the "
+                                "viscosity on this factor, which is called $\\beta$ there.");
+              prm.declare_entry ("Melt compressibility", "0.0",
+                                Patterns::Double (0.),
+                                "The value of the compressibility of the melt. "
+                                "Units: \\si{\\per\\pascal}.");
+              prm.declare_entry ("Melt bulk modulus derivative", "0.0",
+                                Patterns::Double (0.),
+                                "The value of the pressure derivative of the melt bulk "
+                                "modulus. "
+                                "Units: None.");
+              prm.declare_entry ("Reference permeability", "1e-6",
+                                Patterns::Double(),
+                                "Reference permeability of the solid host rock."
+                                "Units: \\si{\\meter\\squared}.");
+              prm.declare_entry ("Maximum permeability", "1e-1",
+                                Patterns::Double(),
+                                "Maximum permeability of the solid host rock."
+                                "Units: \\si{\\meter\\squared}.");
+              prm.declare_entry ("Maximum pressure for melt", "4.75e12",
+                                Patterns::Double (0.),
+                                "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
+              prm.declare_entry ("Extraction depth", "4000",
+                                Patterns::Double (),
+                                "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
+              prm.declare_entry ("Extraction width", "4000",
+                                Patterns::Double (),
+                                "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
+              prm.declare_entry ("Compaction to shear viscosity ratio", "10",
+                                Patterns::Double (),
+                                "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
+              prm.declare_entry ("Use fractional melting", "false",
+                             Patterns::Bool (),
+                             "Whether to use fractional or batch melting.");
+              prm.declare_entry ("Use extraction patch", "false",
+                             Patterns::Bool (),
+                             "Whether to use fractional or batch melting.");
+              prm.declare_entry ("Use simons law", "false",
+                             Patterns::Bool (),
+                             "Whether to use fractional or batch melting.");
+              prm.declare_entry ("Depth to degass", "30e3",
+                                Patterns::Double (),
+                                "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
+            }
+            prm.leave_subsection();
+          }
+          prm.leave_subsection();
+        }
+      
+      
+
+
+      template <int dim>
+      void
+      VolatilesMelt<dim>::parse_parameters (ParameterHandler &prm)
+      {
+        prm.enter_subsection("Reaction model");
+        {
+        prm.enter_subsection("Volatiles model");
+        {
+            n_components = prm.get_integer("Number of components");
+            T0i = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("T0"))),
+                                                                          n_components,
+                                                                          "Thermal diffusivities");
+            Ai = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("A"))),
+                                                                          n_components,
+                                                                          "Thermal diffusivities");                                                              
+            Bi = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("B"))),
+                                                                          n_components,
+                                                                          "Thermal diffusivities");
+            Li = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("L"))),
+                                                                          n_components,
+                                                                          "Thermal diffusivities");
+            Ri = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("R"))),
+                                                                          n_components,
+                                                                          "Thermal diffusivities");
+            fluid_density_difference         = prm.get_double ("Fluid density difference");
+            extraction_depth        = prm.get_double ("Extraction depth");
+            extraction_width        = prm.get_double ("Extraction width");
+            pressure_max         = prm.get_double ("Maximum pressure for melt");
+            compaction_viscosity_ratio         = prm.get_double ("Compaction to shear viscosity ratio");
+            melting_time_scale         = prm.get_double ("Melting time scale for operator splitting");
+            use_fractional_melting        = prm.get_bool ("Use fractional melting");
+            use_extraction_patch        = prm.get_bool ("Use extraction patch");
+            use_simons_law     = prm.get_bool ("Use simons law");
+
+            if (this->convert_output_to_years() == true)
+              melting_time_scale *= year_in_seconds;
+
+            // Get ID for all fields. Should I do this once here or do it in the main function?
+            AssertThrow(this->introspection().compositional_name_exists("porosity"), ExcMessage("A porosity field is needed to use the co2 plugin."));
+            porosity_idx = this->introspection().compositional_index_for_name("porosity");
+
+            AssertThrow(this->introspection().compositional_name_exists("morb_cl"), ExcMessage("A morb_cl field is needed to use the co2 plugin."));
+            mcl_idx = this->introspection().compositional_index_for_name("morb_cl");
+
+            AssertThrow(this->introspection().compositional_name_exists("morb_cs"), ExcMessage("A morb_cs field is needed to use the co2 plugin."));
+            mcs_idx = this->introspection().compositional_index_for_name("morb_cs");
+          
+            AssertThrow(this->introspection().compositional_name_exists("cmorb_cl"), ExcMessage("A cmorb_cl field is needed to use the co2 plugin."));
+            ccl_idx = this->introspection().compositional_index_for_name("cmorb_cl");
+
+            AssertThrow(this->introspection().compositional_name_exists("cmorb_cs"), ExcMessage("A cmorb_cs field is needed to use the co2 plugin."));
+            ccs_idx = this->introspection().compositional_index_for_name("cmorb_cs");
+
+            AssertThrow(this->introspection().compositional_name_exists("hmorb_cl"), ExcMessage("A hmorb_cl field is needed to use the co2 plugin."));
+            hcl_idx = this->introspection().compositional_index_for_name("hmorb_cl");
+
+            AssertThrow(this->introspection().compositional_name_exists("hmorb_cs"), ExcMessage("A hmorb_cs field is needed to use the co2 plugin."));
+            hcs_idx = this->introspection().compositional_index_for_name("hmorb_cs");
+
+            xi_0                       = prm.get_double ("Reference bulk viscosity");
+            viscosity_fluid            = prm.get_double ("Reference melt viscosity");
+            thermal_bulk_viscosity_exponent = prm.get_double ("Thermal bulk viscosity exponent");
+            alpha_phi                  = prm.get_double ("Exponential melt weakening factor");
+            melt_compressibility       = prm.get_double ("Melt compressibility");
+            melt_bulk_modulus_derivative = prm.get_double ("Melt bulk modulus derivative");
+            reference_permeability     = prm.get_double ("Reference permeability");
+            maximum_permeability     = prm.get_double ("Maximum permeability");
+            degass_depth     = prm.get_double ("Depth to degass");
+            }
+            prm.leave_subsection();
+        }
+        prm.leave_subsection();
+      }
+    }
+  }
+}
+
+
+// explicit instantiations
+namespace aspect
+{
+  namespace MaterialModel
+  {
+#define INSTANTIATE(dim) \
+  namespace ReactionModel \
+  { \
+    template class VolatilesMelt<dim>; \
+  }
+
+    ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
+  }
+}
