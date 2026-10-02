@@ -31,6 +31,26 @@ namespace aspect
   namespace MaterialModel
   {
     template <int dim>
+    double
+    ViscoPlastic<dim>::
+    reference_darcy_coefficient () const
+    {
+      // 0.01 = 1% melt
+      return volatile_model.reference_darcy_coefficient();
+    }
+
+    template <int dim>
+    void
+    ViscoPlastic<dim>::
+    melt_fractions (const MaterialModel::MaterialModelInputs<dim> &in,
+                    std::vector<double> &melt_fractions,
+                    const MaterialModel::MaterialModelOutputs<dim> *) const
+    {
+      for (unsigned int q=0; q<in.n_evaluation_points(); ++q)
+        melt_fractions[q] = 0.0;  
+    } 
+
+    template <int dim>
     void
     ViscoPlastic<dim>::initialize()
     {
@@ -107,6 +127,11 @@ namespace aspect
     {
       EquationOfStateOutputs<dim> eos_outputs (this->introspection().get_number_of_fields_of_type(CompositionalFieldDescription::chemical_composition)+1);
       EquationOfStateOutputs<dim> eos_outputs_all_phases (n_phases);
+
+      // Reaction rates needed for operator splitting. This model doesn't consider a case
+      // where there is no operator splitting that uses reaction terms instead.
+      const std::shared_ptr<ReactionRateOutputs<dim>>
+      reaction_rate_out = out.template get_additional_output_object<ReactionRateOutputs<dim>>();
 
       std::vector<double> average_elastic_shear_moduli (in.n_evaluation_points());
 
@@ -216,7 +241,7 @@ namespace aspect
           IsostrainViscosities isostrain_viscosities;
 
           if (in.requests_property(MaterialProperties::viscosity) || in.requests_property(MaterialProperties::additional_outputs) ||
-              (this->get_parameters().enable_elasticity && in.requests_property(MaterialProperties::reaction_rates) ))
+              (this->get_parameters().enable_elasticity && in.requests_property(MaterialProperties::reaction_rates) ) && this->simulator_is_past_initialization())
             {
               // Currently, the viscosities for each of the compositional fields are calculated assuming
               // isostrain amongst all compositions, allowing calculation of the viscosity ratio.
@@ -285,7 +310,12 @@ namespace aspect
 
           // Now compute changes in the compositional fields (e.g., the accumulated strain).
           for (unsigned int c=0; c<in.composition[i].size(); ++c)
+          {
             out.reaction_terms[i][c] = 0.0;
+
+            if (reaction_rate_out != nullptr && in.requests_property(MaterialProperties::reaction_rates))
+              reaction_rate_out->reaction_rates[i][c] = 0.0;
+          }
 
           // Calculate changes in strain invariants and update the reaction terms
           // TODO only when requests_property is set to reaction_terms
@@ -350,6 +380,9 @@ namespace aspect
           // to obtain $\tau^{t}$.
           rheology->elastic_rheology.fill_reaction_rates(in, average_elastic_shear_moduli, out);
         }
+
+     volatile_model.calculate_reaction_rate_outputs(in, out);
+     volatile_model.calculate_fluid_outputs(in, out);
     }
 
 
@@ -379,6 +412,10 @@ namespace aspect
     {
       prm.enter_subsection("Material model");
       {
+
+        // Melt model
+        ReactionModel::VolatilesMelt<dim>::declare_parameters(prm);
+
         prm.enter_subsection ("Visco Plastic");
         {
           prm.declare_entry ("Use dominant phase for viscosity","false",
@@ -439,6 +476,10 @@ namespace aspect
     {
       prm.enter_subsection("Material model");
       {
+        // Melt model parameters
+        volatile_model.initialize_simulator (this->get_simulator());
+        volatile_model.parse_parameters(prm);
+
         prm.enter_subsection ("Visco Plastic");
         {
           // Phase transition parameters

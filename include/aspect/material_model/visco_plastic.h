@@ -25,6 +25,7 @@
 #include <aspect/material_model/interface.h>
 #include <aspect/material_model/equation_of_state/multicomponent_incompressible.h>
 #include <aspect/material_model/rheology/visco_plastic.h>
+#include <aspect/material_model/reaction_model/volatiles_melt.h>
 
 #include<deal.II/fe/component_mask.h>
 
@@ -181,7 +182,9 @@ namespace aspect
      * @ingroup MaterialModels
      */
     template <int dim>
-    class ViscoPlastic : public MaterialModel::Interface<dim>, public ::aspect::SimulatorAccess<dim>
+    class ViscoPlastic : public MaterialModel::MeltInterface<dim>,
+      public MaterialModel::MeltFractionModel<dim>,
+      public ::aspect::SimulatorAccess<dim>
     {
       public:
         /**
@@ -205,6 +208,17 @@ namespace aspect
          * This material model is incompressible.
          */
         bool is_compressible () const override;
+
+
+        void melt_fractions (const MaterialModel::MaterialModelInputs<dim> &in,
+                             std::vector<double> &melt_fractions,
+                             const MaterialModel::MaterialModelOutputs<dim> *) const override;
+
+        /**
+         * @name Reference quantities
+         * @{
+         */
+        double reference_darcy_coefficient () const override;
 
         static
         void
@@ -294,6 +308,11 @@ namespace aspect
          * Record the mapping of reaction progress to phase transitions used in the material model
          */
         std::vector<unsigned int> reaction_progress_mapping;
+
+        /*
+        * Object for computing the melt parameters
+        */
+        ReactionModel::VolatilesMelt<dim> volatile_model;
 
     };
 
