@@ -206,6 +206,11 @@ namespace aspect
           double use_extraction_patch;
           double degass_depth;
           bool use_simons_law;
+          double T_ledge;
+          double P_ledge;
+          double c_floor;
+          double extraction_timescale;
+
 
           mutable int totaln = 0;
           mutable double totaltime = 0;

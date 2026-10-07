@@ -130,8 +130,7 @@ namespace aspect
 
       // Reaction rates needed for operator splitting. This model doesn't consider a case
       // where there is no operator splitting that uses reaction terms instead.
-      const std::shared_ptr<ReactionRateOutputs<dim>>
-      reaction_rate_out = out.template get_additional_output_object<ReactionRateOutputs<dim>>();
+      const std::shared_ptr<ReactionRateOutputs<dim>> reaction_rate_out = out.template get_additional_output_object<ReactionRateOutputs<dim>>();
 
       std::vector<double> average_elastic_shear_moduli (in.n_evaluation_points());
 
@@ -240,8 +239,8 @@ namespace aspect
           bool plastic_yielding = false;
           IsostrainViscosities isostrain_viscosities;
 
-          if (in.requests_property(MaterialProperties::viscosity) || in.requests_property(MaterialProperties::additional_outputs) ||
-              (this->get_parameters().enable_elasticity && in.requests_property(MaterialProperties::reaction_rates) ) && this->simulator_is_past_initialization())
+          if ((in.requests_property(MaterialProperties::viscosity) || in.requests_property(MaterialProperties::additional_outputs) ||
+              (this->get_parameters().enable_elasticity && in.requests_property(MaterialProperties::reaction_rates))) && this->simulator_is_past_initialization())
             {
               // Currently, the viscosities for each of the compositional fields are calculated assuming
               // isostrain amongst all compositions, allowing calculation of the viscosity ratio.
@@ -557,6 +556,13 @@ namespace aspect
 
       if (this->get_parameters().enable_elasticity)
         rheology->elastic_rheology.create_elastic_additional_outputs(out);
+
+      if (this->get_parameters().use_operator_splitting && out.template has_additional_output_object<ReactionRateOutputs<dim>>() == false)
+        {
+          const unsigned int n_points = out.n_evaluation_points();
+          out.additional_outputs.push_back(
+            std::make_unique<MaterialModel::ReactionRateOutputs<dim>> (n_points, this->n_compositional_fields()));
+        }
     }
 
   }
