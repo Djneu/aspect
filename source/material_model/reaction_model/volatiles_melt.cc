@@ -180,7 +180,8 @@ namespace aspect
                     // Approximate temperature of the dolomite reaction. Linear slope based on Schmidt et al., 2024, Fig. 7
                     const double current_cmorb_cs = in.composition[q][ccs_idx];
                     const double current_cmorb_cl = in.composition[q][ccl_idx];
-                    if (pressure < P_ledge && temperature > T_ledge && depth > degass_depth) 
+                    double T_ledge_slope = T_ledge + 2.5e-07*(pressure - P_ledge);
+                    if (pressure < P_ledge && temperature > T_ledge_slope && depth > degass_depth) 
                     {
                       if(this->introspection().compositional_name_exists("free_carbon"))
                       {
@@ -376,9 +377,13 @@ template <int dim>
         double Fvol_old =  std::max(0.0, std::min(composition[porosity_idx],1.0));
         const double rho_l = rho_s - fluid_density_difference;
 
+        if(return_composition)
+        {
+            double T_ledge_slope = T_ledge + 2.5e-07*(pressure - P_ledge);
+            if(pressure < P_ledge && temperature > T_ledge_slope)
+              cmorb_cs = c_floor;
+          }
 
-        //if (pressure < P_ledge && temperature > T_ledge && return_composition) 
-        //  cmorb_cs = 0.000125;
 
         double reaction_time_step_size = 1.0;
         if (this->simulator_is_past_initialization())
@@ -417,13 +422,6 @@ template <int dim>
         double avg_rho = Fvol_old*rho_l + (1. - Fvol_old)*rho_s;
         double avg_rho_new = avg_rho; // Will be updated later.
         double Fmass_old = Fvol_old*rho_l/avg_rho;
-
-        /*if(ep == 1)
-        {
-          double cppm = (Fmass_old * cmorb_cl + (1 - Fmass_old)*cmorb_cs) * 20/100 * 1e6;
-          double cmass = (Fmass_old * cmorb_cl * rho_l + (1 - Fmass_old)*cmorb_cs*rho_s) * 20/100;
-          std::cout<<"Old: "<<cppm<<" "<<cmass<<std::endl;
-        }*/
    
         // Now that things are ordered, find the bulk composition for each component.
         for (unsigned int i=0; i<n_components; ++i)
@@ -663,7 +661,9 @@ template <int dim>
             // has aleady occured and either mixed with the mantle or propagated upward
             // and enriched the lithosphere. So we remove it and reduce the co2 content to its
             // depleted value.
-            if(pressure > P_ledge && C_bar[2] > 0.001 && Fmass_new > 1e-6)
+            // Note: for outputting solidus this will mess with high ppm values,
+            // in full models we do not expect this to be true anywhere but metasomtized regions.
+            if(pressure > P_ledge && C_bar[2] > 0.0005 && Fmass_new > 1e-6)
             {
               // Remove all melt and associated carbon.
                 Fmass_new = 0.0; 
@@ -673,21 +673,6 @@ template <int dim>
                 // to ensure no further melting occurs we slightly reduce the solid content so the carbon is
                 // just stable.
                 solid_reaction_rates[2] = solid_reaction_rates[2]*0.99; 
-            }
-
-            // Approximate temperature of the dolomite reaction. Linear slope based on Schmidt et al., 2024, Fig. 7
-            // If this is the initial component step, any areas where this is true reduce 
-            // content to 20 ppm, which we considered depleted.
-            if(pressure < P_ledge && temperature > T_ledge)
-            {
-              // Remove all melt and associated carbon.
-                
-                liquid_reaction_rates[2] = c_floor;
-
-                // Stripping all carbon in the melt should essentially put the current carbon content on the solidus,
-                // to ensure no further melting occurs we slightly reduce the solid content so the carbon is
-                // just stable.
-                solid_reaction_rates[2] = c_floor; 
             }
           }
       }   
@@ -788,10 +773,20 @@ template <int dim>
 
           const double P_GPa = pressure / 1e9;  // pressure is in Pa; convert once
 
-          const double minimum_solidus = A0
+          double minimum_solidus = A0
                                       + A1 * P_GPa
                                       + A2 * P_GPa * P_GPa
                                       + A3 * P_GPa * P_GPa * P_GPa;
+
+          // Water lowers the carbonated solidus by up to ~100 K (Falloon & Green 1989, ~2.6 GPa),
+          // with the effect saturating at small water contents (Falloon & Green 1990)
+          //const double X_H2O = 0.05 * composition[3];   // bulk water mass fraction (hMORB = 5 wt% H2O)
+          //const double X_ref = 0.002;                   // 0.2 wt% bulk H2O: water content at which the effect saturates (tunable)
+          ////const double dT_max = 100.0;                  // K
+
+          //∂const double dT_H2O = dT_max * std::min(1.0, X_H2O / X_ref);
+
+         // minimum_solidus = minimum_solidus - dT_H2O;
                                 
           if(T_solidus < minimum_solidus)
             T_solidus = minimum_solidus;            
@@ -1083,7 +1078,7 @@ template <int dim>
               prm.declare_entry ("Temperature for carbonate ledge", "1245",
                                 Patterns::Double (),
                                 "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
-              prm.declare_entry ("Carbonate floor", "0.000125",
+              prm.declare_entry ("Carbonate floor", "25",
                                 Patterns::Double (),
                                 "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
             }
@@ -1132,6 +1127,10 @@ template <int dim>
             P_ledge         = prm.get_double ("Pressure for carbonate ledge");
             T_ledge        = prm.get_double ("Temperature for carbonate ledge");
             c_floor        = prm.get_double ("Carbonate floor");
+
+            // Convert from ppm to a field value. This calculates the value,
+            // assuming everything is completely in the solid.
+            c_floor = c_floor/1e6/0.2;
 
             if (this->convert_output_to_years() == true)
             {
