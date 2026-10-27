@@ -137,6 +137,8 @@ namespace aspect
                   double cmorb_cl =  std::max(0.0, std::min(in.composition[q][ccl_idx],1.0));
                   double cmorb_cs =  std::max(0.0, std::min(in.composition[q][ccs_idx],1.0));
                   double Fvol =  std::max(0.0, std::min(in.composition[q][porosity_idx],1.0));
+                  double fre  = std::max(0.0, std::min(1e6, in.composition[q][f_idx]));
+                  double deg  = std::max(0.0, std::min(1e6, in.composition[q][d_idx]));
                   double rho_s = out.densities[q];
                   double rho_l = fluid_out->fluid_densities[q];
 
@@ -145,17 +147,21 @@ namespace aspect
                       // Solid follows the surface: no solid flux.
                       // Melt crosses it at its velocity relative to the mesh.
                       const Tensor<1,dim> u_f_rel = fluid_velocity_values[q] - mesh_velocity_values[q];
-                      local_co2_flux += 20./100. * Fvol * cmorb_cl * rho_l
+                      local_co2_flux += ((20./100. * Fvol * cmorb_cl * rho_l) + fre)
                                         * (u_f_rel * fe_face_values.normal_vector(q))
                                         * fe_face_values.JxW(q);
+                                        
                     }
                   else
                     {
-                    local_co2_flux += (20./100 *  
+                    local_co2_flux += ((
+                      (20./100 *  
                       (
                       (Fvol * cmorb_cl * rho_l * (fluid_velocity_values[q] * fe_face_values.normal_vector(q)))
                       + ((1 - Fvol) * cmorb_cs * rho_s * (in.velocity[q] * fe_face_values.normal_vector(q)))
-                      )
+                      ))
+                      + deg * (in.velocity[q] * fe_face_values.normal_vector(q))
+                      + fre * (fluid_velocity_values[q] * fe_face_values.normal_vector(q)))
                       * fe_face_values.JxW(q));    
                     } 
                   }                           
@@ -303,6 +309,8 @@ for (unsigned int q = 0; q < n_q_points; ++q)
     const double Fvol = std::max(0.0, std::min(1.0, in_fe.composition[q][porosity_idx]));
     const double ccl  = std::max(0.0, std::min(1.0, in_fe.composition[q][ccl_idx]));
     const double ccs  = std::max(0.0, std::min(1.0, in_fe.composition[q][ccs_idx]));
+    const double deg  = std::max(0.0, std::min(1e6, in_fe.composition[q][d_idx]));
+    const double fre  = std::max(0.0, std::min(1e6, in_fe.composition[q][f_idx]));
 
     double liquid_mass = Fvol * ccl * rho_l * 20.0/100.0 * fe_values.JxW(q);
     double solid_mass  = (1.0 - Fvol) * ccs * rho_s * 20.0/100.0 * fe_values.JxW(q);
@@ -313,10 +321,10 @@ for (unsigned int q = 0; q < n_q_points; ++q)
     local_solid_compositional_integrals += solid_mass;
 
     if(track_degass)
-      local_degassed_compositional_integrals += in_fe.composition[q][d_idx] * fe_values.JxW(q);
+      local_degassed_compositional_integrals += deg * fe_values.JxW(q);
 
     if(track_free)
-      local_free_compositional_integrals += in_fe.composition[q][f_idx] * fe_values.JxW(q);
+      local_free_compositional_integrals += fre * fe_values.JxW(q);
 }
           }
 

@@ -87,16 +87,14 @@ namespace aspect
 
               const double xcord = in.position[q](0);
               const double depth = this->get_geometry_model().depth(in.position[q]);
+              const double ycord = in.position[q](1);
 
               // Ignore melt fraction, get melt reaction rate (volume)
               // and solid and liquid reaction rates, ordered as dunite (background field), morb, cmorb, hmorb.
               // Note: At the moment compositions are hardcoded in assuming there is always 4 components.
-              const double rho_s = out.densities[q]; //3200
+              const double rho_s = out.densities[q];
               const double rho_l = rho_s - fluid_density_difference;
-              auto [vfrac, melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates, enthalpy] = equilibrium(composition, temperature, pressure, rho_s, q, 0.);
-              const double current_porosity = in.composition[q][porosity_idx];
-              const double current_cmorb_cl = in.composition[q][ccl_idx];
-              //const double current_cmorb_cs = in.composition[q][ccs_idx];
+              auto [vfrac, melt_reaction_rate, solid_reaction_rates, liquid_reaction_rates, enthalpy] = equilibrium(composition, temperature, pressure, rho_s, q, 0., xcord, ycord);
 
               for (unsigned int c=0; c<in.composition[q].size(); ++c)
                 {
@@ -178,41 +176,50 @@ namespace aspect
                       reaction_rate_out != nullptr && in.requests_property(MaterialProperties::additional_outputs))
                   {
                     // Approximate temperature of the dolomite reaction. Linear slope based on Schmidt et al., 2024, Fig. 7
+                    const double current_porosity = in.composition[q][porosity_idx];
                     const double current_cmorb_cs = in.composition[q][ccs_idx];
                     const double current_cmorb_cl = in.composition[q][ccl_idx];
                     double T_ledge_slope = T_ledge + 2.5e-07*(pressure - P_ledge);
+                    const double timescale = 1.0 - std::exp(-reaction_time_step_size / extraction_timescale);
                     if (pressure < P_ledge && temperature > T_ledge_slope && depth > degass_depth) 
                     {
                       if(this->introspection().compositional_name_exists("free_carbon"))
                       {
                         const unsigned int idx = this->introspection().compositional_index_for_name("free_carbon");
                   
+                        // Extract over the pressure of the ledge.
+                        const double linear_extraction = std::min(1.0, std::max(0.0, (P_ledge - pressure) / 2e8));
+
+                        // Fraction of the remaining porosity removed in this step
                         // Strip all solid cMORB above the floor.                       
                         double strip_cs = 0.0;
                         if(current_cmorb_cs > c_floor)
-                          strip_cs = std::max(0.0, (current_cmorb_cs - c_floor)) / (extraction_timescale);
+                          strip_cs = std::max(0.0, (current_cmorb_cs - c_floor));
 
-                        reaction_rate_out->reaction_rates[q][ccs_idx] += -strip_cs;
+                        // Change it into a rate.
+                        strip_cs = -strip_cs * linear_extraction * timescale / reaction_time_step_size;
 
-                        // Strip all solid cMORB above the floor.                       
-                        double strip_cl = 0.0;
-                        if(current_cmorb_cl > c_floor)
-                          strip_cl = std::max(0.0, (current_cmorb_cl - c_floor)) / (extraction_timescale);
-
-                        if(current_cmorb_cs + (-strip_cs + reaction_rate_out->reaction_rates[q][ccs_idx])*reaction_time_step_size < 0)
+                        // We still allow reactions to occur, but we want to make sure these don't shoot the field negative.
+                        if(current_cmorb_cs + (strip_cs + reaction_rate_out->reaction_rates[q][ccs_idx])*reaction_time_step_size < 0)
                           reaction_rate_out->reaction_rates[q][ccs_idx] = -current_cmorb_cs/reaction_time_step_size;
                         else
-                          reaction_rate_out->reaction_rates[q][ccs_idx] += -strip_cs;
+                          reaction_rate_out->reaction_rates[q][ccs_idx] += strip_cs;
 
-                        if(current_cmorb_cl + (-strip_cl + reaction_rate_out->reaction_rates[q][ccl_idx])*reaction_time_step_size < 0)
+                        // Do the same for the liquid                      
+                        double strip_cl = 0.0;
+                        if(current_cmorb_cl > c_floor)
+                          strip_cl = std::max(0.0, (current_cmorb_cl - c_floor));
+
+                        strip_cl = -strip_cl * linear_extraction * timescale / reaction_time_step_size;
+
+                        if(current_cmorb_cl + (strip_cl + reaction_rate_out->reaction_rates[q][ccl_idx])*reaction_time_step_size < 0)
                           reaction_rate_out->reaction_rates[q][ccl_idx] = -current_cmorb_cl/reaction_time_step_size;
                         else
-                          reaction_rate_out->reaction_rates[q][ccl_idx] += -strip_cl;
-
-
+                          reaction_rate_out->reaction_rates[q][ccl_idx] += strip_cl;
+                     
                         // Track the co2 removed from the solid component.
-                        const double co2_from_solid  = strip_cs * (1.0 - current_porosity) * rho_s;
-                        const double co2_from_liquid  = strip_cl * current_porosity * rho_l;
+                        const double co2_from_solid  = -reaction_rate_out->reaction_rates[q][ccs_idx] * (1.0 - current_porosity) * rho_s;
+                        const double co2_from_liquid  = -reaction_rate_out->reaction_rates[q][ccl_idx] * current_porosity * rho_l;
 
                         // Add removed co2 to free_carbon field. This way we can see where we have free carbon,
                         // which will be moved with melt velocity, but it no longer affects the solidus.
@@ -224,40 +231,34 @@ namespace aspect
                       // Rate of carbon degassing from the melt and from the freed carbon.
                       double degassed_rate = 0.0;
                       double free_to_degassed = 0.0;
-                      const double idx = this->introspection().compositional_index_for_name("degassed_carbon");
-                      if(current_porosity > 1e-8)
-                      {
-                        double porosity_extraction_rate = -current_porosity / extraction_timescale;
-                        const double new_porosity = current_porosity + porosity_extraction_rate * reaction_time_step_size;
-                        
-                        // Make sure this doesn't cause porosity to shoot negative.
-                        if (new_porosity < 0.0)
-                          porosity_extraction_rate = -current_porosity / reaction_time_step_size;
+                      const double linear_extraction = std::min(1.0, std::max(0.0, (degass_depth - depth) / 7.5e3));
 
+                      // Fraction of the remaining porosity removed in this step
+                      const double idx = this->introspection().compositional_index_for_name("degassed_carbon");
+                      if(current_porosity > 0)
+                      {
+                        // First we find out the amoount of porosity we want to extract over a given length scale.
+                        double porosity_extraction_rate = -current_porosity * linear_extraction * timescale / reaction_time_step_size;
+                    
                         // Reaction rate to extract porosity
                         reaction_rate_out->reaction_rates[q][porosity_idx] = porosity_extraction_rate;
-
-                        // The bulk of the solid mass directly depends on the porosity. As porosity decreases, this would increase.
-                        // Here, we alter solid concentrations to try and conserve the original bulk mass.
-                        const double factor = std::max(1.0 - current_porosity, 1e-12) / std::max(1.0 - new_porosity, 1e-12);
-
-                        reaction_rate_out->reaction_rates[q][ccs_idx] = in.composition[q][ccs_idx] * (factor - 1.0) / reaction_time_step_size;
-                        reaction_rate_out->reaction_rates[q][mcs_idx] = in.composition[q][mcs_idx] * (factor - 1.0) / reaction_time_step_size;
-                        reaction_rate_out->reaction_rates[q][hcs_idx] = in.composition[q][hcs_idx] * (factor - 1.0) / reaction_time_step_size;
 
                         // Because we do not want to change the melt composition during extraction, we disallow further reactions.
                         reaction_rate_out->reaction_rates[q][ccl_idx] = 0.0;
                         reaction_rate_out->reaction_rates[q][mcl_idx] = 0.0;
                         reaction_rate_out->reaction_rates[q][hcl_idx] = 0.0;
-                      
-                        const double old_degassed = in.composition[q][idx];
-                        degassed_rate = -porosity_extraction_rate * rho_l * in.composition[q][ccl_idx] * 20/100.0;
 
-                          // If the field is already negative, or the rate would push it below zero,
-                          // set the rate to bring it exactly to zero this step.
-                          // Why would it ever push the rate negatvie, degassed should only go up?
-                        if (old_degassed + degassed_rate * reaction_time_step_size < 0.0)
-                          degassed_rate = -old_degassed / reaction_time_step_size;
+                        // Because removing porosity would change the mass held in the solid, we scale it so the solid keeps the same mass.
+                        const double new_porosity = std::max(0.0, std::min(current_porosity + porosity_extraction_rate * reaction_time_step_size,1.0));
+                        const double scale_solid = std::max(1.0 - current_porosity, 1e-8) / std::max(1.0 - new_porosity, 1e-8);
+                        reaction_rate_out->reaction_rates[q][ccs_idx] = in.composition[q][ccs_idx] * (scale_solid - 1.0) / reaction_time_step_size;
+                        reaction_rate_out->reaction_rates[q][mcs_idx] = in.composition[q][mcs_idx] * (scale_solid - 1.0) / reaction_time_step_size;
+                        reaction_rate_out->reaction_rates[q][hcs_idx] = in.composition[q][hcs_idx] * (scale_solid - 1.0) / reaction_time_step_size;
+                      
+                        // Next, based on the extracted porosity we calculate the mass of co2 leaving the system,
+                        // while makeing sure we don't use a negative cl value.
+                        const double cl = std::max(0.0, std::min(in.composition[q][ccl_idx],1.0));
+                        degassed_rate = (-porosity_extraction_rate * rho_l * cl * 20/100.0);
                       }
 
                         // Now, if it exists, also convert free_co2 to degassed_co2. This is already a mass
@@ -265,19 +266,24 @@ namespace aspect
                         if(this->introspection().compositional_name_exists("free_carbon"))
                         {
                           const unsigned int fidx = this->introspection().compositional_index_for_name("free_carbon");
-                          free_to_degassed = in.composition[q][fidx]/extraction_timescale;
+                          free_to_degassed = in.composition[q][fidx] * linear_extraction * timescale / reaction_time_step_size;
                           reaction_rate_out->reaction_rates[q][fidx] = -free_to_degassed;
-
-                          if (in.composition[q][fidx] - free_to_degassed * reaction_time_step_size < 0.0)
-                                free_to_degassed = -in.composition[q][fidx] / reaction_time_step_size;
                         }
 
                         // The final degassed co2 is a combination from the melt and the free co2.
-                        reaction_rate_out->reaction_rates[q][idx] = degassed_rate + free_to_degassed;
-                        
-                        
+                        reaction_rate_out->reaction_rates[q][idx] = degassed_rate + free_to_degassed;                                             
                       }
                     }
+
+                    /*if (depth < degass_depth && this->introspection().compositional_name_exists("degassed_carbon"))
+                    {
+                      // Rate of carbon degassing from the melt and from the freed carbon.
+                      double degassed_rate = 0.0;
+                      double free_to_degassed = 0.0;
+                      const double idx = this->introspection().compositional_index_for_name("degassed_carbon");
+                      if(current_porosity > 1e-8)
+                        out.reaction_terms[q][idx] = current_porosity * rho_l * in.composition[q][ccl_idx] * 20/100.0;
+                      }*/
                   
                 if (enthalpy_out != nullptr)
                   enthalpy_out->enthalpies_of_fusion[q] = enthalpy;    
@@ -362,7 +368,9 @@ template <int dim>
                      const double pressure,
                      const double rho_s,
                      const int ep,
-                     const bool return_composition) const
+                     const bool return_composition,
+                    const double xc,
+                  const double yc) const
       {
         // Define component dependent parameters 
         small_vector<double> C_bar (n_components);
@@ -375,7 +383,16 @@ template <int dim>
         double hmorb_cl =  std::max(0.0, std::min(composition[hcl_idx],1.0));
         double hmorb_cs =  std::max(0.0, std::min(composition[hcs_idx],1.0));
         double Fvol_old =  std::max(0.0, std::min(composition[porosity_idx],1.0));
+        double ymin = 85000; //92499;
+        double ymax = 125000; //93499;
         const double rho_l = rho_s - fluid_density_difference;
+
+          /*if(xc==0 && yc<ymax && yc>ymin && ep==1) //ep ==1 xc<50 && yc<12050 && yc>12001
+             {
+               double ppm_old = (Fvol_old*cmorb_cl + (1-Fvol_old)*cmorb_cs)*0.2*1e6;
+               std::cout<<"start: "<<"Fvol | cl | cs | ppm | qpoint | pressure | temperature | y | x"<<std::endl;
+               std::cout<<"start: "<<Fvol_old<<" | "<<cmorb_cl<<" | "<<cmorb_cs<<" | "<<ppm_old<<" | "<<ep<<" | "<<pressure<<" "<<temperature<<" "<<yc<<" "<<xc<<std::endl;
+              }*/
 
         if(return_composition)
         {
@@ -525,7 +542,7 @@ template <int dim>
           small_vector<double> c_leq = {dcl, mcl, ccl, hcl};
           small_vector<double> c_seq = {dcs, mcs, ccs, hcs};
 
-          if (Fmass_new < 1e-6 && Fmass_old < 1e-6)
+          if (Fmass_new < 1e-8 && Fmass_old < 1e-8)
           {
               // No melt exists and none should — no reaction needed
               for (unsigned int i = 0; i < n_components; ++i)
@@ -534,7 +551,7 @@ template <int dim>
                   c_seq[i] = c_s[i];
               }
           }
-          else if (Fmass_new < 1e-6 && Fmass_old >= 1e-6)
+          else if (Fmass_new < 1e-8 && Fmass_old >= 1e-8)
           {
               // Freezing case — existing melt should solidify
               // c_leq drives toward zero melt, c_seq absorbs the composition
@@ -553,8 +570,8 @@ template <int dim>
           const double reaction_rho = rho_s;
           const double tau_r        = melting_time_scale + 2.0 * reaction_time_step_size;
           const double R  =  reaction_rho/tau_r;
-          const int max_iter = 20;
-          const double tol   = 1e-6;
+          const int max_iter = 10;
+          const double tol   = 1e-10;
           // Better initial guess
           const double alpha = 1.0 - std::exp(-reaction_time_step_size / tau_r);
           double previous_error = std::numeric_limits<double>::max();
@@ -579,12 +596,12 @@ template <int dim>
               const double avg_rho_pred = rho_s / (1.0 - Fmass_pred * (1.0 - rho_s / rho_l));
               const double Fmass_rate = GammaSum / avg_rho_pred;
 
-              const double inv_solid_denom  = 1.0 / (std::max(1e-6, 1.0 - Fmass_pred) * avg_rho_pred);
-              const double inv_liquid_denom = 1.0 / (std::max(1e-6, Fmass_pred) * avg_rho_pred);
+              const double inv_solid_denom  = 1.0 / (std::max(1e-8, 1.0 - Fmass_pred) * avg_rho_pred);
+              const double inv_liquid_denom = 1.0 / (std::max(1e-8, Fmass_pred) * avg_rho_pred);
               for (unsigned int i = 0; i < n_components; ++i)
               {
                   solid_reaction_rates[i]  = -(Gamma[i] - c_s[i] * GammaSum) * inv_solid_denom;
-                  liquid_reaction_rates[i] = (Fmass_pred < 1e-6)
+                  liquid_reaction_rates[i] = (Fmass_pred < 1e-8)
                                             ? (c_leq[i] - c_l[i]) / reaction_time_step_size
                                             :  (Gamma[i] - c_l[i] * GammaSum) * inv_liquid_denom;
               }
@@ -625,27 +642,43 @@ template <int dim>
                   max_error = std::max(max_error, std::abs(C_bar_pred - C_bar[i]));
               }
 
-              /*if(ep ==1)
-              {
-              double co2 = (Fmass_pred * c_l_pred[2] + (1.0 - Fmass_pred) * c_s_pred[2])*1e6*20/100;
-              double h2o = (Fmass_pred * c_l_pred[3] + (1.0 - Fmass_pred) * c_s_pred[3])*1e6*5/100;
-              double morb = (Fmass_pred * c_l_pred[1] + (1.0 - Fmass_pred) * c_s_pred[1]);
-              double dun = (Fmass_pred * c_l_pred[0] + (1.0 - Fmass_pred) * c_s_pred[0]);
-              std::cout<<"it: "<<iter+1<<"| F: "<<Fmass_pred<<" "<<GammaSum<<" "<<dun<<" "<<morb<<" "<<co2<<" "<<h2o<<" "<<max_error<<std::endl;  
-              }*/
-
               melt_reaction_rate = GammaSum / reaction_rho;
 
               if(GammaSum != 0)
                 enthalpy = enthalpy/GammaSum; 
 
-              if (max_error < tol)
+              // Always run twice as we often get much better convergence on second iteration.
+              if (max_error < tol && iter >= 1)
                   break;
 
               if (iter == max_iter - 1)
                   std::cout << "Warning: reaction iteration did not converge, error: "
                             << max_error << std::endl;
           }
+
+          /*if(xc<500 && yc<13001 && yc>12001) //ep ==1
+             {
+               double new_solid = cmorb_cs + solid_reaction_rates[2]*reaction_time_step_size;
+               double new_liquid = cmorb_cl + liquid_reaction_rates[2]*reaction_time_step_size;
+               double new_por = Fmass_old + melt_reaction_rate*reaction_time_step_size;
+               double ppm_old = (Fmass_old*cmorb_cl + (1-Fmass_old)*cmorb_cs)*0.2*1e6;
+               double ppm_new = (new_por*new_liquid+ (1-new_por)*new_solid)*0.2*1e6;
+               double ppm_eq = (Fmass_new*c_leq[2] + (1-Fmass_new)*c_seq[2])*0.2*1e6;
+               std::cout<<"Old: "<<Fmass_old<<" "<<cmorb_cl<<" "<<cmorb_cs<<" "<<ppm_old<<std::endl;
+               std::cout<<"New: "<<new_por<<" "<<new_liquid<<" "<<new_solid<<" "<<ppm_new<<std::endl;
+               std::cout<<"Eq: "<<Fmass_new<<" "<<c_leq[2]<<" "<<c_seq[2]<<" "<<ppm_eq<<std::endl;
+               std::cout<<"_________________________________________"<<std::endl;
+              }*/
+
+          /*if(xc==0 && yc<ymax && yc>ymin && ep==1) //ep ==1 xc<50 && yc<12050 && yc>12001
+             {
+               double new_solid = cmorb_cs + solid_reaction_rates[2]*reaction_time_step_size;
+               double new_liquid = cmorb_cl + liquid_reaction_rates[2]*reaction_time_step_size;
+               double new_por = Fmass_old + melt_reaction_rate*reaction_time_step_size;
+               double ppm_new = (new_por*new_liquid+ (1-new_por)*new_solid)*0.2*1e6;
+               std::cout<<"end: "<<new_por<<" | "<<new_liquid<<" | "<<new_solid<<" | "<<ppm_new<<" | "<<ep<<" | "<<pressure<<" "<<temperature<<std::endl;
+               std::cout<<"----------------------"<<std::endl;
+              }*/
 
           // If we only want to return the composition for the initial conditions,
           // overwrite the solid and liquid vectors with the actual values. 
@@ -663,7 +696,7 @@ template <int dim>
             // depleted value.
             // Note: for outputting solidus this will mess with high ppm values,
             // in full models we do not expect this to be true anywhere but metasomtized regions.
-            if(pressure > P_ledge && C_bar[2] > 0.0005 && Fmass_new > 1e-6)
+            if(pressure > P_ledge && C_bar[2] > 0.0005 && Fmass_new > 1e-8)
             {
               // Remove all melt and associated carbon.
                 Fmass_new = 0.0; 
@@ -1069,7 +1102,7 @@ template <int dim>
               prm.declare_entry ("Depth to degass", "30e3",
                                 Patterns::Double (),
                                 "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
-              prm.declare_entry ("Extraction time scale for operator splitting", "30e3",
+              prm.declare_entry ("Extraction time scale", "30e3",
                                 Patterns::Double (),
                                 "The value of the constant melt viscosity $\\viscosity_fluid$. Units: \\si{\\pascal\\second}.");
               prm.declare_entry ("Pressure for carbonate ledge", "2.1e9",
@@ -1120,7 +1153,7 @@ template <int dim>
             pressure_max         = prm.get_double ("Maximum pressure for melt");
             compaction_viscosity_ratio         = prm.get_double ("Compaction to shear viscosity ratio");
             melting_time_scale         = prm.get_double ("Melting time scale for operator splitting");
-            extraction_timescale         = prm.get_double ("Extraction time scale for operator splitting");
+            extraction_timescale         = prm.get_double ("Extraction time scale");
             use_fractional_melting        = prm.get_bool ("Use fractional melting");
             use_extraction_patch        = prm.get_bool ("Use extraction patch");
             use_simons_law     = prm.get_bool ("Use simons law");

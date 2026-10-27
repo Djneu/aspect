@@ -87,7 +87,7 @@ namespace aspect
         
         auto [vfrac, melt_reaction_rate, solids, liquids, enthalpy] 
             = volatile_model.equilibrium(composition, in.temperature[0], 
-                                in.pressure[0], density, 0, 1);
+                                in.pressure[0], density, 0, 1, 0.0, 0.0);
         
         if (compositional_index == porosity_index) return vfrac;
         if (compositional_index == mcs_index) return solids[1];

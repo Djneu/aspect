@@ -1966,13 +1966,13 @@ namespace aspect
         const typename Parameters<dim>::AdvectionFieldMethod::Kind method =
           this->get_parameters().compositional_field_methods[c];
 
-        if (this->get_parameters().use_discontinuous_composition_discretization[c])
+        /*if (this->get_parameters().use_discontinuous_composition_discretization[c])
           AssertThrow(method != Parameters<dim>::AdvectionFieldMethod::fem_melt_field &&
                       !this->is_porosity(AdvectionField::composition(c)),
                       ExcMessage("Using discontinuous elements for the porosity field "
                                  "or for compositional fields that are advected with the "
                                  "melt velocity is currently not implemented in models "
-                                 "with melt transport.") );
+                                 "with melt transport.") );*/
       }
 
     if (melt_parameters.use_discontinuous_p_c)

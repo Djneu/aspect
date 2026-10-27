@@ -135,7 +135,9 @@ namespace aspect
                      const double pressure,
                      const double rho_ss,
                      const int ep,
-                     const bool return_composition) const;
+                     const bool return_composition,
+                     const double xc,
+                     const double yc) const;
 
           double reference_darcy_coefficient () const;
 

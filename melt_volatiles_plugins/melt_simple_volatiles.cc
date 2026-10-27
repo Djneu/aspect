@@ -85,7 +85,7 @@ namespace aspect
 
         const double depth = in.position[q](1); //this->get_geometry_model().depth(in.position[q]);
         const double xcord = in.position[q](0);
-        double volume_fraction = std::get<0>(volatile_model.equilibrium(composition, in.temperature[q], pressure, rho_s, q, 0.));
+        double volume_fraction = 0.0; //std::get<0>(volatile_model.equilibrium(composition, in.temperature[q], pressure, rho_s, q, 0.));
 
         melt_fractions[q] = volume_fraction;  
       }
@@ -165,6 +165,21 @@ namespace aspect
       
       volatile_model.calculate_reaction_rate_outputs(in, out);
       volatile_model.calculate_fluid_outputs(in, out);
+
+      /*const double pidx = this->introspection().compositional_index_for_name("porosity");
+      const double cidx = this->introspection().compositional_index_for_name("cmorb_cl");
+      for (unsigned int q=0; q<out.n_evaluation_points(); ++q){
+      const double depth = this->get_geometry_model().depth(in.position[q]);
+      if (depth < 60e3 && this->introspection().compositional_name_exists("degassed_carbon"))
+      {
+        // Rate of carbon degassing from the melt and from the freed carbon.
+        double degassed_rate = 0.0;
+        double free_to_degassed = 0.0;
+        const double idx = this->introspection().compositional_index_for_name("degassed_carbon");
+        if(in.composition[q][pidx] > 1e-8)
+          out.reaction_terms[q][idx] = in.composition[q][pidx] * 3200 * in.composition[q][cidx] * 20/100.0;
+        }
+      }*/
       
     }
 
