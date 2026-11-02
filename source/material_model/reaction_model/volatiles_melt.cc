@@ -402,8 +402,13 @@ template <int dim>
         const double rho_l = rho_s - fluid_density_difference;
         double Fvol_old =  std::max(0.0, std::min(composition[porosity_idx],1.0));
         double avg_rho = Fvol_old*rho_l + (1. - Fvol_old)*rho_s;
-        double avg_rho_new = avg_rho; // Will be updated later.
         double Fmass_old = Fvol_old*rho_l/avg_rho;
+
+        if(ep==1)
+        {
+        std::cout<<"Start: | ep | Fmass_old (avg_rho/rho_l) | Fvol_old | avg_rho | rho_l"<<std::endl;
+          std::cout<<"Start: "<<ep<<" | "<<Fmass_old<<" | "<<Fvol_old<<" | "<<avg_rho<<" | "<<rho_l<<std::endl;
+        }
         
         // Get the compositional values, and limit between 0 and 1.
         double morb_cl =  std::max(0.0, std::min(composition[mcl_idx],1.0));
@@ -417,8 +422,10 @@ template <int dim>
         {
           morb_cl = morb_cl/Fmass_old;
           morb_cs = morb_cs/(1-Fmass_old);
+
           cmorb_cl = cmorb_cl/Fmass_old;
           cmorb_cs = cmorb_cs/(1-Fmass_old);
+
           hmorb_cl = hmorb_cl/Fmass_old;
           hmorb_cs = hmorb_cs/(1-Fmass_old);
         }
@@ -478,7 +485,9 @@ template <int dim>
    
         // Now that things are ordered, find the bulk composition for each component.
         for (unsigned int i=0; i<n_components; ++i)
+        {
             C_bar[i] = Fmass_old*c_l[i] + (1-Fmass_old)*c_s[i];
+        }
       
         // Define parameters that will be returned.
         double Fmass_new = 0.0;
@@ -702,6 +711,9 @@ template <int dim>
                std::cout<<"----------------------"<<std::endl;
               }*/
 
+          const double avg_rho_new = rho_s / (1 - (Fmass_old + melt_reaction_rate * reaction_time_step_size) * (1 - rho_s/rho_l));
+          //const double melt_reaction_rate2 = melt_reaction_rate * ()
+          double melt_reaction_rate2 = melt_reaction_rate*(avg_rho/rho_l);
           for (unsigned int i=0; i<n_components; ++i)
           {
             solid_reaction_rates[i] = (1.0 - Fmass_old) * solid_reaction_rates[i]
@@ -711,6 +723,14 @@ template <int dim>
             liquid_reaction_rates[i] = Fmass_old * liquid_reaction_rates[i]
                                       + c_l[i] * melt_reaction_rate
                                       + reaction_time_step_size * liquid_reaction_rates[i] * melt_reaction_rate;
+          }
+
+          double Fmass_pred2 = Fmass_old+reaction_time_step_size*melt_reaction_rate;
+
+          if(ep==1)
+          {
+            std::cout<<"End: | ep | Fmass_predicted | Fvol_predicted (avg_rho_predicted/rho_l) | avg_rho_predicted | avg_rho_start"<<std::endl;
+            std::cout<<"End: "<<ep<<" | "<<Fmass_pred2<<" | "<<Fmass_pred2*avg_rho_new/rho_l<<" | "<<avg_rho_new<<" | "<<" | "<<avg_rho<<std::endl;
           }
 
           // If we only want to return the composition for the initial conditions,
@@ -749,7 +769,13 @@ template <int dim>
           }
       }   
 
-      avg_rho_new = rho_s / (1 - Fmass_new * (1 - rho_s/rho_l));
+      const double avg_rho_new = rho_s / (1 - Fmass_new * (1 - rho_s/rho_l));
+
+      /*for (unsigned int i=0; i<n_components; ++i)
+            {
+              solid_reaction_rates[i] *= (avg_rho_new/rho_l);
+              liquid_reaction_rates[i] *= (avg_rho_new/rho_l);
+            }*/
 
       // Return values, with melt_fractions converted from mass fraction to volume fraction.
       // In the case of return_composition, we should return the Fvol but needs to be tested.

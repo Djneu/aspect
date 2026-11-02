@@ -151,8 +151,13 @@ namespace aspect
                   }
                   
 
-                  double fre  = std::max(0.0, std::min(1e6, in.composition[q][f_idx]));
-                  double deg  = std::max(0.0, std::min(1e6, in.composition[q][d_idx]));
+                  double fre = 0.0;
+                  if(track_free)
+                    fre  = std::max(0.0, std::min(1e6, in.composition[q][f_idx]));
+
+                  double deg =0.0;
+                  if(track_degass)
+                    deg  = std::max(0.0, std::min(1e6, in.composition[q][d_idx]));
 
 
 
