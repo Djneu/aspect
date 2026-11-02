@@ -137,8 +137,15 @@ namespace aspect
                   double cmorb_cl =  std::max(0.0, std::min(in.composition[q][ccl_idx],1.0));
                   double cmorb_cs =  std::max(0.0, std::min(in.composition[q][ccs_idx],1.0));
                   double Fvol =  std::max(0.0, std::min(in.composition[q][porosity_idx],1.0));
-                  double fre  = std::max(0.0, std::min(1e6, in.composition[q][f_idx]));
-                  double deg  = std::max(0.0, std::min(1e6, in.composition[q][d_idx]));
+
+                  double fre = 0.0;
+                  if(track_free)
+                    fre  = std::max(0.0, std::min(1e6, in.composition[q][f_idx]));
+
+                  double deg =0.0;
+                  if(track_degass)
+                    deg  = std::max(0.0, std::min(1e6, in.composition[q][d_idx]));
+
                   double rho_s = out.densities[q];
                   double rho_l = fluid_out->fluid_densities[q];
 
@@ -150,10 +157,10 @@ namespace aspect
                       local_co2_flux += ((20./100. * Fvol * cmorb_cl * rho_l) + fre)
                                         * (u_f_rel * fe_face_values.normal_vector(q))
                                         * fe_face_values.JxW(q);
-                                        
                     }
                   else
                     {
+                    std::cout<<fre<<" "<<deg<<std::endl;
                     local_co2_flux += ((
                       (20./100 *  
                       (
