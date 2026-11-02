@@ -134,13 +134,27 @@ namespace aspect
                 double local_co2_flux = 0;
                 for (unsigned int q=0; q<fe_face_values.n_quadrature_points; ++q)
                   {
-                  double cmorb_cl =  std::max(0.0, std::min(in.composition[q][ccl_idx],1.0));
-                  double cmorb_cs =  std::max(0.0, std::min(in.composition[q][ccs_idx],1.0));
                   double Fvol =  std::max(0.0, std::min(in.composition[q][porosity_idx],1.0));
-                  double fre  = std::max(0.0, std::min(1e6, in.composition[q][f_idx]));
-                  double deg  = std::max(0.0, std::min(1e6, in.composition[q][d_idx]));
                   double rho_s = out.densities[q];
                   double rho_l = fluid_out->fluid_densities[q];
+
+                  const double avg_rho = Fvol*rho_l + (1. - Fvol)*rho_s;
+                  const double Fmass_old = Fvol*rho_l/avg_rho;
+
+                  double cmorb_cl =  std::max(0.0, std::min(in.composition[q][ccl_idx],1.0));
+                  double cmorb_cs =  std::max(0.0, std::min(in.composition[q][ccs_idx],1.0));
+
+                  if(Fmass_old > 0.0)
+                  {
+                    cmorb_cl = cmorb_cl/Fmass_old;
+                    cmorb_cs = cmorb_cs/(1-Fmass_old);
+                  }
+                  
+
+                  double fre  = std::max(0.0, std::min(1e6, in.composition[q][f_idx]));
+                  double deg  = std::max(0.0, std::min(1e6, in.composition[q][d_idx]));
+
+
 
                   if (face_on_free_surface)
                     {
@@ -307,14 +321,22 @@ for (unsigned int q = 0; q < n_q_points; ++q)
 
     // Read from in_fe.composition instead of separate get_function_values
     const double Fvol = std::max(0.0, std::min(1.0, in_fe.composition[q][porosity_idx]));
-    const double ccl  = std::max(0.0, std::min(1.0, in_fe.composition[q][ccl_idx]));
-    const double ccs  = std::max(0.0, std::min(1.0, in_fe.composition[q][ccs_idx]));
+    const double avg_rho = Fvol*rho_l + (1. - Fvol)*rho_s;
+    const double Fmass_old = Fvol*rho_l/avg_rho;
+
+    double ccl  = std::max(0.0, std::min(1.0, in_fe.composition[q][ccl_idx]));
+    double ccs  = std::max(0.0, std::min(1.0, in_fe.composition[q][ccs_idx]));
     const double deg  = std::max(0.0, std::min(1e6, in_fe.composition[q][d_idx]));
     const double fre  = std::max(0.0, std::min(1e6, in_fe.composition[q][f_idx]));
 
+    if(Fmass_old > 0.0)
+    {
+      ccl = ccl/Fmass_old;
+      ccs = ccs/(1-Fmass_old);
+    }
+
     double liquid_mass = Fvol * ccl * rho_l * 20.0/100.0 * fe_values.JxW(q);
     double solid_mass  = (1.0 - Fvol) * ccs * rho_s * 20.0/100.0 * fe_values.JxW(q);
-
 
     local_co2_compositional_integrals += liquid_mass + solid_mass;
     local_fluid_compositional_integrals += liquid_mass;

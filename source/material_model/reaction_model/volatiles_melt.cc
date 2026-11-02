@@ -177,8 +177,17 @@ namespace aspect
                   {
                     // Approximate temperature of the dolomite reaction. Linear slope based on Schmidt et al., 2024, Fig. 7
                     const double current_porosity = in.composition[q][porosity_idx];
-                    const double current_cmorb_cs = in.composition[q][ccs_idx];
-                    const double current_cmorb_cl = in.composition[q][ccl_idx];
+                    const double avg_rho = current_porosity*rho_l + (1 - current_porosity)*rho_s;
+                    const double Fmass = current_porosity*rho_l/avg_rho; 
+
+                    double current_cmorb_cs = in.composition[q][ccs_idx];
+                    double current_cmorb_cl = in.composition[q][ccl_idx];
+                    /*if(Fmass > 0.0)
+                    {
+                      current_cmorb_cs = current_cmorb_cs/(1-Fmass);
+                      current_cmorb_cl = current_cmorb_cl/Fmass;
+                    }*/
+
                     double T_ledge_slope = T_ledge + 2.5e-07*(pressure - P_ledge);
                     const double timescale = 1.0 - std::exp(-reaction_time_step_size / extraction_timescale);
                     if (pressure < P_ledge && temperature > T_ledge_slope && depth > degass_depth) 
@@ -193,33 +202,37 @@ namespace aspect
                         // Fraction of the remaining porosity removed in this step
                         // Strip all solid cMORB above the floor.                       
                         double strip_cs = 0.0;
-                        if(current_cmorb_cs > c_floor)
-                          strip_cs = std::max(0.0, (current_cmorb_cs - c_floor));
+                        double c_floor2 = 25*(1-current_porosity)/0.2/1e6;
+                        if(current_cmorb_cs > c_floor2)
+                          strip_cs = std::max(0.0, (current_cmorb_cs - c_floor2));
+
+                        //std::cout<<current_cmorb_cs<<" "<<c_floor2<<" "<<strip_cs<<std::endl;
 
                         // Change it into a rate.
                         strip_cs = -strip_cs * linear_extraction * timescale / reaction_time_step_size;
 
                         // We still allow reactions to occur, but we want to make sure these don't shoot the field negative.
-                        if(current_cmorb_cs + (strip_cs + reaction_rate_out->reaction_rates[q][ccs_idx])*reaction_time_step_size < 0)
-                          reaction_rate_out->reaction_rates[q][ccs_idx] = -current_cmorb_cs/reaction_time_step_size;
-                        else
-                          reaction_rate_out->reaction_rates[q][ccs_idx] += strip_cs;
+                        //if(current_cmorb_cs + (strip_cs + reaction_rate_out->reaction_rates[q][ccs_idx])*reaction_time_step_size < 0)
+                        //  reaction_rate_out->reaction_rates[q][ccs_idx] = -current_cmorb_cs/reaction_time_step_size;
+                        //else
+                        reaction_rate_out->reaction_rates[q][ccs_idx] += strip_cs;
 
                         // Do the same for the liquid                      
                         double strip_cl = 0.0;
-                        if(current_cmorb_cl > c_floor)
-                          strip_cl = std::max(0.0, (current_cmorb_cl - c_floor));
+                        double c_floor3 =  25*(current_porosity)/0.2/1e6;
+                        if(current_cmorb_cl > c_floor3)
+                          strip_cl = std::max(0.0, (current_cmorb_cl - c_floor3));
 
                         strip_cl = -strip_cl * linear_extraction * timescale / reaction_time_step_size;
 
-                        if(current_cmorb_cl + (strip_cl + reaction_rate_out->reaction_rates[q][ccl_idx])*reaction_time_step_size < 0)
-                          reaction_rate_out->reaction_rates[q][ccl_idx] = -current_cmorb_cl/reaction_time_step_size;
-                        else
+                        //if(current_cmorb_cl + (strip_cl + reaction_rate_out->reaction_rates[q][ccl_idx])*reaction_time_step_size < 0)
+                        //  reaction_rate_out->reaction_rates[q][ccl_idx] = -current_cmorb_cl/reaction_time_step_size;
+                        //else
                           reaction_rate_out->reaction_rates[q][ccl_idx] += strip_cl;
                      
                         // Track the co2 removed from the solid component.
-                        const double co2_from_solid  = -reaction_rate_out->reaction_rates[q][ccs_idx] * (1.0 - current_porosity) * rho_s;
-                        const double co2_from_liquid  = -reaction_rate_out->reaction_rates[q][ccl_idx] * current_porosity * rho_l;
+                        const double co2_from_solid  = -reaction_rate_out->reaction_rates[q][ccs_idx]  * rho_s;
+                        const double co2_from_liquid  = -reaction_rate_out->reaction_rates[q][ccl_idx]  * rho_l;
 
                         // Add removed co2 to free_carbon field. This way we can see where we have free carbon,
                         // which will be moved with melt velocity, but it no longer affects the solidus.
@@ -312,6 +325,17 @@ template <int dim>
                 double cmorb_cl =  std::max(0.0, std::min(in.composition[i][ccl_idx],1.0));
                 double hmorb_cl =  std::max(0.0, std::min(in.composition[i][hcl_idx],1.0));
 
+                const double rho_l = out.densities[i] - fluid_density_difference;
+                double avg_rho = porosity*rho_l + (1. - porosity)*out.densities[i];
+                double Fmass_old = porosity*rho_l/avg_rho;
+
+                if(Fmass_old > 0.)
+                {
+                  morb_cl = morb_cl/Fmass_old;
+                  cmorb_cl = cmorb_cl/Fmass_old;
+                  hmorb_cl = hmorb_cl/Fmass_old;
+                }
+
                 // Near the surface we sometimes get liquid values above one.
                 // here we force them to 1 and assume there is no dunite.
                 double comp_sum = morb_cl + cmorb_cl + hmorb_cl;
@@ -375,6 +399,12 @@ template <int dim>
         // Define component dependent parameters 
         small_vector<double> C_bar (n_components);
 
+        const double rho_l = rho_s - fluid_density_difference;
+        double Fvol_old =  std::max(0.0, std::min(composition[porosity_idx],1.0));
+        double avg_rho = Fvol_old*rho_l + (1. - Fvol_old)*rho_s;
+        double avg_rho_new = avg_rho; // Will be updated later.
+        double Fmass_old = Fvol_old*rho_l/avg_rho;
+        
         // Get the compositional values, and limit between 0 and 1.
         double morb_cl =  std::max(0.0, std::min(composition[mcl_idx],1.0));
         double morb_cs =  std::max(0.0, std::min(composition[mcs_idx],1.0));
@@ -382,10 +412,20 @@ template <int dim>
         double cmorb_cs =  std::max(0.0, std::min(composition[ccs_idx],1.0));
         double hmorb_cl =  std::max(0.0, std::min(composition[hcl_idx],1.0));
         double hmorb_cs =  std::max(0.0, std::min(composition[hcs_idx],1.0));
-        double Fvol_old =  std::max(0.0, std::min(composition[porosity_idx],1.0));
+
+        if(Fmass_old > 0.0)
+        {
+          morb_cl = morb_cl/Fmass_old;
+          morb_cs = morb_cs/(1-Fmass_old);
+          cmorb_cl = cmorb_cl/Fmass_old;
+          cmorb_cs = cmorb_cs/(1-Fmass_old);
+          hmorb_cl = hmorb_cl/Fmass_old;
+          hmorb_cs = hmorb_cs/(1-Fmass_old);
+        }
+        
+              
         double ymin = 85000; //92499;
         double ymax = 125000; //93499;
-        const double rho_l = rho_s - fluid_density_difference;
 
           /*if(xc==0 && yc<ymax && yc>ymin && ep==1) //ep ==1 xc<50 && yc<12050 && yc>12001
              {
@@ -435,10 +475,6 @@ template <int dim>
           
         small_vector<double> c_s = {dunite, morb_cs, cmorb_cs, hmorb_cs};
         small_vector<double> c_l = {dunite_l, morb_cl, cmorb_cl, hmorb_cl};
-
-        double avg_rho = Fvol_old*rho_l + (1. - Fvol_old)*rho_s;
-        double avg_rho_new = avg_rho; // Will be updated later.
-        double Fmass_old = Fvol_old*rho_l/avg_rho;
    
         // Now that things are ordered, find the bulk composition for each component.
         for (unsigned int i=0; i<n_components; ++i)
@@ -656,20 +692,6 @@ template <int dim>
                             << max_error << std::endl;
           }
 
-          /*if(xc<500 && yc<13001 && yc>12001) //ep ==1
-             {
-               double new_solid = cmorb_cs + solid_reaction_rates[2]*reaction_time_step_size;
-               double new_liquid = cmorb_cl + liquid_reaction_rates[2]*reaction_time_step_size;
-               double new_por = Fmass_old + melt_reaction_rate*reaction_time_step_size;
-               double ppm_old = (Fmass_old*cmorb_cl + (1-Fmass_old)*cmorb_cs)*0.2*1e6;
-               double ppm_new = (new_por*new_liquid+ (1-new_por)*new_solid)*0.2*1e6;
-               double ppm_eq = (Fmass_new*c_leq[2] + (1-Fmass_new)*c_seq[2])*0.2*1e6;
-               std::cout<<"Old: "<<Fmass_old<<" "<<cmorb_cl<<" "<<cmorb_cs<<" "<<ppm_old<<std::endl;
-               std::cout<<"New: "<<new_por<<" "<<new_liquid<<" "<<new_solid<<" "<<ppm_new<<std::endl;
-               std::cout<<"Eq: "<<Fmass_new<<" "<<c_leq[2]<<" "<<c_seq[2]<<" "<<ppm_eq<<std::endl;
-               std::cout<<"_________________________________________"<<std::endl;
-              }*/
-
           /*if(xc==0 && yc<ymax && yc>ymin && ep==1) //ep ==1 xc<50 && yc<12050 && yc>12001
              {
                double new_solid = cmorb_cs + solid_reaction_rates[2]*reaction_time_step_size;
@@ -680,6 +702,17 @@ template <int dim>
                std::cout<<"----------------------"<<std::endl;
               }*/
 
+          for (unsigned int i=0; i<n_components; ++i)
+          {
+            solid_reaction_rates[i] = (1.0 - Fmass_old) * solid_reaction_rates[i]
+                                      - c_s[i] * melt_reaction_rate
+                                      - reaction_time_step_size * solid_reaction_rates[i] * melt_reaction_rate;
+
+            liquid_reaction_rates[i] = Fmass_old * liquid_reaction_rates[i]
+                                      + c_l[i] * melt_reaction_rate
+                                      + reaction_time_step_size * liquid_reaction_rates[i] * melt_reaction_rate;
+          }
+
           // If we only want to return the composition for the initial conditions,
           // overwrite the solid and liquid vectors with the actual values. 
           if(return_composition)
@@ -688,6 +721,12 @@ template <int dim>
             {
               solid_reaction_rates[i] = c_seq[i];
               liquid_reaction_rates[i] = c_leq[i];
+
+              if(Fmass_new > 0.)
+              {
+                solid_reaction_rates[i] = c_seq[i]*(1-Fmass_new);
+                liquid_reaction_rates[i] = c_leq[i]*(Fmass_new);                  
+              }
             }
 
             // If we are in the lithosphere below the ledge, we assume any initial melt

@@ -140,20 +140,32 @@ namespace aspect
               for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
                 composition[c] = input_data.solution_values[q][this->introspection().component_indices.compositional_fields[c]];
 
-              // Get the compositional values, and limit between 0 and 1.
-              const double cmorb_cl =  std::max(0.0, std::min(composition[ccl_idx],1.0));
-              const double cmorb_cs =  std::max(0.0, std::min(composition[ccs_idx],1.0));
-              const double hmorb_cl =  std::max(0.0, std::min(composition[hcl_idx],1.0));
-              const double hmorb_cs =  std::max(0.0, std::min(composition[hcs_idx],1.0));
-              const double morb_cl =  std::max(0.0, std::min(composition[mcl_idx],1.0));
-              const double morb_cs =  std::max(0.0, std::min(composition[mcs_idx],1.0));
+              
               const double Fvol =  std::max(0.0, std::min(composition[porosity_idx],1.0));
               double rho_s = out.densities[q];
               const double rho_l = fluid_out->fluid_densities[q];
-
               // We track the volume fraction of melt, convert to mass fraction here.
               const double avg_rho = Fvol*rho_l + (1 - Fvol)*rho_s;
-              const double Fmass = Fvol*rho_l/avg_rho;     
+              const double Fmass = Fvol*rho_l/avg_rho;   
+
+              // Get the compositional values, and limit between 0 and 1.
+              double cmorb_cl =  std::max(0.0, std::min(composition[ccl_idx],1.0));
+              double cmorb_cs =  std::max(0.0, std::min(composition[ccs_idx],1.0));
+              double hmorb_cl =  std::max(0.0, std::min(composition[hcl_idx],1.0));
+              double hmorb_cs =  std::max(0.0, std::min(composition[hcs_idx],1.0));
+              double morb_cl =  std::max(0.0, std::min(composition[mcl_idx],1.0));
+              double morb_cs =  std::max(0.0, std::min(composition[mcs_idx],1.0));
+
+              if(Fmass > 0.0)
+              {
+                morb_cl = morb_cl/Fmass;
+                morb_cs = morb_cs/(1-Fmass);
+                cmorb_cl = cmorb_cl/Fmass;
+                cmorb_cs = cmorb_cs/(1-Fmass);
+                hmorb_cl = hmorb_cl/Fmass;
+                hmorb_cs = hmorb_cs/(1-Fmass);
+              }
+  
               
               // request update_gradients in get_needed_update_flags(), then:
               //
