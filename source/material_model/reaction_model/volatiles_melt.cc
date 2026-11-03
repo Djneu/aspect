@@ -413,10 +413,10 @@ template <int dim>
         double hmorb_cl =  std::max(0.0, std::min(composition[hcl_idx],1.0));
         double hmorb_cs =  std::max(0.0, std::min(composition[hcs_idx],1.0));
 
-        if(ep==1)
+        /*if(ep==1)
         {
           std::cout<<"Start: "<<ep<<" | "<<Fmass_old<<" | "<<Fvol_old<<" | "<<avg_rho<<" | "<<rho_l<<" | "<<cmorb_cl/Fmass_old<<" | "<<cmorb_cl<<std::endl;
-        }
+        }*/
 
         if(Fmass_old > 0.0)
         {
@@ -737,14 +737,14 @@ template <int dim>
 
 
           
-          double Q = cl_pred*Fmass_pred2;
+          /*double Q = cl_pred*Fmass_pred2;
           double Q2 = cmorb_cl*Fmass_old + liquid_reaction_rates[2]*reaction_time_step_size;
           double Fvol_new = Fmass_pred2*avg_rho/rho_l;
           double div_pred = Fvol_new - Fmass_pred2;
           if(ep==1)
           {
             std::cout<<"End: "<<ep<<" | "<<Fmass_pred2<<" | "<<Fmass_pred2*avg_rho_new/rho_l<<" | "<<cl_pred<<" | "<<Q2<<" | "<<avg_rho_new<<" | "<<avg_rho<<" | "<<div_pred<<std::endl;
-          }
+          }*/
 
           // If we only want to return the composition for the initial conditions,
           // overwrite the solid and liquid vectors with the actual values. 
