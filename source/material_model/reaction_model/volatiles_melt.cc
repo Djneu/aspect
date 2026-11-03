@@ -402,13 +402,8 @@ template <int dim>
         const double rho_l = rho_s - fluid_density_difference;
         double Fvol_old =  std::max(0.0, std::min(composition[porosity_idx],1.0));
         double avg_rho = Fvol_old*rho_l + (1. - Fvol_old)*rho_s;
-        double Fmass_old = Fvol_old*rho_l/avg_rho;
 
-        if(ep==1)
-        {
-        std::cout<<"Start: | ep | Fmass_old (avg_rho/rho_l) | Fvol_old | avg_rho | rho_l"<<std::endl;
-          std::cout<<"Start: "<<ep<<" | "<<Fmass_old<<" | "<<Fvol_old<<" | "<<avg_rho<<" | "<<rho_l<<std::endl;
-        }
+        double Fmass_old = Fvol_old*rho_l/avg_rho;
         
         // Get the compositional values, and limit between 0 and 1.
         double morb_cl =  std::max(0.0, std::min(composition[mcl_idx],1.0));
@@ -417,6 +412,11 @@ template <int dim>
         double cmorb_cs =  std::max(0.0, std::min(composition[ccs_idx],1.0));
         double hmorb_cl =  std::max(0.0, std::min(composition[hcl_idx],1.0));
         double hmorb_cs =  std::max(0.0, std::min(composition[hcs_idx],1.0));
+
+        if(ep==1)
+        {
+          std::cout<<"Start: "<<ep<<" | "<<Fmass_old<<" | "<<Fvol_old<<" | "<<avg_rho<<" | "<<rho_l<<" | "<<cmorb_cl/Fmass_old<<" | "<<cmorb_cl<<std::endl;
+        }
 
         if(Fmass_old > 0.0)
         {
@@ -638,7 +638,7 @@ template <int dim>
                   GammaSum += Gamma[i];
               }
 
-              const double avg_rho_pred = rho_s / (1.0 - Fmass_pred * (1.0 - rho_s / rho_l));
+              const double avg_rho_pred = rho_s; // / (1.0 - Fmass_pred * (1.0 - rho_s / rho_l));
               const double Fmass_rate = GammaSum / avg_rho_pred;
 
               const double inv_solid_denom  = 1.0 / (std::max(1e-8, 1.0 - Fmass_pred) * avg_rho_pred);
@@ -714,6 +714,16 @@ template <int dim>
           const double avg_rho_new = rho_s / (1 - (Fmass_old + melt_reaction_rate * reaction_time_step_size) * (1 - rho_s/rho_l));
           //const double melt_reaction_rate2 = melt_reaction_rate * ()
           double melt_reaction_rate2 = melt_reaction_rate*(avg_rho/rho_l);
+          double Fmass_pred2 = Fmass_old+reaction_time_step_size*melt_reaction_rate;
+
+          //const double Fmass_after_divergence =
+          //    Fvol_after_divergence * rho_l / avg_rho_after_divergence;
+
+          //const double divergence_mass_fraction_rate =
+          //    (Fmass_after_divergence - Fmass_new) / divergence_time_step;
+          //+ c_l[i] * divergence_mass_fraction_rate
+          //                + reaction_time_step_size * liquid_reaction_rates[i] * divergence_mass_fraction_rate;
+          double cl_pred = cmorb_cl + liquid_reaction_rates[2]*reaction_time_step_size;
           for (unsigned int i=0; i<n_components; ++i)
           {
             solid_reaction_rates[i] = (1.0 - Fmass_old) * solid_reaction_rates[i]
@@ -725,12 +735,15 @@ template <int dim>
                                       + reaction_time_step_size * liquid_reaction_rates[i] * melt_reaction_rate;
           }
 
-          double Fmass_pred2 = Fmass_old+reaction_time_step_size*melt_reaction_rate;
 
+          
+          double Q = cl_pred*Fmass_pred2;
+          double Q2 = cmorb_cl*Fmass_old + liquid_reaction_rates[2]*reaction_time_step_size;
+          double Fvol_new = Fmass_pred2*avg_rho/rho_l;
+          double div_pred = Fvol_new - Fmass_pred2;
           if(ep==1)
           {
-            std::cout<<"End: | ep | Fmass_predicted | Fvol_predicted (avg_rho_predicted/rho_l) | avg_rho_predicted | avg_rho_start"<<std::endl;
-            std::cout<<"End: "<<ep<<" | "<<Fmass_pred2<<" | "<<Fmass_pred2*avg_rho_new/rho_l<<" | "<<avg_rho_new<<" | "<<" | "<<avg_rho<<std::endl;
+            std::cout<<"End: "<<ep<<" | "<<Fmass_pred2<<" | "<<Fmass_pred2*avg_rho_new/rho_l<<" | "<<cl_pred<<" | "<<Q2<<" | "<<avg_rho_new<<" | "<<avg_rho<<" | "<<div_pred<<std::endl;
           }
 
           // If we only want to return the composition for the initial conditions,
