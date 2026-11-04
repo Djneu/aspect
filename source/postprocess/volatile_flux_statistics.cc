@@ -160,7 +160,7 @@ namespace aspect
                     }
                   else
                     {
-                    std::cout<<fre<<" "<<deg<<std::endl;
+                    //std::cout<<fre<<" "<<deg<<std::endl;
                     local_co2_flux += ((
                       (20./100 *  
                       (
